@@ -1,0 +1,26 @@
+{
+  "name": "apex-conformance-local",
+  "version": "0.1.0-alpha",
+  "private": true,
+  "type": "module",
+  "description": "Executable smoke and dry-run checks for APEX Protocol alpha implementations",
+  "scripts": {
+    "smoke": "node scripts/smoke.mjs",
+    "dry-run": "node scripts/dry-run.mjs",
+    "smoke:typescript": "node scripts/smoke.mjs typescript",
+    "smoke:go": "node scripts/smoke.mjs go",
+    "smoke:rust": "node scripts/smoke.mjs --command cargo --args '[\"run\",\"--quiet\"]' --cwd ../reference-implementation/rust --name rust",
+    "smoke:java": "node scripts/smoke.mjs java",
+    "dry-run:typescript": "node scripts/dry-run.mjs typescript",
+    "dry-run:java": "node scripts/dry-run.mjs java",
+    "dry-run:go": "node scripts/dry-run.mjs go",
+    "dry-run:rust": "node scripts/dry-run.mjs --command cargo --args '[\"run\",\"--quiet\"]' --cwd ../reference-implementation/rust --name rust",
+    "verify:alpha": "node scripts/smoke.mjs typescript && node scripts/smoke.mjs go && node scripts/smoke.mjs --command cargo --args '[\"run\",\"--quiet\"]' --cwd ../reference-implementation/rust --name rust && node scripts/smoke.mjs java && node scripts/dry-run.mjs typescript && node scripts/dry-run.mjs go && node scripts/dry-run.mjs --command cargo --args '[\"run\",\"--quiet\"]' --cwd ../reference-implementation/rust --name rust && node scripts/dry-run.mjs java"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

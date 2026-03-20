@@ -1,0 +1,18 @@
+[package]
+name = "apex-reference"
+version = "0.1.0"
+edition = "2021"
+description = "APEX Protocol Reference Implementation — Rust MCP Server"
+
+[[bin]]
+name = "apex-reference"
+path = "src/main.rs"
+
+[dependencies]
+rmcp = { version = "0.1", features = ["server", "transport-io"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+tokio = { version = "1", features = ["full"] }

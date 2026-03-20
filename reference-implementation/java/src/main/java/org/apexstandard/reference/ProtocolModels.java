@@ -1,0 +1,189 @@
+package org.apexstandard.reference;
+
+import java.util.List;
+import java.util.Map;
+
+final class ProtocolModels {
+    private ProtocolModels() {
+    }
+
+    record ApexError(String code, String category, String message, String request_id, Integer retry_after) {
+    }
+
+    record ApexErrorEnvelope(ApexError error) {
+    }
+
+    record SessionResponse(
+        String session_id,
+        String account_id,
+        String expires_at,
+        List<String> capabilities,
+        List<String> profiles,
+        String broker_id,
+        String broker_name
+    ) {
+    }
+
+    record CapabilitiesResponse(
+        String apex_version,
+        String broker_id,
+        List<String> core_tools,
+        Map<String, String> profiles,
+        Object vendor_extensions,
+        Map<String, Integer> rate_limits,
+        List<String> supported_order_types,
+        List<String> supported_tif
+    ) {
+    }
+
+    record HeartbeatResponse(String timestamp, String status) {
+    }
+
+    record AccountSummaryResponse(
+        String account_id,
+        String account_base_currency,
+        String response_currency,
+        double balance,
+        double equity,
+        double used_margin,
+        double free_margin,
+        double margin_level_pct,
+        double unrealised_pnl,
+        double realised_pnl_today,
+        String as_of
+    ) {
+    }
+
+    record PositionProfileData(
+        double rollover_long_daily,
+        double rollover_short_daily,
+        double accrued_rollover,
+        double pip_value,
+        String pip_value_currency
+    ) {
+    }
+
+    record Position(
+        String position_id,
+        String instrument_id,
+        String broker_symbol,
+        String side,
+        int quantity,
+        String quantity_unit,
+        String broker_quantity,
+        String broker_quantity_unit,
+        double open_price,
+        double current_price,
+        double unrealised_pnl,
+        String unrealised_pnl_currency,
+        double used_margin,
+        String open_time,
+        double stop_loss,
+        double take_profit,
+        PositionProfileData profile_data
+    ) {
+    }
+
+    record AccountPositionsResponse(List<Position> positions, double total_unrealised_pnl, String as_of) {
+    }
+
+    record OrderListResponse(List<Object> orders, String as_of) {
+    }
+
+    record AccountHistoryResponse(List<Object> events, Object next_cursor, boolean has_more) {
+    }
+
+    record OrderPlacementResponse(
+        String order_id,
+        Object client_order_id,
+        String status,
+        Object fill_price,
+        double fill_quantity,
+        double remaining_quantity,
+        Object position_id,
+        Object rejection_reason,
+        String created_at
+    ) {
+    }
+
+    record OrderModifyResponse(String target_type, String target_id, String status, Object rejection_reason, String updated_at) {
+    }
+
+    record OrderCancelResponse(String order_id, String status, Object rejection_reason, String cancelled_at) {
+    }
+
+    record OrderStatusResponse(String order_id, String status, int filled_quantity, String as_of) {
+    }
+
+    record MarketQuoteResponse(
+        String instrument_id,
+        String broker_symbol,
+        double bid,
+        double ask,
+        double mid,
+        double spread,
+        String timestamp,
+        boolean is_tradeable,
+        String market_status
+    ) {
+    }
+
+    record MarketSnapshotResponse(String instrument_id, String timeframe, List<Object> candles) {
+    }
+
+    record SearchInstrument(String instrument_id, String broker_symbol, String display_name, String profile, boolean is_tradeable) {
+    }
+
+    record MarketSearchResponse(List<SearchInstrument> instruments) {
+    }
+
+    record TradingHours(String day, String open, String close, String timezone) {
+    }
+
+    record MarketDetailsResponse(
+        String instrument_id,
+        String broker_symbol,
+        String display_name,
+        String profile,
+        String base_currency,
+        String quote_currency,
+        double pip_size,
+        int lot_size,
+        String quantity_unit,
+        String broker_quantity_unit,
+        int min_quantity,
+        int max_quantity,
+        int quantity_step,
+        double margin_rate_pct,
+        double commission_per_lot,
+        String spread_type,
+        double typical_spread_pips,
+        List<TradingHours> trading_hours,
+        Map<String, Object> profile_data
+    ) {
+    }
+
+    record RiskCheckResponse(
+        boolean approved,
+        double required_margin,
+        double available_margin,
+        double margin_after_trade,
+        double exposure_increase,
+        List<Object> warnings,
+        Object rejection_reason
+    ) {
+    }
+
+    record RiskLimitsResponse(
+        String account_id,
+        int max_position_size,
+        int max_open_orders,
+        double daily_loss_limit,
+        double daily_loss_used,
+        int margin_call_level_pct,
+        int stop_out_level_pct,
+        List<Object> restricted_instruments,
+        boolean kill_switch_active
+    ) {
+    }
+}
