@@ -117,6 +117,7 @@ impl ApexServer {
                 "DAY".to_owned(),
             ],
             realtime_contract: serde_json::json!({
+                "transport_mode": "stdio",
                 "reconnect_mode": "no_replay",
                 "quote_freshness_ms": 1000,
                 "account_freshness_ms": 2000

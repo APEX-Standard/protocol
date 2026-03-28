@@ -8,6 +8,10 @@ import (
 )
 
 func registerOrderTools(s *server.MCPServer) {
+	registerOrderToolsWithState(s, state)
+}
+
+func registerOrderToolsWithState(s *server.MCPServer, st *referenceState) {
 	s.AddTool(
 		mcp.NewTool("apex.order.place",
 			mcp.WithDescription("Unified order entry across all asset classes. Profile-composable."),
@@ -34,7 +38,34 @@ func registerOrderTools(s *server.MCPServer) {
 				}),
 			),
 		),
-		handleOrderPlace,
+		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			if ok, code, category, reason := st.orderAcceptance(); !ok {
+				// Emit order rejected notification in HTTP mode
+				if st.notifyCallback != nil {
+					st.mu.Lock()
+					riskSeq := st.nextSequence(referenceURIs.Risk)
+					cb := st.notifyCallback
+					st.mu.Unlock()
+					cb(orderRejectedNotification(code, reason, riskSeq))
+				}
+				return jsonResult(apexError(code, category, reason))
+			}
+
+			order := mapParam(request.GetArguments(), "order")
+			if order == nil {
+				return jsonResult(apexError("APEX_4011", "validation", "order is required"))
+			}
+
+			orderType := strParam(order, "order_type", "market")
+
+			if orderType == "limit" {
+				if _, ok := order["limit_price"]; !ok {
+					return jsonResult(apexError("APEX_4011", "validation", "limit_price required for limit orders"))
+				}
+			}
+
+			return jsonResult(st.createOrder(request.GetArguments()))
+		},
 	)
 
 	s.AddTool(
@@ -54,7 +85,32 @@ func registerOrderTools(s *server.MCPServer) {
 				}),
 			),
 		),
-		handleOrderModify,
+		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := request.GetArguments()
+			targetType := strParam(args, "target_type", "")
+			modifications := mapParam(args, "modifications")
+
+			if targetType == "position" && modifications != nil {
+				if _, ok := modifications["limit_price"]; ok {
+					return jsonResult(apexError("APEX_4011", "validation", "positions may only amend stop_loss, take_profit, or trailing_stop"))
+				}
+				if _, ok := modifications["stop_price"]; ok {
+					return jsonResult(apexError("APEX_4011", "validation", "positions may only amend stop_loss, take_profit, or trailing_stop"))
+				}
+				if _, ok := modifications["quantity"]; ok {
+					return jsonResult(apexError("APEX_4011", "validation", "positions may only amend stop_loss, take_profit, or trailing_stop"))
+				}
+			}
+
+			st.modifyOrder(strParam(args, "target_id", ""))
+			return jsonResult(orderModifyResponse{
+				TargetType:      targetType,
+				TargetID:        strParam(args, "target_id", ""),
+				Status:          "modified",
+				RejectionReason: nil,
+				UpdatedAt:       nowISO(),
+			})
+		},
 	)
 
 	s.AddTool(
@@ -64,7 +120,16 @@ func registerOrderTools(s *server.MCPServer) {
 			mcp.WithString("order_id", mcp.Required()),
 			mcp.WithString("reason", mcp.Description("Agent-provided reason for audit trail")),
 		),
-		handleOrderCancel,
+		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			orderID := strParam(request.GetArguments(), "order_id", "")
+			st.cancelOrder(orderID)
+			return jsonResult(orderCancelResponse{
+				OrderID:         orderID,
+				Status:          "cancelled",
+				RejectionReason: nil,
+				CancelledAt:     nowISO(),
+			})
+		},
 	)
 
 	s.AddTool(
@@ -73,78 +138,12 @@ func registerOrderTools(s *server.MCPServer) {
 			mcp.WithString("account_id", mcp.Required()),
 			mcp.WithString("order_id", mcp.Required()),
 		),
-		handleOrderStatus,
+		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			order, found := st.orderStatus(strParam(request.GetArguments(), "order_id", ""))
+			if !found {
+				return jsonResult(apexError("APEX_4011", "validation", "Unknown order"))
+			}
+			return jsonResult(order)
+		},
 	)
-}
-
-func handleOrderPlace(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	if ok, code, category, reason := state.orderAcceptance(); !ok {
-		return jsonResult(apexError(code, category, reason))
-	}
-
-	order := mapParam(request.GetArguments(), "order")
-	if order == nil {
-		return jsonResult(apexError("APEX_4011", "validation", "order is required"))
-	}
-
-	orderType := strParam(order, "order_type", "market")
-	quantity := floatParam(order, "quantity", 0)
-	clientOrderID := strParam(order, "client_order_id", "")
-
-	if orderType == "limit" {
-		if _, ok := order["limit_price"]; !ok {
-			return jsonResult(apexError("APEX_4011", "validation", "limit_price required for limit orders"))
-		}
-	}
-
-	_ = quantity
-	_ = clientOrderID
-
-	return jsonResult(state.createOrder(request.GetArguments()))
-}
-
-func handleOrderModify(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	args := request.GetArguments()
-	targetType := strParam(args, "target_type", "")
-	modifications := mapParam(args, "modifications")
-
-	if targetType == "position" && modifications != nil {
-		if _, ok := modifications["limit_price"]; ok {
-			return jsonResult(apexError("APEX_4011", "validation", "positions may only amend stop_loss, take_profit, or trailing_stop"))
-		}
-		if _, ok := modifications["stop_price"]; ok {
-			return jsonResult(apexError("APEX_4011", "validation", "positions may only amend stop_loss, take_profit, or trailing_stop"))
-		}
-		if _, ok := modifications["quantity"]; ok {
-			return jsonResult(apexError("APEX_4011", "validation", "positions may only amend stop_loss, take_profit, or trailing_stop"))
-		}
-	}
-
-	state.modifyOrder(strParam(args, "target_id", ""))
-	return jsonResult(orderModifyResponse{
-		TargetType:      targetType,
-		TargetID:        strParam(args, "target_id", ""),
-		Status:          "modified",
-		RejectionReason: nil,
-		UpdatedAt:       nowISO(),
-	})
-}
-
-func handleOrderCancel(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	orderID := strParam(request.GetArguments(), "order_id", "")
-	state.cancelOrder(orderID)
-	return jsonResult(orderCancelResponse{
-		OrderID:         orderID,
-		Status:          "cancelled",
-		RejectionReason: nil,
-		CancelledAt:     nowISO(),
-	})
-}
-
-func handleOrderStatus(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	order, found := state.orderStatus(strParam(request.GetArguments(), "order_id", ""))
-	if !found {
-		return jsonResult(apexError("APEX_4011", "validation", "Unknown order"))
-	}
-	return jsonResult(order)
 }

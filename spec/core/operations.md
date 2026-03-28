@@ -112,8 +112,11 @@ For alpha, exact sequence arithmetic may remain implementation-specific, but cli
 Implementations should document one of the following reconnect modes:
 
 - `no_replay`
+- `session_replay`
 - `best_effort_replay`
 - `guaranteed_replay`
+
+For alpha HTTP/SSE interoperability, replay applies to server-initiated notifications first. Resource state remains the canonical rebuild path even when notification replay is available.
 
 ### 4.1 No Replay
 
@@ -123,13 +126,47 @@ After reconnect:
 - the client must re-read all execution-critical resources
 - autonomous execution should remain paused until the new baseline is established
 
-### 4.2 Replay Modes
+### 4.2 Session Replay
 
-If replay is supported, implementations should document:
+Session-scoped replay using SSE event IDs as cursors.
+
+- Server assigns a monotonic integer `id` to every SSE event within a session.
+- Client reconnects with `Last-Event-ID` header containing the last received event ID.
+- Server replays all buffered events after that ID, then continues streaming.
+- If `Last-Event-ID` is outside the buffer (too old or unknown), server sends `notifications/apex.session.replay_failed` and streams new events only.
+- Client must treat replay failure as a sequence discontinuity: discard cached state, re-read all resources, re-establish baseline.
+
+This mode is appropriate for reference implementations and alpha brokers. It provides meaningful reconnect support without requiring durable event persistence.
+
+### 4.3 Replay Modes (Best-Effort And Guaranteed)
+
+If replay beyond session scope is supported, implementations should document:
 
 - retention window
 - replay ordering guarantees
 - whether replay includes only notifications or also resource versions
+- how the client supplies the replay cursor
+
+`best_effort_replay` may lose events under load or across restarts. `guaranteed_replay` requires durable event persistence and must not lose events within the documented retention window.
+
+### 4.4 HTTP/SSE Replay Cursor
+
+For HTTP/SSE transports, the recommended replay cursor is the SSE `Last-Event-ID` header.
+
+Implementations that support replay should:
+
+- attach `id:` to SSE events
+- treat the SSE event ID as an opaque monotonic cursor within a session
+- replay missed server notifications after reconnect when `Last-Event-ID` is supplied and still retained
+- fail deterministically when the cursor is outside the retention window
+
+### 4.5 Replay Failure
+
+If replay cannot be satisfied:
+
+- the server should respond with a deterministic error or explicit reset signal — for `session_replay`, this is the `notifications/apex.session.replay_failed` notification sent as the first event on the new SSE stream
+- the client should discard continuity assumptions
+- the client should rebuild state from execution-critical resources before resuming autonomous order flow
 
 ---
 
@@ -186,11 +223,15 @@ Implementations should advertise operationally important facts in capabilities:
 ```json
 {
   "realtime_contract": {
-    "reconnect_mode": "no_replay",
+    "transport_mode": "streamable_http",
+    "reconnect_mode": "session_replay",
+    "replay_buffer_size": 1000,
     "quote_freshness_ms": 1000,
     "account_freshness_ms": 2000
   }
 }
 ```
+
+For implementations using `best_effort_replay` or `guaranteed_replay`, use the corresponding `reconnect_mode` value and replace `replay_buffer_size` with `replay_window_events` documenting the retention window in event count or duration.
 
 This does not replace resource-level metadata. It complements it.

@@ -1,7 +1,11 @@
 mod helpers;
 mod models;
+mod notifications;
+mod replay_buffer;
 mod server;
 mod state;
+mod tick_engine;
+mod transport;
 
 use rmcp::ServiceExt;
 
@@ -10,6 +14,18 @@ use crate::server::ApexServer;
 
 #[tokio::main]
 async fn main() {
+    // Parse --http <port>
+    let args: Vec<String> = std::env::args().collect();
+    let http_idx = args.iter().position(|a| a == "--http");
+
+    if let Some(idx) = http_idx {
+        let port_str = args.get(idx + 1).expect("Usage: apex-reference --http <port>");
+        let port: u16 = port_str.parse().expect("Port must be a valid number");
+        transport::http::start_http_server(port).await;
+        return;
+    }
+
+    // Stdio mode
     eprintln!(
         "APEX Protocol Reference Server v{SERVER_VERSION} — waiting for MCP client on stdin..."
     );

@@ -77,6 +77,17 @@ type referenceState struct {
 	forceSequenceGap  bool
 	killSwitchActive  bool
 	partialFillNext   bool
+
+	// Live quote state — updated by tick engine in HTTP mode
+	liveBid float64
+	liveAsk float64
+	liveMid float64
+
+	// Callbacks for HTTP mode
+	notifyCallback         func(notif map[string]any)
+	resourceUpdateCallback func(uris []string)
+	onAuthenticated        func()
+	tickEngine             *TickEngine
 }
 
 func newReferenceState() *referenceState {
@@ -110,8 +121,20 @@ func newReferenceState() *referenceState {
 				},
 			},
 		},
-		fills: []map[string]any{},
+		fills:   []map[string]any{},
+		liveBid: 1.08740,
+		liveAsk: 1.08760,
+		liveMid: 1.08750,
 	}
+}
+
+// UpdateQuote updates the live quote prices (called by tick engine).
+func (s *referenceState) UpdateQuote(mid, bid, ask float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.liveMid = mid
+	s.liveBid = bid
+	s.liveAsk = ask
 }
 
 func resourceQuoteURI(instrumentID string) string {
@@ -202,13 +225,18 @@ func (s *referenceState) resourceJSON(uri string) string {
 	var payload any
 	switch uri {
 	case referenceURIs.Quote:
+		spread := s.liveAsk - s.liveBid
+		if spread < 0 {
+			spread = -spread
+		}
+		spread = float64(int(spread*100000+0.5)) / 100000
 		payload = map[string]any{
 			"instrument_id":  referenceInstrumentID,
 			"broker_symbol":  referenceBrokerSymbol,
-			"bid":            1.08740,
-			"ask":            1.08760,
-			"mid":            1.08750,
-			"spread":         0.00020,
+			"bid":            s.liveBid,
+			"ask":            s.liveAsk,
+			"mid":            s.liveMid,
+			"spread":         spread,
 			"timestamp":      map[bool]string{true: time.Now().UTC().Add(-5 * time.Second).Format(time.RFC3339), false: nowISO()}[s.quoteStale],
 			"is_tradeable":   true,
 			"market_status":  "open",
@@ -226,7 +254,7 @@ func (s *referenceState) resourceJSON(uri string) string {
 			"instrument_id": referenceInstrumentID,
 			"as_of":         nowISO(),
 			"quote": map[string]any{
-				"bid": 1.08740, "ask": 1.08760, "mid": 1.08750, "spread": 0.00020,
+				"bid": s.liveBid, "ask": s.liveAsk, "mid": s.liveMid, "spread": 0.00020,
 			},
 			"returns":    map[string]any{"r_1s": 0.00002, "r_5s": 0.00005, "r_1m": 0.0008},
 			"volatility": map[string]any{"rv_1m": 0.12, "rv_5m": 0.37, "rv_30m": 0.55},
@@ -388,12 +416,18 @@ func (s *referenceState) quoteResponse(instrumentID, brokerSymbol string) quoteR
 	if brokerSymbol == "" {
 		brokerSymbol = referenceBrokerSymbol
 	}
+	s.mu.Lock()
+	bid := s.liveBid
+	ask := s.liveAsk
+	mid := s.liveMid
+	s.mu.Unlock()
+
 	return quoteResponse{
 		InstrumentID: instrumentID,
 		BrokerSymbol: brokerSymbol,
-		Bid:          1.08740,
-		Ask:          1.08760,
-		Mid:          1.08750,
+		Bid:          bid,
+		Ask:          ask,
+		Mid:          mid,
 		Spread:       0.00020,
 		Timestamp:    nowISO(),
 		IsTradeable:  true,
@@ -410,7 +444,7 @@ func (s *referenceState) createOrder(args map[string]any) orderPlacementResponse
 	quantity := floatParam(order, "quantity", 0)
 	isMarketOrder := orderType == "market"
 	now := nowISO()
-	orderID := fmt.Sprintf("ord_%s", time.Now().UTC().Format("150405"))
+	orderID := fmt.Sprintf("ord_%s", time.Now().UTC().Format("150405.000"))
 	var limitPrice *float64
 	if value, ok := order["limit_price"]; ok {
 		parsed := floatParam(map[string]any{"limit_price": value}, "limit_price", 0)
@@ -427,6 +461,21 @@ func (s *referenceState) createOrder(args map[string]any) orderPlacementResponse
 		clientOrderValue = clientOrderID
 	}
 
+	fillQuantity := quantity
+	remainingQuantity := 0.0
+	status := "filled"
+
+	if !isMarketOrder {
+		fillQuantity = 0
+		remainingQuantity = quantity
+		status = "working"
+	} else if s.partialFillNext {
+		fillQuantity = quantity / 2
+		remainingQuantity = quantity / 2
+		status = "partially_filled"
+		s.partialFillNext = false
+	}
+
 	record := referenceOrder{
 		OrderID:           orderID,
 		ClientOrderID:     clientOrderValue,
@@ -440,19 +489,13 @@ func (s *referenceState) createOrder(args map[string]any) orderPlacementResponse
 		LimitPrice:        limitPrice,
 		StopPrice:         stopPrice,
 		TimeInForce:       strParam(order, "time_in_force", "GTC"),
-		Status:            map[bool]string{true: "filled", false: "working"}[isMarketOrder],
-		FilledQuantity:    map[bool]float64{true: quantity, false: 0}[isMarketOrder],
-		RemainingQuantity: map[bool]float64{true: 0, false: quantity}[isMarketOrder],
+		Status:            status,
+		FilledQuantity:    fillQuantity,
+		RemainingQuantity: remainingQuantity,
 		AverageFillPrice:  map[bool]any{true: 1.08755, false: nil}[isMarketOrder],
 		Reason:            nil,
 		CreatedAt:         now,
 		UpdatedAt:         now,
-	}
-	if isMarketOrder && s.partialFillNext {
-		record.Status = "partially_filled"
-		record.FilledQuantity = quantity / 2
-		record.RemainingQuantity = quantity / 2
-		s.partialFillNext = false
 	}
 	s.orders = append(s.orders, record)
 
@@ -474,6 +517,27 @@ func (s *referenceState) createOrder(args map[string]any) orderPlacementResponse
 	}
 
 	s.bumpLocked(referenceURIs.Orders, referenceURIs.Positions, referenceURIs.Fills, referenceURIs.Risk, referenceURIs.DecisionContext)
+
+	// Emit APEX notifications in HTTP mode
+	if isMarketOrder && s.notifyCallback != nil {
+		fillSeq := s.nextSequence(referenceURIs.Fills)
+		if status == "filled" {
+			s.notifyCallback(orderFilledNotification(record, fillSeq))
+		} else if status == "partially_filled" {
+			s.notifyCallback(orderPartiallyFilledNotification(record, fillSeq))
+		}
+	}
+
+	// Notify resource updates in HTTP mode
+	if s.resourceUpdateCallback != nil {
+		uris := []string{referenceURIs.Orders, referenceURIs.Positions, referenceURIs.Fills, referenceURIs.Risk, referenceURIs.DecisionContext}
+		// Clear pending updates since we handle them directly
+		s.pendingUpdates = nil
+		// Must call outside lock, so save the callback
+		cb := s.resourceUpdateCallback
+		// We need to call outside the lock but we're inside it. Use a goroutine.
+		go cb(uris)
+	}
 
 	return orderPlacementResponse{
 		OrderID:           orderID,
@@ -502,7 +566,14 @@ func (s *referenceState) setRealtimeFaults(quoteStale, riskStale, forceSequenceG
 		s.forceSequenceGap = *forceSequenceGap
 	}
 	if killSwitchActive != nil {
+		wasActive := s.killSwitchActive
 		s.killSwitchActive = *killSwitchActive
+		if !wasActive && *killSwitchActive && s.notifyCallback != nil {
+			seq := s.nextSequence(referenceURIs.Risk)
+			notif := killSwitchEngagedNotification(seq)
+			cb := s.notifyCallback
+			go cb(notif)
+		}
 	}
 	if partialFillNext != nil {
 		s.partialFillNext = *partialFillNext
@@ -611,4 +682,24 @@ func registerResources(s *server.MCPServer, state *referenceState) {
 			}, nil
 		})
 	}
+}
+
+// registerForceCandeCloseToolWithState registers the test-only force candle close tool.
+func registerForceCandeCloseToolWithState(s *server.MCPServer, st *referenceState) {
+	s.AddTool(
+		mcp.NewTool("reference.test.force_candle_close",
+			mcp.WithDescription("Force-close the current partial candle for a given timeframe. Test-only."),
+			mcp.WithString("timeframe", mcp.Required(), mcp.Description("Candle timeframe"), mcp.Enum("M1", "M5", "H1")),
+		),
+		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			timeframe := strParam(request.GetArguments(), "timeframe", "M1")
+			if st.tickEngine != nil {
+				st.tickEngine.ForceCandleClose(timeframe)
+			}
+			return jsonResult(map[string]any{
+				"closed":    true,
+				"timeframe": timeframe,
+			})
+		},
+	)
 }

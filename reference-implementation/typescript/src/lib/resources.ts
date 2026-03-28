@@ -2,6 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import type { ApexErrorCategory } from "./helpers.js";
 import { nowIso } from "./helpers.js";
+import type { ApexNotification } from "./notifications.js";
+import { killSwitchEngagedNotification } from "./notifications.js";
 
 const ACCOUNT_ID = "ACC_12345";
 const INSTRUMENT_ID = "APEX:FX:EURUSD";
@@ -97,19 +99,33 @@ export class ReferenceTradingState {
   private killSwitchActive = false;
   private partialFillNextOrder = false;
 
+  /** Mutable quote state — updated by tick engine in HTTP mode. */
+  private liveBid = 1.0874;
+  private liveAsk = 1.0876;
+  private liveMid = 1.0875;
+
+  /** Optional callback for emitting APEX notifications (set in HTTP mode). */
+  emitNotification?: (notif: ApexNotification) => void;
+
   readonly accountId = ACCOUNT_ID;
   readonly instrumentId = INSTRUMENT_ID;
   readonly brokerSymbol = BROKER_SYMBOL;
   readonly uris = canonicalUris;
 
+  updateQuote(mid: number, bid: number, ask: number) {
+    this.liveMid = mid;
+    this.liveBid = bid;
+    this.liveAsk = ask;
+  }
+
   getQuote() {
     return this.withMeta(this.uris.quote, {
       instrument_id: this.instrumentId,
       broker_symbol: this.brokerSymbol,
-      bid: 1.0874,
-      ask: 1.0876,
-      mid: 1.0875,
-      spread: 0.0002,
+      bid: this.liveBid,
+      ask: this.liveAsk,
+      mid: this.liveMid,
+      spread: Math.round((this.liveAsk - this.liveBid) * 100000) / 100000,
       timestamp: this.quoteStale ? new Date(Date.now() - 5_000).toISOString() : nowIso(),
       is_tradeable: true,
       market_status: "open",
@@ -382,7 +398,12 @@ export class ReferenceTradingState {
       this.forceSequenceGap = options.force_sequence_gap;
     }
     if (options.kill_switch_active !== undefined) {
+      const wasActive = this.killSwitchActive;
       this.killSwitchActive = options.kill_switch_active;
+      if (!wasActive && options.kill_switch_active && this.emitNotification) {
+        const seq = this.resourceSequences.get(this.uris.risk) ?? 1;
+        this.emitNotification(killSwitchEngagedNotification(seq));
+      }
     }
     if (options.partial_fill_next_order !== undefined) {
       this.partialFillNextOrder = options.partial_fill_next_order;

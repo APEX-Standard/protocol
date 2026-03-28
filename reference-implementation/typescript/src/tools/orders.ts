@@ -2,6 +2,12 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { apexError, nowIso } from "../lib/helpers.js";
+import type { ApexNotification } from "../lib/notifications.js";
+import {
+  orderFilledNotification,
+  orderPartiallyFilledNotification,
+  orderRejectedNotification,
+} from "../lib/notifications.js";
 import type { ReferenceTradingState } from "../lib/resources.js";
 import {
   InstrumentIdSchema,
@@ -41,7 +47,11 @@ const OrderModificationSchema = z.object({
   trailing_stop: TrailingStopSchema,
 });
 
-export function registerOrderTools(server: McpServer, state: ReferenceTradingState): void {
+export function registerOrderTools(
+  server: McpServer,
+  state: ReferenceTradingState,
+  emitNotification?: (notif: ApexNotification) => void,
+): void {
   server.registerTool(
     "apex.order.place",
     {
@@ -55,6 +65,14 @@ export function registerOrderTools(server: McpServer, state: ReferenceTradingSta
     async ({ account_id, order }) => {
       const orderGate = state.canAcceptOrders();
       if (!orderGate.ok) {
+        if (emitNotification) {
+          const riskSeq = (state.getRisk() as Record<string, unknown>).sequence as number ?? 1;
+          emitNotification(orderRejectedNotification(
+            orderGate.code ?? "APEX_5000",
+            orderGate.reason ?? "Order rejected",
+            riskSeq,
+          ));
+        }
         return {
           structuredContent: apexError(orderGate.code ?? "APEX_5000", orderGate.category ?? "internal", orderGate.reason ?? "Order rejected"),
           content: [],
@@ -120,6 +138,18 @@ export function registerOrderTools(server: McpServer, state: ReferenceTradingSta
         state.uris.risk,
         state.uris.decisionContext,
       );
+
+      if (emitNotification && isMarketOrder) {
+        const placedOrder = state.getOrders().orders.find((o) => o.order_id === orderId);
+        if (placedOrder) {
+          const fillSeq = (state.getFills() as Record<string, unknown>).sequence as number ?? 1;
+          if (status === "filled") {
+            emitNotification(orderFilledNotification(placedOrder, fillSeq));
+          } else if (status === "partially_filled") {
+            emitNotification(orderPartiallyFilledNotification(placedOrder, fillSeq));
+          }
+        }
+      }
 
       return {
         structuredContent: {

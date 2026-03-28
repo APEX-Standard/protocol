@@ -25,9 +25,22 @@
     "production-resilience:go": "node scripts/production-resilience.mjs go",
     "production-resilience:rust": "node scripts/production-resilience.mjs rust",
     "production-resilience:java": "node scripts/production-resilience.mjs java",
+    "transport-smoke:typescript": "node scripts/transport-smoke.mjs typescript",
+    "transport-smoke:go": "node scripts/transport-smoke.mjs go",
+    "transport-smoke:rust": "node scripts/transport-smoke.mjs rust",
+    "transport-smoke:java": "node scripts/transport-smoke.mjs java",
+    "transport-resilience:typescript": "node scripts/transport-resilience.mjs typescript",
+    "transport-resilience:go": "node scripts/transport-resilience.mjs go",
+    "transport-resilience:rust": "node scripts/transport-resilience.mjs rust",
+    "transport-resilience:java": "node scripts/transport-resilience.mjs java",
+    "transport-marketdata:typescript": "node scripts/transport-marketdata.mjs typescript",
+    "transport-marketdata:go": "node scripts/transport-marketdata.mjs go",
+    "transport-marketdata:rust": "node scripts/transport-marketdata.mjs rust",
+    "transport-marketdata:java": "node scripts/transport-marketdata.mjs java",
     "verify:alpha": "node scripts/smoke.mjs typescript && node scripts/smoke.mjs go && node scripts/smoke.mjs rust && node scripts/smoke.mjs java && node scripts/dry-run.mjs typescript && node scripts/dry-run.mjs go && node scripts/dry-run.mjs rust && node scripts/dry-run.mjs java",
     "verify:production": "node scripts/production-smoke.mjs typescript && node scripts/production-smoke.mjs go && node scripts/production-smoke.mjs rust && node scripts/production-smoke.mjs java && node scripts/production-resilience.mjs typescript && node scripts/production-resilience.mjs go && node scripts/production-resilience.mjs rust && node scripts/production-resilience.mjs java",
-    "verify:all": "npm run verify:alpha && npm run verify:production"
+    "verify:transport": "node scripts/transport-smoke.mjs typescript && node scripts/transport-smoke.mjs go && node scripts/transport-smoke.mjs rust && node scripts/transport-smoke.mjs java && node scripts/transport-resilience.mjs typescript && node scripts/transport-resilience.mjs go && node scripts/transport-resilience.mjs rust && node scripts/transport-resilience.mjs java && node scripts/transport-marketdata.mjs typescript && node scripts/transport-marketdata.mjs go && node scripts/transport-marketdata.mjs rust && node scripts/transport-marketdata.mjs java",
+    "verify:all": "npm run verify:alpha && npm run verify:production && npm run verify:transport"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

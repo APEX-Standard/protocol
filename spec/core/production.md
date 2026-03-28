@@ -33,10 +33,21 @@ An implementation claiming `APEX Production Realtime` must satisfy all of the fo
 
 ### 1.1 Transport
 
-- Support MCP Streamable HTTP for remote sessions.
+- Support remote MCP over HTTP.
 - Support server-to-client SSE delivery for realtime notifications.
+- The recommended transport for alpha is **MCP Streamable HTTP** on a single `/mcp` endpoint (POST for JSON-RPC requests, GET for the SSE notification stream, DELETE for session teardown). Session identity is carried via the `Mcp-Session-Id` response/request header.
+- As an alternative for alpha interoperability, implementations may use the older MCP HTTP+SSE compatibility transport if Streamable HTTP is not yet available.
 - Document replay behavior across reconnects.
 - Expose enough metadata for clients to detect stale state and sequence discontinuity.
+
+### 1.1.1 Replay Buffer
+
+Production Realtime implementations that support `session_replay` should maintain a per-session event buffer of at least 1000 events. The buffer is used with SSE event IDs and the `Last-Event-ID` header for reconnect replay.
+
+- Every event pushed to the SSE stream must carry a monotonic integer `id` (transmitted as a string per the SSE spec).
+- On reconnect, the client sends `Last-Event-ID` with the last received event ID; the server replays all buffered events after that ID, then continues streaming.
+- If the requested `Last-Event-ID` is outside the buffer (evicted or unknown), the server sends `notifications/apex.session.replay_failed` as the first event on the new stream and continues with live events only.
+- Buffer scope is per session. Each `Mcp-Session-Id` has its own buffer. The buffer is discarded on session teardown (DELETE) or server shutdown.
 
 ### 1.2 Mandatory Tools
 
@@ -88,12 +99,20 @@ Every execution-relevant realtime resource must include:
 - `notifications/apex.market.candle_closed`
 - `notifications/apex.risk.kill_switch_engaged`
 
+Notification payloads should include:
+
+- stable event identifier: `event_id`
+- event timestamp: `timestamp`
+- current resource or account `sequence` where applicable
+- enough identifiers to correlate the event back to the affected order, fill, account, or resource
+
 ### 1.6 Mandatory Sequencing Behavior
 
 - Sequences must be monotonic within each realtime resource stream.
 - Notifications referring to a realtime resource must carry the current `sequence`.
 - Clients must be able to detect gaps deterministically.
-- The server must document whether replay is supported.
+- The server must document its reconnect mode: `no_replay`, `session_replay`, `best_effort_replay`, or `guaranteed_replay`. See [`operations.md`](./operations.md) Section 4 for definitions.
+- If replay is supported (any mode other than `no_replay`), notification events must have stable replay ordering within a session.
 
 ### 1.7 Mandatory Feature Minimums
 
@@ -159,6 +178,7 @@ At minimum:
 The implementation must document:
 
 - replay retention window
+- replay scope: per session, per account, or global
 - freshness limits by resource type
 - whether timestamps reflect event time or processing time
 - supported autonomous controls

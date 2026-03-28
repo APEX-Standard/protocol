@@ -81,6 +81,38 @@ console.log("Available profiles:", session.profiles);
 
 ---
 
+## Step 3A: Connecting Over HTTP/SSE
+
+If your broker exposes a remote HTTP endpoint (rather than a local stdio process), you can connect using Streamable HTTP and receive real-time notifications over SSE.
+
+```typescript
+// Connect via Streamable HTTP (for remote brokers)
+const response = await fetch("https://broker.example.com/mcp", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    jsonrpc: "2.0", id: 1, method: "initialize",
+    params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "my-agent", version: "1.0" } }
+  }),
+});
+
+// Extract session ID from response header
+const sessionId = response.headers.get("Mcp-Session-Id");
+
+// Open SSE stream for real-time notifications
+const sseResponse = await fetch("https://broker.example.com/mcp", {
+  headers: { Accept: "text/event-stream", "Mcp-Session-Id": sessionId },
+});
+
+// Process SSE events
+const reader = sseResponse.body.getReader();
+// ... parse SSE frames for notifications/resources/updated and APEX notifications
+```
+
+Every SSE frame includes a monotonic integer `id:` field. If the SSE connection drops, reconnect with the `Last-Event-ID` header set to the last received SSE event ID. The server will replay missed events from its session replay buffer. If the requested event ID has been evicted from the buffer, the server sends a `notifications/apex.session.replay_failed` notification instead -- treat this as a sequence discontinuity, discard cached state, re-read all resources, and re-establish your execution baseline before resuming autonomous trading.
+
+---
+
 ## Step 4: Discover What You Can Trade
 
 ```typescript

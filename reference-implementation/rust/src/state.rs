@@ -45,7 +45,7 @@ pub fn decision_context_uri() -> String {
     format!("apex://agent/decision-context/{INSTRUMENT_ID}")
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct InnerState {
     resource_sequences: HashMap<String, u64>,
     orders: Vec<Value>,
@@ -55,6 +55,27 @@ struct InnerState {
     force_sequence_gap: bool,
     kill_switch_active: bool,
     partial_fill_next_order: bool,
+    live_mid: f64,
+    live_bid: f64,
+    live_ask: f64,
+}
+
+impl Default for InnerState {
+    fn default() -> Self {
+        Self {
+            resource_sequences: HashMap::new(),
+            orders: Vec::new(),
+            fills: Vec::new(),
+            quote_stale: false,
+            risk_stale: false,
+            force_sequence_gap: false,
+            kill_switch_active: false,
+            partial_fill_next_order: false,
+            live_mid: 1.08750,
+            live_bid: 1.08740,
+            live_ask: 1.08760,
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -63,6 +84,23 @@ pub struct ReferenceTradingState {
 }
 
 impl ReferenceTradingState {
+    pub fn update_quote(&self, mid: f64, bid: f64, ask: f64) {
+        let mut inner = self.inner.lock().expect("state mutex poisoned");
+        inner.live_mid = mid;
+        inner.live_bid = bid;
+        inner.live_ask = ask;
+    }
+
+    pub fn bump_resources_list(&self, uris: &[String]) -> Vec<String> {
+        let mut inner = self.inner.lock().expect("state mutex poisoned");
+        self.bump_sequences(&mut inner, uris)
+    }
+
+    pub fn get_sequence(&self, uri: &str) -> u64 {
+        let inner = self.inner.lock().expect("state mutex poisoned");
+        inner.resource_sequences.get(uri).copied().unwrap_or(1)
+    }
+
     pub fn account_summary_payload(&self, currency: Option<String>) -> Value {
         json!({
             "account_id": ACCOUNT_ID,
@@ -131,14 +169,16 @@ impl ReferenceTradingState {
         instrument_id: Option<String>,
         broker_symbol: Option<String>,
     ) -> Value {
+        let inner = self.inner.lock().expect("state mutex poisoned");
+        let spread = ((inner.live_ask - inner.live_bid) * 100000.0).round() / 100000.0;
         json!({
             "instrument_id": instrument_id.unwrap_or_else(|| INSTRUMENT_ID.to_owned()),
             "broker_symbol": broker_symbol.unwrap_or_else(|| BROKER_SYMBOL.to_owned()),
-            "bid": 1.08740,
-            "ask": 1.08760,
-            "mid": 1.08750,
-            "spread": 0.00020,
-            "timestamp": if self.inner.lock().expect("state mutex poisoned").quote_stale {
+            "bid": inner.live_bid,
+            "ask": inner.live_ask,
+            "mid": inner.live_mid,
+            "spread": spread,
+            "timestamp": if inner.quote_stale {
                 (chrono::Utc::now() - chrono::Duration::seconds(5))
                     .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
             } else {

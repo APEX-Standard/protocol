@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -18,6 +20,25 @@ type incomingMessage struct {
 }
 
 func main() {
+	// Parse --http <port> from args
+	for i, arg := range os.Args[1:] {
+		if arg == "--http" {
+			if i+1 >= len(os.Args[1:]) {
+				fmt.Fprintln(os.Stderr, "Usage: apex-reference --http <port>")
+				os.Exit(1)
+			}
+			portStr := os.Args[i+2]
+			port, err := strconv.Atoi(portStr)
+			if err != nil || port < 1 || port > 65535 {
+				fmt.Fprintln(os.Stderr, "Usage: apex-reference --http <port>")
+				os.Exit(1)
+			}
+			StartHTTPServer(port)
+			return
+		}
+	}
+
+	// Stdio mode
 	srv := newServer()
 	subscriptions := map[string]struct{}{}
 	scanner := bufio.NewScanner(os.Stdin)

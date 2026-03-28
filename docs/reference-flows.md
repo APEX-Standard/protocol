@@ -71,3 +71,16 @@
 6. Broker fills the remaining quantity — second fill event
 7. Server emits `notifications/resources/updated` again
 8. Agent reads updated orders resource — order now `status: "filled"`, `remaining_quantity: 0`
+
+---
+
+## 7. SSE Reconnect and Replay
+
+1. Agent's SSE connection drops (network interruption, timeout)
+2. Agent sends GET `/mcp` with `Mcp-Session-Id` and `Last-Event-ID` headers
+3. Server looks up session, finds buffered events after the given ID
+4. Server replays missed events as SSE frames with original IDs
+5. Server continues streaming new events on the same connection
+6. If `Last-Event-ID` is outside the replay buffer, server sends `notifications/apex.session.replay_failed`
+7. Agent treats replay failure as sequence discontinuity: discards cached state, re-reads all resources
+8. Agent re-establishes execution baseline before resuming autonomous trading

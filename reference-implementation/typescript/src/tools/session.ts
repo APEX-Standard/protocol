@@ -11,7 +11,13 @@ import { apexError, hoursFromNow, nowIso } from "../lib/helpers.js";
 import type { ReferenceTradingState } from "../lib/resources.js";
 import { z } from "zod";
 
-export function registerSessionTools(server: McpServer, state: ReferenceTradingState): void {
+export interface SessionToolOptions {
+  transportMode?: "stdio" | "streamable_http";
+  onAuthenticated?: () => void;
+}
+
+export function registerSessionTools(server: McpServer, state: ReferenceTradingState, options?: SessionToolOptions): void {
+  const transportMode = options?.transportMode ?? "stdio";
   server.registerTool(
     "apex.session.authenticate",
     {
@@ -32,6 +38,8 @@ export function registerSessionTools(server: McpServer, state: ReferenceTradingS
           content: [],
         };
       }
+
+      options?.onAuthenticated?.();
 
       return {
         structuredContent: {
@@ -65,11 +73,29 @@ export function registerSessionTools(server: McpServer, state: ReferenceTradingS
         rate_limits: { orders_per_second: 10, market_data_per_second: 100 },
         supported_order_types: [...SUPPORTED_ORDER_TYPES],
         supported_tif: [...SUPPORTED_TIF],
-        realtime_contract: {
-          reconnect_mode: "no_replay",
-          quote_freshness_ms: 1000,
-          account_freshness_ms: 2000,
-        },
+        realtime_contract: transportMode === "streamable_http"
+          ? {
+              transport_mode: "streamable_http",
+              reconnect_mode: "session_replay",
+              replay_buffer_size: 1000,
+              quote_freshness_ms: 1000,
+              account_freshness_ms: 2000,
+              tick_interval_ms: 2000,
+              notifications: [
+                "notifications/apex.order.filled",
+                "notifications/apex.order.partially_filled",
+                "notifications/apex.order.rejected",
+                "notifications/apex.market.candle_closed",
+                "notifications/apex.risk.kill_switch_engaged",
+                "notifications/apex.session.replay_failed",
+              ],
+            }
+          : {
+              transport_mode: "stdio",
+              reconnect_mode: "no_replay",
+              quote_freshness_ms: 1000,
+              account_freshness_ms: 2000,
+            },
       },
       content: [],
     }),

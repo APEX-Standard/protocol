@@ -3,48 +3,272 @@
  *
  * This implementation keeps the reference behavior intentionally simple while
  * using a structure that maps more naturally to a production TypeScript service.
+ *
+ * Supports two transport modes:
+ *   stdio  (default)     — `node dist/server.js`
+ *   HTTP/SSE             — `node dist/server.js --http <port>`
  */
+
+import { randomUUID } from "node:crypto";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SubscribeRequestSchema, UnsubscribeRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 import { SERVER_NAME, SERVER_VERSION } from "./lib/constants.js";
+import type { ApexNotification } from "./lib/notifications.js";
+import { candleClosedNotification } from "./lib/notifications.js";
+import { ReplayBuffer } from "./lib/replay-buffer.js";
 import { ReferenceTradingState, registerReferenceResources } from "./lib/resources.js";
+import { TickEngine } from "./lib/tick-engine.js";
 import { registerAccountTools } from "./tools/account.js";
 import { registerMarketTools } from "./tools/market.js";
 import { registerOrderTools } from "./tools/orders.js";
 import { registerRiskTools } from "./tools/risk.js";
 import { registerSessionTools } from "./tools/session.js";
 
-const server = new McpServer({
-  name: SERVER_NAME,
-  version: SERVER_VERSION,
-});
-const state = new ReferenceTradingState();
+import { z } from "zod";
 
-server.server.registerCapabilities({
-  resources: {
-    subscribe: true,
-    listChanged: true,
-  },
-});
+/* ------------------------------------------------------------------ */
+/*  Argument parsing                                                   */
+/* ------------------------------------------------------------------ */
 
-server.server.setRequestHandler(SubscribeRequestSchema, async () => ({}));
-server.server.setRequestHandler(UnsubscribeRequestSchema, async () => ({}));
-server.server.fallbackRequestHandler = async (request) => {
-  if (request.method === "resources/subscribe" || request.method === "resources/unsubscribe") {
-    return {};
+function parseArgs(): { mode: "stdio" } | { mode: "http"; port: number } {
+  const idx = process.argv.indexOf("--http");
+  if (idx === -1) return { mode: "stdio" };
+  const portStr = process.argv[idx + 1];
+  const port = Number(portStr);
+  if (!portStr || Number.isNaN(port) || port < 1 || port > 65535) {
+    console.error("Usage: node server.js --http <port>");
+    process.exit(1);
   }
-  throw new Error(`Method not found: ${request.method}`);
-};
+  return { mode: "http", port };
+}
 
-registerSessionTools(server, state);
-registerReferenceResources(server, state);
-registerAccountTools(server, state);
-registerOrderTools(server, state);
-registerMarketTools(server, state);
-registerRiskTools(server, state);
+/* ------------------------------------------------------------------ */
+/*  Common setup                                                       */
+/* ------------------------------------------------------------------ */
 
-await server.connect(new StdioServerTransport());
-console.error(`APEX Protocol Reference Server v${SERVER_VERSION} running`);
+function setupCommon(server: McpServer) {
+  server.server.registerCapabilities({
+    resources: {
+      subscribe: true,
+      listChanged: true,
+    },
+  });
+
+  server.server.setRequestHandler(SubscribeRequestSchema, async () => ({}));
+  server.server.setRequestHandler(UnsubscribeRequestSchema, async () => ({}));
+  server.server.fallbackRequestHandler = async (request) => {
+    if (request.method === "resources/subscribe" || request.method === "resources/unsubscribe") {
+      return {};
+    }
+    throw new Error(`Method not found: ${request.method}`);
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Stdio mode                                                         */
+/* ------------------------------------------------------------------ */
+
+async function startStdio() {
+  const server = new McpServer({
+    name: SERVER_NAME,
+    version: SERVER_VERSION,
+  });
+  const state = new ReferenceTradingState();
+
+  setupCommon(server);
+
+  registerSessionTools(server, state);
+  registerReferenceResources(server, state);
+  registerAccountTools(server, state);
+  registerOrderTools(server, state);
+  registerMarketTools(server, state);
+  registerRiskTools(server, state);
+
+  await server.connect(new StdioServerTransport());
+  console.error(`APEX Protocol Reference Server v${SERVER_VERSION} running`);
+}
+
+/* ------------------------------------------------------------------ */
+/*  HTTP/SSE mode                                                      */
+/* ------------------------------------------------------------------ */
+
+async function startHttp(port: number) {
+  // Dynamic import of express to keep it out of the stdio path
+  const express = (await import("express")).default;
+
+  const app = express();
+  app.use(express.json());
+
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
+    eventStore: new ReplayBuffer(),
+  });
+
+  const server = new McpServer({
+    name: SERVER_NAME,
+    version: SERVER_VERSION,
+  });
+  const state = new ReferenceTradingState();
+
+  setupCommon(server);
+
+  /* -- Notification helper ----------------------------------------- */
+
+  const emitNotification = (notif: ApexNotification) => {
+    server.server.notification({
+      method: notif.method,
+      params: notif.params,
+    }).catch((err: unknown) => {
+      console.error("Failed to send APEX notification:", err);
+    });
+  };
+
+  state.emitNotification = emitNotification;
+
+  /* -- Tick engine ------------------------------------------------- */
+
+  const tickEngine = new TickEngine({
+    onQuoteUpdate(mid, bid, ask) {
+      state.updateQuote(mid, bid, ask);
+      state.bumpResources(state.uris.quote, state.uris.features);
+      server.server.notification({
+        method: "notifications/resources/updated",
+        params: { uri: state.uris.quote },
+      }).catch(() => {});
+      server.server.notification({
+        method: "notifications/resources/updated",
+        params: { uri: state.uris.features },
+      }).catch(() => {});
+    },
+
+    onCandleClose(timeframe, candle) {
+      const candleUri =
+        timeframe === "M1" ? state.uris.candlesM1
+        : timeframe === "M5" ? state.uris.candlesM5
+        : state.uris.candlesH1;
+
+      state.bumpResources(candleUri);
+
+      const seq = (state.getCandles(timeframe as "M1" | "M5" | "H1") as Record<string, unknown>).sequence as number ?? 1;
+      const notif = candleClosedNotification(
+        state.instrumentId,
+        timeframe,
+        {
+          time: candle.openTime,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+          volume: candle.volume,
+        },
+        seq,
+      );
+      server.server.notification({
+        method: notif.method,
+        params: notif.params,
+      }).catch(() => {});
+
+      server.server.notification({
+        method: "notifications/resources/updated",
+        params: { uri: candleUri },
+      }).catch(() => {});
+    },
+
+    onCandleUpdate(timeframe) {
+      const candleUri =
+        timeframe === "M1" ? state.uris.candlesM1
+        : timeframe === "M5" ? state.uris.candlesM5
+        : state.uris.candlesH1;
+
+      server.server.notification({
+        method: "notifications/resources/updated",
+        params: { uri: candleUri },
+      }).catch(() => {});
+    },
+
+    onFeatureUpdate() {
+      server.server.notification({
+        method: "notifications/resources/updated",
+        params: { uri: state.uris.features },
+      }).catch(() => {});
+    },
+  });
+
+  /* -- Register tools ---------------------------------------------- */
+
+  registerSessionTools(server, state, {
+    transportMode: "streamable_http",
+    onAuthenticated: () => {
+      tickEngine.start();
+      console.error("Tick engine started after authentication");
+    },
+  });
+  registerReferenceResources(server, state);
+  registerAccountTools(server, state);
+  registerOrderTools(server, state, emitNotification);
+  registerMarketTools(server, state);
+  registerRiskTools(server, state);
+
+  /* -- Test-only: force candle close ------------------------------- */
+
+  server.registerTool(
+    "reference.test.force_candle_close",
+    {
+      description: "Force-close the current partial candle for a given timeframe. Test-only.",
+      inputSchema: { timeframe: z.enum(["M1", "M5", "H1"]) },
+    },
+    async ({ timeframe }) => {
+      tickEngine.forceCandleClose(timeframe);
+      return { structuredContent: { closed: true, timeframe }, content: [] };
+    },
+  );
+
+  /* -- Express routes ---------------------------------------------- */
+
+  app.post("/mcp", (req, res) => {
+    transport.handleRequest(req, res, req.body);
+  });
+  app.get("/mcp", (req, res) => {
+    // When a client reconnects with Last-Event-ID, close the previous
+    // standalone SSE stream so the SDK does not reject the reconnection
+    // with 409 Conflict.  This compensates for the fact that client-side
+    // aborts are not always detected by the server in Node.js/Express.
+    if (req.headers["last-event-id"]) {
+      transport.closeStandaloneSSEStream();
+    }
+    transport.handleRequest(req, res);
+  });
+  app.delete("/mcp", (req, res) => {
+    transport.handleRequest(req, res);
+  });
+
+  /* -- Cleanup on session close ------------------------------------- */
+
+  transport.onclose = () => {
+    tickEngine.stop();
+    console.error("Tick engine stopped (transport closed)");
+  };
+
+  /* -- Connect and start ------------------------------------------- */
+
+  await server.connect(transport);
+
+  app.listen(port, () => {
+    console.error(`APEX Protocol Reference Server v${SERVER_VERSION} listening on http://localhost:${port}/mcp`);
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/*  Entry point                                                        */
+/* ------------------------------------------------------------------ */
+
+const args = parseArgs();
+if (args.mode === "http") {
+  await startHttp(args.port);
+} else {
+  await startStdio();
+}

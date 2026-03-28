@@ -34,6 +34,15 @@ final class ReferenceTradingState {
     private boolean forceSequenceGap;
     private boolean killSwitchActive;
     private boolean partialFillNextOrder;
+
+    /** Live quote state — updated by tick engine in HTTP mode. */
+    private volatile double liveBid = 1.08740;
+    private volatile double liveAsk = 1.08760;
+    private volatile double liveMid = 1.08750;
+
+    /** Callback for starting tick engine after authentication. */
+    private volatile Runnable onAuthenticated;
+
     private final List<ProtocolModels.Position> positions = List.of(
         new ProtocolModels.Position(
             "pos_001",
@@ -55,6 +64,37 @@ final class ReferenceTradingState {
             new ProtocolModels.PositionProfileData(-2.50, 1.80, -7.50, 10.00, "USD")
         )
     );
+
+    void setOnAuthenticated(Runnable callback) {
+        this.onAuthenticated = callback;
+    }
+
+    void fireOnAuthenticated() {
+        Runnable cb = onAuthenticated;
+        if (cb != null) {
+            cb.run();
+            onAuthenticated = null; // Only fire once
+        }
+    }
+
+    /** Update live quote prices (called by tick engine). */
+    void updateQuote(double mid, double bid, double ask) {
+        this.liveMid = mid;
+        this.liveBid = bid;
+        this.liveAsk = ask;
+    }
+
+    /** Bump sequences without adding to pendingUpdates (for tick engine). */
+    synchronized void bumpResourcesNoTrack(String... uris) {
+        for (String uri : uris) {
+            sequences.merge(uri, 1, Integer::sum);
+        }
+    }
+
+    /** Get current sequence for a resource URI. */
+    synchronized int getSequence(String uri) {
+        return sequences.getOrDefault(uri, 1);
+    }
 
     List<Map<String, Object>> resources() {
         return List.of(
@@ -97,13 +137,17 @@ final class ReferenceTradingState {
     }
 
     synchronized ProtocolModels.MarketQuoteResponse quoteResponse(String instrumentId, String brokerSymbol) {
+        double bid = liveBid;
+        double ask = liveAsk;
+        double mid = liveMid;
+        double spread = Math.round((ask - bid) * 100000.0) / 100000.0;
         return new ProtocolModels.MarketQuoteResponse(
             instrumentId == null || instrumentId.isBlank() ? INSTRUMENT_ID : instrumentId,
             brokerSymbol == null || brokerSymbol.isBlank() ? BROKER_SYMBOL : brokerSymbol,
-            1.08740,
-            1.08760,
-            1.08750,
-            0.00020,
+            bid,
+            ask,
+            mid,
+            spread,
             (quoteStale ? Instant.now().minusSeconds(5) : Instant.now()).toString(),
             true,
             "open"
@@ -176,6 +220,12 @@ final class ReferenceTradingState {
         );
     }
 
+    /** Get the last created order record (for notification emission). */
+    synchronized Map<String, Object> getLastOrder() {
+        if (orders.isEmpty()) return null;
+        return new LinkedHashMap<>(orders.get(orders.size() - 1));
+    }
+
     synchronized Map<String, Object> setFaults(Boolean quoteStale, Boolean riskStale, Boolean forceSequenceGap, Boolean killSwitchActive, Boolean partialFillNextOrder) {
         if (quoteStale != null) {
             this.quoteStale = quoteStale;
@@ -199,6 +249,10 @@ final class ReferenceTradingState {
             "kill_switch_active", this.killSwitchActive,
             "partial_fill_next_order", this.partialFillNextOrder
         );
+    }
+
+    synchronized boolean isKillSwitchActive() {
+        return killSwitchActive;
     }
 
     synchronized Map<String, Object> orderAcceptance() {
@@ -250,24 +304,30 @@ final class ReferenceTradingState {
 
     synchronized Object readResource(String uri) {
         return switch (uri) {
-            case QUOTE_URI -> envelope(uri, Map.of(
-                "instrument_id", INSTRUMENT_ID,
-                "broker_symbol", BROKER_SYMBOL,
-                "bid", 1.08740,
-                "ask", 1.08760,
-                "mid", 1.08750,
-                "spread", 0.00020,
-                "timestamp", (quoteStale ? Instant.now().minusSeconds(5) : Instant.now()).toString(),
-                "is_tradeable", true,
-                "market_status", "open"
-            ), 1000);
+            case QUOTE_URI -> {
+                double bid = liveBid;
+                double ask = liveAsk;
+                double mid = liveMid;
+                double spread = Math.round((ask - bid) * 100000.0) / 100000.0;
+                yield envelope(uri, Map.of(
+                    "instrument_id", INSTRUMENT_ID,
+                    "broker_symbol", BROKER_SYMBOL,
+                    "bid", bid,
+                    "ask", ask,
+                    "mid", mid,
+                    "spread", spread,
+                    "timestamp", (quoteStale ? Instant.now().minusSeconds(5) : Instant.now()).toString(),
+                    "is_tradeable", true,
+                    "market_status", "open"
+                ), 1000);
+            }
             case CANDLES_M1_URI -> candlesEnvelope(uri, "M1", 1.0875);
             case CANDLES_M5_URI -> candlesEnvelope(uri, "M5", 1.0868);
             case CANDLES_H1_URI -> candlesEnvelope(uri, "H1", 1.0842);
             case FEATURES_URI -> envelope(uri, Map.of(
                 "instrument_id", INSTRUMENT_ID,
                 "as_of", (riskStale ? Instant.now().minusSeconds(5) : Instant.now()).toString(),
-                "quote", Map.of("bid", 1.08740, "ask", 1.08760, "mid", 1.08750, "spread", 0.00020),
+                "quote", Map.of("bid", liveBid, "ask", liveAsk, "mid", liveMid, "spread", Math.round((liveAsk - liveBid) * 100000.0) / 100000.0),
                 "returns", Map.of("r_1s", 0.00002, "r_5s", 0.00005, "r_1m", 0.0008),
                 "volatility", Map.of("rv_1m", 0.12, "rv_5m", 0.37, "rv_30m", 0.55),
                 "book", Map.of("top_level_imbalance", 0.21, "depth_imbalance", 0.18, "microprice", 1.08753),

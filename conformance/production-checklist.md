@@ -122,14 +122,19 @@ The reference harness now executes:
 - resource subscription smoke test
 - schema validation for quote, candle (M1, M5, H1), feature, decision-context, account summary, positions, orders, fills, and risk resources
 - schema validation against normative order-event and fill-event schemas
-- reconnect without replay baseline rebuild checks
+- reconnect without replay baseline rebuild checks (stdio)
 - stale quote and stale risk order rejection checks
 - injected sequence gap detection and sequence-gap rejection checks
 - partial fill lifecycle and event schema validation
 - kill switch order rejection checks
+- HTTP/SSE transport connection and session management
+- SSE notification delivery (`notifications/resources/updated` and APEX notifications)
+- SSE reconnect with `Last-Event-ID` replay
+- Replay buffer exhaustion and `replay_failed` notification
+- Live market data streaming (quote updates, candle close via `force_candle_close`)
+- Session rejection for invalid session IDs (bogus ID returns 404)
 
 ## Recommended Future Executable Tests
 
 - quote freshness timeout test (wall-clock staleness detection)
-- reconnect with replay continuity test (resumable SSE streams)
-- candle close notification timing test
+- candle close notification wall-clock timing precision test

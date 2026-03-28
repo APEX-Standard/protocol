@@ -15,12 +15,17 @@ import java.util.Set;
 
 public final class Server {
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final ReferenceTradingState STATE = new ReferenceTradingState();
-    private static final Map<String, ToolDefinition> TOOLS = new ToolRegistry(MAPPER, STATE).createTools();
-    private static final Set<String> SUBSCRIPTIONS = new LinkedHashSet<>();
 
     private Server() {
     }
+
+    /* ================================================================== */
+    /*  Stdio mode (original)                                              */
+    /* ================================================================== */
+
+    private static final ReferenceTradingState STDIO_STATE = new ReferenceTradingState();
+    private static final Map<String, ToolDefinition> STDIO_TOOLS = new ToolRegistry(MAPPER, STDIO_STATE, "stdio", null).createTools();
+    private static final Set<String> SUBSCRIPTIONS = new LinkedHashSet<>();
 
     @SuppressWarnings("unchecked")
     private static ObjectNode handleRequest(JsonNode request) throws IOException {
@@ -70,7 +75,7 @@ public final class Server {
         ObjectNode result = MAPPER.createObjectNode();
         ArrayNode toolsArray = result.putArray("tools");
 
-        for (ToolDefinition tool : TOOLS.values()) {
+        for (ToolDefinition tool : STDIO_TOOLS.values()) {
             ObjectNode toolNode = toolsArray.addObject();
             toolNode.put("name", tool.name());
             toolNode.put("description", tool.description());
@@ -84,7 +89,7 @@ public final class Server {
     private static ObjectNode listResourcesResult() {
         ObjectNode result = MAPPER.createObjectNode();
         ArrayNode resources = result.putArray("resources");
-        for (Map<String, Object> resource : STATE.resources()) {
+        for (Map<String, Object> resource : STDIO_STATE.resources()) {
             ObjectNode node = resources.addObject();
             node.put("name", String.valueOf(resource.get("name")));
             node.put("uri", String.valueOf(resource.get("uri")));
@@ -96,12 +101,13 @@ public final class Server {
 
     private static void handleToolCall(ObjectNode response, JsonNode params) throws IOException {
         String toolName = params != null ? params.path("name").asText("") : "";
-        ToolDefinition tool = TOOLS.get(toolName);
+        ToolDefinition tool = STDIO_TOOLS.get(toolName);
         if (tool == null) {
             response.set("error", jsonRpcError(-32601, "Unknown tool: " + toolName));
             return;
         }
 
+        @SuppressWarnings("unchecked")
         Map<String, Object> arguments = params != null && params.has("arguments")
             ? MAPPER.convertValue(params.get("arguments"), LinkedHashMap.class)
             : Map.of();
@@ -124,7 +130,7 @@ public final class Server {
 
     private static void handleResourceRead(ObjectNode response, JsonNode params) throws IOException {
         String uri = params != null ? params.path("uri").asText("") : "";
-        Object payload = STATE.readResource(uri);
+        Object payload = STDIO_STATE.readResource(uri);
         if (payload == null) {
             response.set("error", jsonRpcError(-32002, "Unknown resource: " + uri));
             return;
@@ -160,7 +166,7 @@ public final class Server {
         return error;
     }
 
-    public static void main(String[] args) throws IOException {
+    private static void runStdio() throws IOException {
         System.err.println("APEX Protocol Reference Server v" + ToolRegistry.SERVER_VERSION + " (Java 21) running");
 
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in))) {
@@ -193,7 +199,7 @@ public final class Server {
     }
 
     private static void flushNotifications() throws IOException {
-        for (String uri : STATE.drainPendingUpdates()) {
+        for (String uri : STDIO_STATE.drainPendingUpdates()) {
             if (!SUBSCRIPTIONS.contains(uri)) {
                 continue;
             }
@@ -204,6 +210,127 @@ public final class Server {
             notification.putObject("params").put("uri", uri);
             System.out.println(MAPPER.writeValueAsString(notification));
             System.out.flush();
+        }
+    }
+
+    /* ================================================================== */
+    /*  HTTP/SSE mode                                                      */
+    /* ================================================================== */
+
+    private static void runHttp(int port) throws IOException {
+        ReferenceTradingState httpState = new ReferenceTradingState();
+        NotificationDispatcher dispatcher = new NotificationDispatcher();
+
+        Map<String, ToolDefinition> httpTools = new ToolRegistry(MAPPER, httpState, "streamable_http", dispatcher).createTools();
+
+        HttpTransport transport = new HttpTransport(MAPPER, port, httpState, httpTools, dispatcher);
+
+        // Set up tick engine
+        TickEngine tickEngine = new TickEngine();
+        transport.setTickEngine(tickEngine);
+
+        // Configure tick engine callbacks
+        tickEngine.setQuoteCallback((mid, bid, ask) -> {
+            httpState.updateQuote(mid, bid, ask);
+            httpState.bumpResourcesNoTrack(ReferenceTradingState.QUOTE_URI, ReferenceTradingState.FEATURES_URI);
+            transport.emitResourceUpdatedToAll(ReferenceTradingState.QUOTE_URI);
+            transport.emitResourceUpdatedToAll(ReferenceTradingState.FEATURES_URI);
+        });
+
+        tickEngine.setCandleCloseCallback((timeframe, candle) -> {
+            String candleUri = switch (timeframe) {
+                case "M1" -> ReferenceTradingState.CANDLES_M1_URI;
+                case "M5" -> ReferenceTradingState.CANDLES_M5_URI;
+                default -> ReferenceTradingState.CANDLES_H1_URI;
+            };
+            httpState.bumpResourcesNoTrack(candleUri);
+            int seq = httpState.getSequence(candleUri);
+
+            Map<String, Object> candleNotif = NotificationDispatcher.candleClosedNotification(
+                ReferenceTradingState.INSTRUMENT_ID, timeframe,
+                candle.open, candle.high, candle.low, candle.close, candle.volume,
+                seq
+            );
+            transport.emitToAllSessions(candleNotif);
+            transport.emitResourceUpdatedToAll(candleUri);
+        });
+
+        tickEngine.setCandleUpdateCallback(timeframe -> {
+            String candleUri = switch (timeframe) {
+                case "M1" -> ReferenceTradingState.CANDLES_M1_URI;
+                case "M5" -> ReferenceTradingState.CANDLES_M5_URI;
+                default -> ReferenceTradingState.CANDLES_H1_URI;
+            };
+            transport.emitResourceUpdatedToAll(candleUri);
+        });
+
+        tickEngine.setFeatureUpdateCallback(() ->
+            transport.emitResourceUpdatedToAll(ReferenceTradingState.FEATURES_URI));
+
+        // Set up notification dispatcher to emit APEX notifications via SSE
+        dispatcher.setSink(notification -> transport.emitToAllSessions(notification));
+
+        // Register force_candle_close tool
+        httpTools.put("reference.test.force_candle_close", new ToolDefinition(
+            "reference.test.force_candle_close",
+            "Force-close the current partial candle for a given timeframe. Test-only.",
+            new SchemaBuilder(MAPPER).objectSchema((props, req) ->
+                new SchemaBuilder(MAPPER).enumProp(props, req, "timeframe", null, true, null, "M1", "M5", "H1")),
+            MAPPER.createObjectNode()
+                .put("readOnlyHint", false)
+                .put("destructiveHint", false)
+                .put("idempotentHint", false),
+            args -> {
+                String timeframe = ToolRegistry.argStr(args, "timeframe", "M1");
+                tickEngine.forceCandleClose(timeframe);
+                return Map.of("closed", true, "timeframe", timeframe);
+            }
+        ));
+
+        // Set the tick engine start callback — the ToolRegistry will call it after auth
+        httpState.setOnAuthenticated(() -> {
+            tickEngine.start();
+            System.err.println("Tick engine started after authentication");
+        });
+
+        transport.start();
+
+        // Keep main thread alive
+        try {
+            Thread.currentThread().join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            tickEngine.shutdown();
+            transport.stop();
+        }
+    }
+
+    /* ================================================================== */
+    /*  Entry point                                                        */
+    /* ================================================================== */
+
+    public static void main(String[] args) throws IOException {
+        int httpIdx = -1;
+        for (int i = 0; i < args.length; i++) {
+            if ("--http".equals(args[i])) {
+                httpIdx = i;
+                break;
+            }
+        }
+
+        if (httpIdx >= 0 && httpIdx + 1 < args.length) {
+            int port;
+            try {
+                port = Integer.parseInt(args[httpIdx + 1]);
+            } catch (NumberFormatException e) {
+                System.err.println("Usage: java -jar apex-reference-java-0.1.0.jar --http <port>");
+                System.exit(1);
+                return;
+            }
+            runHttp(port);
+        } else {
+            runStdio();
         }
     }
 }

@@ -121,8 +121,35 @@ npm run production-smoke:typescript
 npm run production-resilience:typescript
 npm run verify:alpha
 npm run verify:production
-npm run verify:all
+npm run verify:transport
+npm run verify:all          # includes alpha + production + transport
 ```
+
+### Transport Tests (HTTP/SSE)
+
+The transport test suites validate HTTP/SSE behavior. They start the server in HTTP mode using `--http <port>` and exercise the wire protocol directly with raw `fetch` and SSE parsing (not the MCP SDK client).
+
+```bash
+npm run transport-smoke:typescript
+npm run transport-smoke:go
+npm run transport-smoke:rust
+npm run transport-smoke:java
+npm run transport-resilience:typescript
+npm run transport-resilience:go
+npm run transport-resilience:rust
+npm run transport-resilience:java
+npm run transport-marketdata:typescript
+npm run transport-marketdata:go
+npm run transport-marketdata:rust
+npm run transport-marketdata:java
+npm run verify:transport     # all 3 transport suites × all 4 implementations
+```
+
+The three transport test scripts are:
+
+- **`transport-smoke`** — HTTP connection lifecycle, session management via `Mcp-Session-Id`, tool calls over POST, SSE notification delivery (both `notifications/resources/updated` and APEX notifications such as `notifications/apex.order.filled` and `notifications/apex.risk.kill_switch_engaged`), APEX notification envelope validation, and negative tests (bogus session ID returns 404, missing session header returns 400).
+- **`transport-resilience`** — SSE reconnect with `Last-Event-ID` replay, replayed event ordering and ID correctness, sequence monotonicity across replay boundaries, replay buffer exhaustion triggering `notifications/apex.session.replay_failed`, and post-failure baseline recovery.
+- **`transport-marketdata`** — Live streaming quote updates over SSE, verification that quote values change between ticks (not static), deterministic candle close via `reference.test.force_candle_close`, `notifications/apex.market.candle_closed` payload validation, and features resource update delivery.
 
 These shortcuts are convenience wrappers around the same harness and are primarily intended for protocol development and regression checks.
 
@@ -145,6 +172,15 @@ The harness launches the target MCP server itself using the supplied stdio comma
 - Go: `go run .`
 - Rust: `cargo run --quiet`
 - Java: `java -jar target/apex-reference-java-0.1.0.jar`
+
+For HTTP/SSE transport tests, the harness starts the server with the `--http <port>` flag:
+
+- TypeScript: `node dist/server.js --http 0`
+- Go: `go run . --http 0`
+- Rust: `cargo run --quiet -- --http 0`
+- Java: `java -jar target/apex-reference-java-0.1.0.jar --http 0`
+
+Port `0` tells the server to bind to a random available port. The harness reads the actual port from the server's stderr output to avoid conflicts when running tests in parallel.
 
 For third-party implementations, replace those with your own server command via `--command` and `--args`, or via `--config`.
 

@@ -19,11 +19,15 @@ final class ToolRegistry {
     private final ObjectMapper mapper;
     private final SchemaBuilder schema;
     private final ReferenceTradingState state;
+    private final String transportMode;
+    private final NotificationDispatcher dispatcher;
 
-    ToolRegistry(ObjectMapper mapper, ReferenceTradingState state) {
+    ToolRegistry(ObjectMapper mapper, ReferenceTradingState state, String transportMode, NotificationDispatcher dispatcher) {
         this.mapper = mapper;
         this.schema = new SchemaBuilder(mapper);
         this.state = state;
+        this.transportMode = transportMode != null ? transportMode : "stdio";
+        this.dispatcher = dispatcher;
     }
 
     Map<String, ToolDefinition> createTools() {
@@ -55,6 +59,9 @@ final class ToolRegistry {
                     return apexError("APEX_4001", "auth", "Invalid or expired token");
                 }
 
+                // Fire authenticated callback (starts tick engine in HTTP mode)
+                state.fireOnAuthenticated();
+
                 return new SessionResponse(
                     UUID.randomUUID().toString(),
                     argStr(args, "account_id", "ACC_12345"),
@@ -73,21 +80,46 @@ final class ToolRegistry {
             "Query the full capability manifest of this broker implementation.",
             schema.objectSchema((props, req) -> {
             }),
-            args -> new CapabilitiesResponse(
-                SERVER_VERSION,
-                "reference-broker",
-                coreTools(),
-                Map.of("fx", SERVER_VERSION),
-                null,
-                Map.of("orders_per_second", 10, "market_data_per_second", 100),
-                List.of("market", "limit", "stop", "stop_limit"),
-                List.of("GTC", "IOC", "FOK", "DAY"),
-                Map.of(
-                    "reconnect_mode", "no_replay",
-                    "quote_freshness_ms", 1000,
-                    "account_freshness_ms", 2000
-                )
-            )
+            args -> {
+                Object realtimeContract;
+                if ("streamable_http".equals(transportMode)) {
+                    realtimeContract = Map.of(
+                        "transport_mode", "streamable_http",
+                        "reconnect_mode", "session_replay",
+                        "replay_buffer_size", 1000,
+                        "quote_freshness_ms", 1000,
+                        "account_freshness_ms", 2000,
+                        "tick_interval_ms", 2000,
+                        "notifications", List.of(
+                            "notifications/apex.order.filled",
+                            "notifications/apex.order.partially_filled",
+                            "notifications/apex.order.rejected",
+                            "notifications/apex.market.candle_closed",
+                            "notifications/apex.risk.kill_switch_engaged",
+                            "notifications/apex.session.replay_failed"
+                        )
+                    );
+                } else {
+                    realtimeContract = Map.of(
+                        "transport_mode", "stdio",
+                        "reconnect_mode", "no_replay",
+                        "quote_freshness_ms", 1000,
+                        "account_freshness_ms", 2000
+                    );
+                }
+
+                return new CapabilitiesResponse(
+                    SERVER_VERSION,
+                    "reference-broker",
+                    coreTools(),
+                    Map.of("fx", SERVER_VERSION),
+                    null,
+                    Map.of("orders_per_second", 10, "market_data_per_second", 100),
+                    List.of("market", "limit", "stop", "stop_limit"),
+                    List.of("GTC", "IOC", "FOK", "DAY"),
+                    realtimeContract
+                );
+            }
         );
 
         registerTool(
@@ -109,16 +141,25 @@ final class ToolRegistry {
                 schema.booleanProp(props, req, "kill_switch_active", false, false);
                 schema.booleanProp(props, req, "partial_fill_next_order", false, false);
             }),
-            args -> Map.of(
-                "ok", true,
-                "faults", state.setFaults(
+            args -> {
+                boolean wasKillSwitchActive = state.isKillSwitchActive();
+
+                Map<String, Object> faults = state.setFaults(
                     argBool(args, "quote_stale"),
                     argBool(args, "risk_stale"),
                     argBool(args, "force_sequence_gap"),
                     argBool(args, "kill_switch_active"),
                     argBool(args, "partial_fill_next_order")
-                )
-            )
+                );
+
+                // Emit kill_switch_engaged notification when transitioning to active
+                if (!wasKillSwitchActive && Boolean.TRUE.equals(argBool(args, "kill_switch_active")) && dispatcher != null) {
+                    int riskSeq = state.getSequence(ReferenceTradingState.RISK_URI);
+                    dispatcher.emit(NotificationDispatcher.killSwitchEngagedNotification(riskSeq));
+                }
+
+                return Map.of("ok", true, "faults", faults);
+            }
         );
     }
 
@@ -224,6 +265,15 @@ final class ToolRegistry {
 
                 Map<String, Object> acceptance = state.orderAcceptance();
                 if (!Boolean.TRUE.equals(acceptance.get("ok"))) {
+                    // Emit order rejected notification in HTTP mode
+                    if (dispatcher != null) {
+                        int riskSeq = state.getSequence(ReferenceTradingState.RISK_URI);
+                        dispatcher.emit(NotificationDispatcher.orderRejectedNotification(
+                            String.valueOf(acceptance.get("code")),
+                            String.valueOf(acceptance.get("message")),
+                            riskSeq
+                        ));
+                    }
                     return apexError(
                         String.valueOf(acceptance.get("code")),
                         String.valueOf(acceptance.get("category")),
@@ -231,7 +281,23 @@ final class ToolRegistry {
                     );
                 }
 
-                return state.createOrder(args);
+                ProtocolModels.OrderPlacementResponse result = state.createOrder(args);
+
+                // Emit order filled/partially filled notification in HTTP mode
+                if (dispatcher != null && "market".equals(orderType)) {
+                    Map<String, Object> lastOrder = state.getLastOrder();
+                    if (lastOrder != null) {
+                        int fillSeq = state.getSequence(ReferenceTradingState.FILLS_URI);
+                        String status = String.valueOf(lastOrder.get("status"));
+                        if ("filled".equals(status)) {
+                            dispatcher.emit(NotificationDispatcher.orderFilledNotification(lastOrder, fillSeq));
+                        } else if ("partially_filled".equals(status)) {
+                            dispatcher.emit(NotificationDispatcher.orderPartiallyFilledNotification(lastOrder, fillSeq));
+                        }
+                    }
+                }
+
+                return result;
             }
         );
 

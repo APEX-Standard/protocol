@@ -29,7 +29,7 @@ APEX adopts the following design principles for agent-native trading:
 - Tools are primarily for actions and explicit queries.
 - Resources are the primary interface for live state.
 - MCP subscriptions and notifications are the primary interface for change.
-- Streamable HTTP with SSE is the recommended transport for remote realtime sessions.
+- HTTP with SSE is the alpha interoperability transport for remote realtime sessions.
 - Agents should consume structured market/account/risk state, not raw unbounded tick text streams.
 - Candle series and derived features are first-class state alongside quotes and order events.
 
@@ -42,6 +42,13 @@ Production capability claims and normative realtime schemas are defined in:
 - [`execution-semantics.md`](./execution-semantics.md)
 - [`operations.md`](./operations.md)
 - [`schemas/`](./schemas/)
+
+For alpha network transport compatibility, implementations may expose either:
+
+- MCP Streamable HTTP with SSE support, or
+- MCP HTTP+SSE compatibility transport
+
+As long as they preserve the same APEX resource, tool, and notification semantics.
 
 ---
 
@@ -1024,42 +1031,207 @@ Client obligations:
 
 ### 6.12 APEX Notification Taxonomy
 
-In addition to MCP-standard resource update notifications, APEX defines the following recommended notification names for urgent or semantically meaningful events:
+In addition to MCP-standard resource update notifications, APEX defines the following notification types. The first five are mandatory for Production Realtime implementations. The remaining are recommended for richer agent-native workflows.
 
-- `notifications/apex.market.quote_moved`
-- `notifications/apex.market.candle_closed`
-- `notifications/apex.market.regime_changed`
-- `notifications/apex.market.volatility_spike`
-- `notifications/apex.order.accepted`
-- `notifications/apex.order.filled`
-- `notifications/apex.order.partially_filled`
-- `notifications/apex.order.cancelled`
-- `notifications/apex.order.rejected`
-- `notifications/apex.risk.limit_warning`
-- `notifications/apex.risk.kill_switch_engaged`
+#### Mandatory Notifications
 
-Recommended event envelope:
+| Notification | Trigger |
+|---|---|
+| `notifications/apex.order.filled` | Order fills completely |
+| `notifications/apex.order.partially_filled` | Order partially fills |
+| `notifications/apex.order.rejected` | Order is rejected (stale data, kill switch, risk limit, etc.) |
+| `notifications/apex.market.candle_closed` | A candle bar completes on a wall-clock boundary |
+| `notifications/apex.risk.kill_switch_engaged` | Kill switch is activated |
+| `notifications/apex.session.replay_failed` | SSE reconnect replay cannot be satisfied from the buffer |
+
+#### Mandatory Payload Shapes
+
+Each mandatory notification must include a `params` object following the event envelope structure below. The `payload` field within `params` carries event-specific data as defined here.
+
+**`notifications/apex.order.filled`**
 
 ```json
 {
-  "event_id": "string",
-  "event_type": "notifications/apex.order.filled",
-  "account_id": "ACC_12345",
-  "instrument_id": "APEX:FX:EURUSD",
-  "resource_uri": "apex://account/fills/ACC_12345",
-  "timestamp": "ISO8601",
-  "sequence": 184468,
-  "payload": {}
+  "params": {
+    "event_id": "evt_a1b2c3d4",
+    "event_type": "notifications/apex.order.filled",
+    "account_id": "ACC_12345",
+    "instrument_id": "APEX:FX:EURUSD",
+    "resource_uri": "apex://account/fills/ACC_12345",
+    "timestamp": "2026-03-27T14:30:00.123Z",
+    "sequence": 42,
+    "payload": {
+      "order_id": "ord_abc123",
+      "side": "buy",
+      "fill_price": 1.08755,
+      "fill_quantity": 100000,
+      "commission": -0.5,
+      "position_id": "pos_001"
+    }
+  }
 }
 ```
+
+**`notifications/apex.order.partially_filled`**
+
+```json
+{
+  "params": {
+    "event_id": "evt_b2c3d4e5",
+    "event_type": "notifications/apex.order.partially_filled",
+    "account_id": "ACC_12345",
+    "instrument_id": "APEX:FX:EURUSD",
+    "resource_uri": "apex://account/fills/ACC_12345",
+    "timestamp": "2026-03-27T14:30:00.456Z",
+    "sequence": 43,
+    "payload": {
+      "order_id": "ord_abc123",
+      "side": "buy",
+      "fill_price": 1.08760,
+      "fill_quantity": 50000,
+      "remaining_quantity": 50000
+    }
+  }
+}
+```
+
+**`notifications/apex.order.rejected`**
+
+```json
+{
+  "params": {
+    "event_id": "evt_c3d4e5f6",
+    "event_type": "notifications/apex.order.rejected",
+    "account_id": "ACC_12345",
+    "instrument_id": "APEX:FX:EURUSD",
+    "resource_uri": "apex://account/orders/ACC_12345",
+    "timestamp": "2026-03-27T14:30:01.000Z",
+    "sequence": 44,
+    "payload": {
+      "order_id": "ord_def456",
+      "code": "STALE_QUOTE",
+      "reason": "Quote data is stale; order rejected"
+    }
+  }
+}
+```
+
+**`notifications/apex.market.candle_closed`**
+
+```json
+{
+  "params": {
+    "event_id": "evt_d4e5f6g7",
+    "event_type": "notifications/apex.market.candle_closed",
+    "account_id": null,
+    "instrument_id": "APEX:FX:EURUSD",
+    "resource_uri": "apex://market/candles/APEX:FX:EURUSD?timeframe=M1&limit=200",
+    "timestamp": "2026-03-27T14:31:00.000Z",
+    "sequence": 45,
+    "payload": {
+      "instrument_id": "APEX:FX:EURUSD",
+      "timeframe": "M1",
+      "open": 1.08750,
+      "high": 1.08780,
+      "low": 1.08740,
+      "close": 1.08765,
+      "volume": 1500000,
+      "complete": true
+    }
+  }
+}
+```
+
+**`notifications/apex.risk.kill_switch_engaged`**
+
+```json
+{
+  "params": {
+    "event_id": "evt_e5f6g7h8",
+    "event_type": "notifications/apex.risk.kill_switch_engaged",
+    "account_id": "ACC_12345",
+    "instrument_id": null,
+    "resource_uri": "apex://account/risk/ACC_12345",
+    "timestamp": "2026-03-27T14:32:00.000Z",
+    "sequence": 46,
+    "payload": {
+      "account_id": "ACC_12345",
+      "reason": "Daily loss limit exceeded"
+    }
+  }
+}
+```
+
+**`notifications/apex.session.replay_failed`**
+
+```json
+{
+  "params": {
+    "event_id": "evt_f6g7h8i9",
+    "event_type": "notifications/apex.session.replay_failed",
+    "account_id": null,
+    "instrument_id": null,
+    "resource_uri": null,
+    "timestamp": "2026-03-27T14:33:00.000Z",
+    "sequence": null,
+    "payload": {
+      "reason": "event_id_outside_buffer",
+      "last_available_id": 502
+    }
+  }
+}
+```
+
+When the server cannot satisfy a `Last-Event-ID` reconnect request because the requested event has been evicted from the replay buffer, it sends this notification as the first event on the new SSE stream. The client must treat this as a sequence discontinuity: discard cached state, re-read all resources, and re-establish baseline before resuming autonomous execution.
+
+#### Recommended Additional Notifications
+
+The following notifications are recommended for richer agent workflows but are not mandatory for Production Realtime compliance:
+
+- `notifications/apex.market.quote_moved`
+- `notifications/apex.market.regime_changed`
+- `notifications/apex.market.volatility_spike`
+- `notifications/apex.order.accepted`
+- `notifications/apex.order.cancelled`
+- `notifications/apex.risk.limit_warning`
+
+#### Event Envelope
+
+Every APEX notification follows this envelope structure. The complete event as sent over the wire is a JSON-RPC 2.0 notification wrapping the `params` object:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "notifications/apex.order.filled",
+  "params": {
+    "event_id": "evt_a1b2c3d4",
+    "event_type": "notifications/apex.order.filled",
+    "account_id": "ACC_12345",
+    "instrument_id": "APEX:FX:EURUSD",
+    "resource_uri": "apex://account/fills/ACC_12345",
+    "timestamp": "2026-03-27T14:30:00.123Z",
+    "sequence": 42,
+    "payload": {
+      "order_id": "ord_abc123",
+      "side": "buy",
+      "fill_price": 1.08755,
+      "fill_quantity": 100000,
+      "commission": -0.5,
+      "position_id": "pos_001"
+    }
+  }
+}
+```
+
+The `event_type` field within `params` intentionally mirrors the JSON-RPC `method` field. This exists so that agents consuming `params` as a standalone payload — stripped from the JSON-RPC wrapper — still have the event type available for routing. Agents processing the full JSON-RPC envelope can use `method` instead.
 
 Production event requirements:
 
 - `event_id` must be unique within the session
 - `event_type` must be stable and machine-routable
 - `timestamp` must reflect broker event time or broker processing time; servers must document which
-- `sequence` must be monotonic for the referenced resource stream
-- `resource_uri` must point to the canonical resource that should be refreshed
+- `sequence` must be monotonic for the referenced resource stream (null for session-level events like `replay_failed`)
+- `resource_uri` must point to the canonical resource that should be refreshed (null when no single resource applies)
 
 ### 6.13 Order And Fill Event Payloads
 

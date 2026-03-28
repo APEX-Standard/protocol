@@ -8,6 +8,10 @@ import (
 )
 
 func registerRiskTools(s *server.MCPServer) {
+	registerRiskToolsWithState(s, state)
+}
+
+func registerRiskToolsWithState(s *server.MCPServer, st *referenceState) {
 	s.AddTool(
 		mcp.NewTool("apex.risk.check",
 			mcp.WithDescription("Pre-trade margin and exposure check. Call before placing large orders."),
@@ -21,7 +25,25 @@ func registerRiskTools(s *server.MCPServer) {
 				}),
 			),
 		),
-		handleRiskCheck,
+		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			order := mapParam(request.GetArguments(), "order")
+			if order == nil {
+				return jsonResult(apexError("APEX_4011", "validation", "order is required"))
+			}
+
+			requiredMargin := (floatParam(order, "quantity", 0) / 100000) * 500
+			availableMargin := 9750.0
+
+			return jsonResult(riskCheckResponse{
+				Approved:         true,
+				RequiredMargin:   requiredMargin,
+				AvailableMargin:  availableMargin,
+				MarginAfterTrade: availableMargin - requiredMargin,
+				ExposureIncrease: floatParam(order, "quantity", 0),
+				Warnings:         []any{},
+				RejectionReason:  nil,
+			})
+		},
 	)
 
 	s.AddTool(
@@ -29,40 +51,18 @@ func registerRiskTools(s *server.MCPServer) {
 			mcp.WithDescription("Current account-level risk limits and utilisation."),
 			mcp.WithString("account_id", mcp.Required()),
 		),
-		handleRiskLimits,
+		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return jsonResult(riskLimitsResponse{
+				AccountID:             strParam(request.GetArguments(), "account_id", ""),
+				MaxPositionSize:       5000000,
+				MaxOpenOrders:         50,
+				DailyLossLimit:        -1000,
+				DailyLossUsed:         -150,
+				MarginCallLevelPct:    100,
+				StopOutLevelPct:       50,
+				RestrictedInstruments: []any{},
+				KillSwitchActive:      st.isKillSwitchActive(),
+			})
+		},
 	)
-}
-
-func handleRiskCheck(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	order := mapParam(request.GetArguments(), "order")
-	if order == nil {
-		return jsonResult(apexError("APEX_4011", "validation", "order is required"))
-	}
-
-	requiredMargin := (floatParam(order, "quantity", 0) / 100000) * 500
-	availableMargin := 9750.0
-
-	return jsonResult(riskCheckResponse{
-		Approved:         true,
-		RequiredMargin:   requiredMargin,
-		AvailableMargin:  availableMargin,
-		MarginAfterTrade: availableMargin - requiredMargin,
-		ExposureIncrease: floatParam(order, "quantity", 0),
-		Warnings:         []any{},
-		RejectionReason:  nil,
-	})
-}
-
-func handleRiskLimits(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return jsonResult(riskLimitsResponse{
-		AccountID:             strParam(request.GetArguments(), "account_id", ""),
-		MaxPositionSize:       5000000,
-		MaxOpenOrders:         50,
-		DailyLossLimit:        -1000,
-		DailyLossUsed:         -150,
-		MarginCallLevelPct:    100,
-		StopOutLevelPct:       50,
-		RestrictedInstruments: []any{},
-		KillSwitchActive:      state.isKillSwitchActive(),
-	})
 }
