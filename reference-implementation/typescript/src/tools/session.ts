@@ -8,9 +8,10 @@ import {
   SUPPORTED_TIF,
 } from "../lib/constants.js";
 import { apexError, hoursFromNow, nowIso } from "../lib/helpers.js";
+import type { ReferenceTradingState } from "../lib/resources.js";
 import { z } from "zod";
 
-export function registerSessionTools(server: McpServer): void {
+export function registerSessionTools(server: McpServer, state: ReferenceTradingState): void {
   server.registerTool(
     "apex.session.authenticate",
     {
@@ -64,6 +65,11 @@ export function registerSessionTools(server: McpServer): void {
         rate_limits: { orders_per_second: 10, market_data_per_second: 100 },
         supported_order_types: [...SUPPORTED_ORDER_TYPES],
         supported_tif: [...SUPPORTED_TIF],
+        realtime_contract: {
+          reconnect_mode: "no_replay",
+          quote_freshness_ms: 1000,
+          account_freshness_ms: 2000,
+        },
       },
       content: [],
     }),
@@ -80,5 +86,30 @@ export function registerSessionTools(server: McpServer): void {
       structuredContent: { timestamp: nowIso(), status: "ok" },
       content: [],
     }),
+  );
+
+  server.registerTool(
+    "reference.test.set_realtime_state",
+    {
+      description: "Reference-only fault injection for conformance and resilience testing.",
+      inputSchema: {
+        quote_stale: z.boolean().optional(),
+        risk_stale: z.boolean().optional(),
+        force_sequence_gap: z.boolean().optional(),
+        kill_switch_active: z.boolean().optional(),
+        partial_fill_next_order: z.boolean().optional(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async (input) => {
+      state.setRealtimeFaults(input);
+      return {
+        structuredContent: {
+          ok: true,
+          faults: state.currentFaults(),
+        },
+        content: [],
+      };
+    },
   );
 }

@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { apexError, nowIso } from "../lib/helpers.js";
+import type { ReferenceTradingState } from "../lib/resources.js";
 import {
   InstrumentIdSchema,
   OrderTypeSchema,
@@ -40,7 +41,7 @@ const OrderModificationSchema = z.object({
   trailing_stop: TrailingStopSchema,
 });
 
-export function registerOrderTools(server: McpServer): void {
+export function registerOrderTools(server: McpServer, state: ReferenceTradingState): void {
   server.registerTool(
     "apex.order.place",
     {
@@ -51,7 +52,15 @@ export function registerOrderTools(server: McpServer): void {
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
-    async ({ order }) => {
+    async ({ account_id, order }) => {
+      const orderGate = state.canAcceptOrders();
+      if (!orderGate.ok) {
+        return {
+          structuredContent: apexError(orderGate.code ?? "APEX_5000", orderGate.category ?? "internal", orderGate.reason ?? "Order rejected"),
+          content: [],
+        };
+      }
+
       if (order.order_type === "limit" && order.limit_price === undefined) {
         return {
           structuredContent: apexError("APEX_4011", "validation", "limit_price required for limit orders"),
@@ -60,15 +69,66 @@ export function registerOrderTools(server: McpServer): void {
       }
 
       const isMarketOrder = order.order_type === "market";
+      const isPartialFill = isMarketOrder && state.consumePartialFillFlag();
+      const orderId = `ord_${crypto.randomUUID().slice(0, 8)}`;
+      const fillQuantity = isMarketOrder ? (isPartialFill ? order.quantity / 2 : order.quantity) : 0;
+      const remainingQuantity = isMarketOrder ? order.quantity - fillQuantity : order.quantity;
+      const status = isMarketOrder ? (isPartialFill ? "partially_filled" : "filled") : "working";
+
+      state.createOrUpdateOrder({
+        order_id: orderId,
+        client_order_id: order.client_order_id ?? null,
+        account_id: account_id,
+        instrument_id: order.instrument_id,
+        broker_symbol: order.broker_symbol ?? state.brokerSymbol,
+        side: order.side,
+        order_type: order.order_type,
+        quantity: order.quantity,
+        quantity_unit: order.quantity_unit,
+        limit_price: order.limit_price ?? null,
+        stop_price: order.stop_price ?? null,
+        time_in_force: order.time_in_force,
+        status,
+        filled_quantity: fillQuantity,
+        remaining_quantity: remainingQuantity,
+        average_fill_price: isMarketOrder ? 1.08755 : null,
+        reason: null,
+      });
+
+      if (isMarketOrder) {
+        state.recordFill({
+          fill_id: `fill_${crypto.randomUUID().slice(0, 8)}`,
+          order_id: orderId,
+          account_id,
+          instrument_id: order.instrument_id,
+          side: order.side,
+          fill_quantity: fillQuantity,
+          fill_price: 1.08755,
+          commission: -0.5,
+          commission_currency: "USD",
+          liquidity_flag: "taker",
+          position_id: "pos_001",
+          timestamp: nowIso(),
+        });
+      }
+
+      await state.notifyResources(
+        server,
+        state.uris.orders,
+        state.uris.positions,
+        state.uris.fills,
+        state.uris.risk,
+        state.uris.decisionContext,
+      );
 
       return {
         structuredContent: {
-          order_id: `ord_${crypto.randomUUID().slice(0, 8)}`,
+          order_id: orderId,
           client_order_id: order.client_order_id ?? null,
-          status: isMarketOrder ? "filled" : "working",
+          status,
           fill_price: isMarketOrder ? 1.08755 : null,
-          fill_quantity: isMarketOrder ? order.quantity : 0,
-          remaining_quantity: isMarketOrder ? 0 : order.quantity,
+          fill_quantity: fillQuantity,
+          remaining_quantity: remainingQuantity,
           position_id: isMarketOrder ? "pos_001" : null,
           rejection_reason: null,
           created_at: nowIso(),
@@ -107,6 +167,8 @@ export function registerOrderTools(server: McpServer): void {
         };
       }
 
+      await state.notifyResources(server, state.uris.orders, state.uris.positions, state.uris.decisionContext);
+
       return {
         structuredContent: {
           target_type,
@@ -131,15 +193,20 @@ export function registerOrderTools(server: McpServer): void {
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     },
-    async ({ order_id }) => ({
-      structuredContent: {
-        order_id,
-        status: "cancelled",
-        rejection_reason: null,
-        cancelled_at: nowIso(),
-      },
-      content: [],
-    }),
+    async ({ order_id }) => {
+      state.cancelOrder(order_id);
+      await state.notifyResources(server, state.uris.orders, state.uris.decisionContext);
+
+      return {
+        structuredContent: {
+          order_id,
+          status: "cancelled",
+          rejection_reason: null,
+          cancelled_at: nowIso(),
+        },
+        content: [],
+      };
+    },
   );
 
   server.registerTool(
@@ -152,14 +219,19 @@ export function registerOrderTools(server: McpServer): void {
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
     },
-    async ({ order_id }) => ({
-      structuredContent: {
-        order_id,
-        status: "working",
-        filled_quantity: 0,
-        as_of: nowIso(),
-      },
-      content: [],
-    }),
+    async ({ order_id }) => {
+      const knownOrder = state.getOrders().orders.find((order) => order.order_id === order_id);
+      if (!knownOrder) {
+        return {
+          structuredContent: apexError("APEX_4011", "validation", `Unknown order: ${order_id}`),
+          content: [],
+        };
+      }
+      const { sequence, stale_after_ms, ...order } = knownOrder as unknown as Record<string, unknown>;
+      return {
+        structuredContent: { ...order, as_of: nowIso() },
+        content: [],
+      };
+    },
   );
 }

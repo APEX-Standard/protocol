@@ -117,10 +117,23 @@ npm run dry-run:typescript
 npm run dry-run:go
 npm run dry-run:rust
 npm run dry-run:java
+npm run production-smoke:typescript
+npm run production-resilience:typescript
 npm run verify:alpha
+npm run verify:production
+npm run verify:all
 ```
 
 These shortcuts are convenience wrappers around the same harness and are primarily intended for protocol development and regression checks.
+
+For production-grade realtime and autonomous trading claims, use the additional production smoke coverage and the checklist in [production-checklist.md](./production-checklist.md) together with:
+
+- [`spec/core/production.md`](../spec/core/production.md)
+- [`spec/core/stability.md`](../spec/core/stability.md)
+- [`spec/core/execution-semantics.md`](../spec/core/execution-semantics.md)
+- [`spec/core/operations.md`](../spec/core/operations.md)
+- [`spec/core/schemas/`](../spec/core/schemas/)
+- [Reference parity matrix](./parity-matrix.md)
 
 ---
 
@@ -153,6 +166,8 @@ Tests are organised by domain and profile. Each test is tagged:
 - `[OPTIONAL]` — informational only
 
 ---
+
+> **Note:** The test catalog below describes the target coverage for APEX conformance. Tests marked `[REQUIRED]` define the eventual mandatory baseline. The executable test scripts (`smoke.mjs`, `dry-run.mjs`, `production-smoke.mjs`, `production-resilience.mjs`) implement the subset currently enforced against reference implementations.
 
 ## Core Test Cases
 

@@ -3,6 +3,7 @@ export type ApexErrorCategory =
   | "validation"
   | "risk"
   | "broker"
+  | "operational"
   | "rate_limit"
   | "internal";
 

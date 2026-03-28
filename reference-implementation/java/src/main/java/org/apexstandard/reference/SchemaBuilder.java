@@ -48,6 +48,15 @@ final class SchemaBuilder {
         }
     }
 
+    void booleanProp(ObjectNode props, ArrayNode required, String name, boolean defaultValue, boolean isRequired) {
+        ObjectNode property = props.putObject(name);
+        property.put("type", "boolean");
+        property.put("default", defaultValue);
+        if (isRequired) {
+            required.add(name);
+        }
+    }
+
     void integerProp(
         ObjectNode props,
         ArrayNode required,

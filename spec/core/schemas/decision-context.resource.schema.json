@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexstandard.org/spec/core/schemas/decision-context.resource.schema.json",
+  "title": "APEX Decision Context Resource",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "instrument_id",
+    "timestamp",
+    "sequence",
+    "stale_after_ms",
+    "market",
+    "account",
+    "constraints"
+  ],
+  "properties": {
+    "instrument_id": {
+      "type": "string",
+      "pattern": "^APEX:[A-Z]+:[A-Z0-9:.]+$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "stale_after_ms": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "market": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quote_resource", "feature_resource", "candle_resources"],
+      "properties": {
+        "quote_resource": { "type": "string", "format": "uri" },
+        "feature_resource": { "type": "string", "format": "uri" },
+        "candle_resources": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "type": "string", "format": "uri" }
+        }
+      }
+    },
+    "account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary_resource", "positions_resource", "orders_resource", "risk_resource"],
+      "properties": {
+        "summary_resource": { "type": "string", "format": "uri" },
+        "positions_resource": { "type": "string", "format": "uri" },
+        "orders_resource": { "type": "string", "format": "uri" },
+        "risk_resource": { "type": "string", "format": "uri" }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["kill_switch_active", "max_position_size", "max_open_orders"],
+      "properties": {
+        "kill_switch_active": { "type": "boolean" },
+        "max_position_size": { "type": "number" },
+        "max_open_orders": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

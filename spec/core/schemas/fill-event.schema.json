@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexstandard.org/spec/core/schemas/fill-event.schema.json",
+  "title": "APEX Fill Event Payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "fill_id",
+    "order_id",
+    "account_id",
+    "instrument_id",
+    "side",
+    "fill_quantity",
+    "fill_price",
+    "commission",
+    "commission_currency",
+    "liquidity_flag",
+    "position_id",
+    "timestamp"
+  ],
+  "properties": {
+    "fill_id": { "type": "string", "minLength": 1 },
+    "order_id": { "type": "string", "minLength": 1 },
+    "account_id": { "type": "string", "minLength": 1 },
+    "instrument_id": {
+      "type": "string",
+      "pattern": "^APEX:[A-Z]+:[A-Z0-9:.]+$"
+    },
+    "side": {
+      "type": "string",
+      "enum": ["buy", "sell"]
+    },
+    "fill_quantity": { "type": "number", "exclusiveMinimum": 0 },
+    "fill_price": { "type": "number", "exclusiveMinimum": 0 },
+    "commission": { "type": "number" },
+    "commission_currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "liquidity_flag": {
+      "type": "string",
+      "enum": ["maker", "taker", "unknown"]
+    },
+    "position_id": {
+      "type": ["string", "null"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

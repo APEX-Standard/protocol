@@ -1,6 +1,7 @@
 mod helpers;
 mod models;
 mod server;
+mod state;
 
 use rmcp::ServiceExt;
 
@@ -14,7 +15,7 @@ async fn main() {
     );
 
     let transport = rmcp::transport::io::stdio();
-    let service = match ApexServer.serve(transport).await {
+    let service = match ApexServer::new().serve(transport).await {
         Ok(service) => service,
         Err(error) => {
             eprintln!("Server exiting: {error}");

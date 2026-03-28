@@ -1,9 +1,10 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+import type { ReferenceTradingState } from "../lib/resources.js";
 import { InstrumentIdSchema, OrderTypeSchema, SideSchema } from "../lib/schemas.js";
 
-export function registerRiskTools(server: McpServer): void {
+export function registerRiskTools(server: McpServer, state: ReferenceTradingState): void {
   server.registerTool(
     "apex.risk.check",
     {
@@ -44,18 +45,8 @@ export function registerRiskTools(server: McpServer): void {
       inputSchema: { account_id: z.string() },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
     },
-    async ({ account_id }) => ({
-      structuredContent: {
-        account_id,
-        max_position_size: 5000000,
-        max_open_orders: 50,
-        daily_loss_limit: -1000.0,
-        daily_loss_used: -150.0,
-        margin_call_level_pct: 100,
-        stop_out_level_pct: 50,
-        restricted_instruments: [],
-        kill_switch_active: false,
-      },
+    async () => ({
+      structuredContent: state.getRisk(),
       content: [],
     }),
   );

@@ -51,18 +51,7 @@ func registerMarketTools(s *server.MCPServer) {
 
 func handleMarketQuote(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-
-	return jsonResult(quoteResponse{
-		InstrumentID: strParam(args, "instrument_id", "APEX:FX:EURUSD"),
-		BrokerSymbol: strParam(args, "broker_symbol", "EURUSD"),
-		Bid:          1.08740,
-		Ask:          1.08760,
-		Mid:          1.08750,
-		Spread:       0.00020,
-		Timestamp:    nowISO(),
-		IsTradeable:  true,
-		MarketStatus: "open",
-	})
+	return jsonResult(state.quoteResponse(strParam(args, "instrument_id", ""), strParam(args, "broker_symbol", "")))
 }
 
 func handleMarketSnapshot(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -79,7 +68,7 @@ func handleMarketSearch(_ context.Context, request mcp.CallToolRequest) (*mcp.Ca
 	query := strings.ToUpper(strParam(request.GetArguments(), "query", ""))
 	response := marketSearchResponse{Instruments: []instrumentSearchResult{}}
 
-	if strings.Contains("EURUSD", query) {
+	if query != "" && strings.Contains("EURUSD", query) {
 		response.Instruments = append(response.Instruments, instrumentSearchResult{
 			InstrumentID: "APEX:FX:EURUSD",
 			BrokerSymbol: "EURUSD",

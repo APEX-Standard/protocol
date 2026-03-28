@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexstandard.org/spec/core/schemas/positions.resource.schema.json",
+  "title": "APEX Positions Resource",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "account_id",
+    "as_of",
+    "positions",
+    "total_unrealised_pnl",
+    "sequence",
+    "stale_after_ms"
+  ],
+  "properties": {
+    "account_id": { "type": "string", "minLength": 1 },
+    "as_of": { "type": "string", "format": "date-time" },
+    "positions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "position_id",
+          "instrument_id",
+          "broker_symbol",
+          "side",
+          "quantity",
+          "quantity_unit",
+          "open_price",
+          "current_price",
+          "unrealised_pnl",
+          "used_margin",
+          "open_time"
+        ],
+        "properties": {
+          "position_id": { "type": "string", "minLength": 1 },
+          "instrument_id": { "type": "string", "pattern": "^APEX:[A-Z]+:[A-Z0-9:.]+$" },
+          "broker_symbol": { "type": "string", "minLength": 1 },
+          "side": { "type": "string", "enum": ["buy", "sell"] },
+          "quantity": { "type": "number", "exclusiveMinimum": 0 },
+          "quantity_unit": { "type": "string", "enum": ["base_units", "shares", "contracts"] },
+          "broker_quantity": { "type": "string" },
+          "broker_quantity_unit": { "type": "string" },
+          "open_price": { "type": "number", "exclusiveMinimum": 0 },
+          "current_price": { "type": "number", "exclusiveMinimum": 0 },
+          "unrealised_pnl": { "type": "number" },
+          "unrealised_pnl_currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+          "used_margin": { "type": "number" },
+          "open_time": { "type": "string", "format": "date-time" },
+          "stop_loss": { "type": "number" },
+          "take_profit": { "type": "number" },
+          "profile_data": { "type": "object" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "total_unrealised_pnl": { "type": "number" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "stale_after_ms": { "type": "integer", "minimum": 1 }
+  }
+}

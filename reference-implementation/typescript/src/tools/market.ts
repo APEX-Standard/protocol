@@ -1,10 +1,10 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-import { nowIso } from "../lib/helpers.js";
+import type { ReferenceTradingState } from "../lib/resources.js";
 import { InstrumentIdSchema } from "../lib/schemas.js";
 
-export function registerMarketTools(server: McpServer): void {
+export function registerMarketTools(server: McpServer, state: ReferenceTradingState): void {
   server.registerTool(
     "apex.market.quote",
     {
@@ -15,20 +15,17 @@ export function registerMarketTools(server: McpServer): void {
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
     },
-    async ({ instrument_id, broker_symbol }) => ({
-      structuredContent: {
-        instrument_id: instrument_id ?? "APEX:FX:EURUSD",
-        broker_symbol: broker_symbol ?? "EURUSD",
-        bid: 1.0874,
-        ask: 1.0876,
-        mid: 1.0875,
-        spread: 0.0002,
-        timestamp: nowIso(),
-        is_tradeable: true,
-        market_status: "open",
-      },
-      content: [],
-    }),
+    async ({ instrument_id, broker_symbol }) => {
+      const quote = state.getQuote();
+      return {
+        structuredContent: {
+          ...quote,
+          instrument_id: instrument_id ?? quote.instrument_id,
+          broker_symbol: broker_symbol ?? quote.broker_symbol,
+        },
+        content: [],
+      };
+    },
   );
 
   server.registerTool(
@@ -44,12 +41,8 @@ export function registerMarketTools(server: McpServer): void {
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
     },
-    async ({ instrument_id, timeframe }) => ({
-      structuredContent: {
-        instrument_id,
-        timeframe,
-        candles: [],
-      },
+    async ({ timeframe }) => ({
+      structuredContent: state.getCandles(timeframe),
       content: [],
     }),
   );

@@ -18,10 +18,12 @@ final class ToolRegistry {
 
     private final ObjectMapper mapper;
     private final SchemaBuilder schema;
+    private final ReferenceTradingState state;
 
-    ToolRegistry(ObjectMapper mapper) {
+    ToolRegistry(ObjectMapper mapper, ReferenceTradingState state) {
         this.mapper = mapper;
         this.schema = new SchemaBuilder(mapper);
+        this.state = state;
     }
 
     Map<String, ToolDefinition> createTools() {
@@ -79,7 +81,12 @@ final class ToolRegistry {
                 null,
                 Map.of("orders_per_second", 10, "market_data_per_second", 100),
                 List.of("market", "limit", "stop", "stop_limit"),
-                List.of("GTC", "IOC", "FOK", "DAY")
+                List.of("GTC", "IOC", "FOK", "DAY"),
+                Map.of(
+                    "reconnect_mode", "no_replay",
+                    "quote_freshness_ms", 1000,
+                    "account_freshness_ms", 2000
+                )
             )
         );
 
@@ -89,6 +96,29 @@ final class ToolRegistry {
             "Keep-alive ping. Hub marks session degraded if response exceeds 500ms.",
             schema.objectSchema((props, req) -> schema.stringProp(props, req, "timestamp", "ISO8601 timestamp", true)),
             args -> new HeartbeatResponse(now(), "ok")
+        );
+
+        registerTool(
+            tools,
+            "reference.test.set_realtime_state",
+            "Reference-only fault injection for conformance and resilience testing.",
+            schema.objectSchema((props, req) -> {
+                schema.booleanProp(props, req, "quote_stale", false, false);
+                schema.booleanProp(props, req, "risk_stale", false, false);
+                schema.booleanProp(props, req, "force_sequence_gap", false, false);
+                schema.booleanProp(props, req, "kill_switch_active", false, false);
+                schema.booleanProp(props, req, "partial_fill_next_order", false, false);
+            }),
+            args -> Map.of(
+                "ok", true,
+                "faults", state.setFaults(
+                    argBool(args, "quote_stale"),
+                    argBool(args, "risk_stale"),
+                    argBool(args, "force_sequence_gap"),
+                    argBool(args, "kill_switch_active"),
+                    argBool(args, "partial_fill_next_order")
+                )
+            )
         );
     }
 
@@ -101,19 +131,7 @@ final class ToolRegistry {
                 schema.stringProp(props, req, "account_id", null, true);
                 schema.stringProp(props, req, "currency", "Response currency. Defaults to account base currency.", false);
             }),
-            args -> new AccountSummaryResponse(
-                argStr(args, "account_id", ""),
-                "USD",
-                argStr(args, "currency", "USD"),
-                10000.00,
-                10250.00,
-                500.00,
-                9750.00,
-                2050.00,
-                250.00,
-                0.00,
-                now()
-            )
+            args -> state.accountSummary(argStr(args, "currency", "USD"))
         );
 
         registerTool(
@@ -125,29 +143,7 @@ final class ToolRegistry {
                 schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)", false);
                 schema.stringProp(props, req, "profile", null, false);
             }),
-            args -> new AccountPositionsResponse(
-                List.of(new Position(
-                    "pos_001",
-                    argStr(args, "instrument_id", "APEX:FX:EURUSD"),
-                    "EURUSD",
-                    "buy",
-                    100000,
-                    "base_units",
-                    "1.0",
-                    "lots",
-                    1.0850,
-                    1.0875,
-                    250.00,
-                    "USD",
-                    500.00,
-                    nowMinusHours(1),
-                    1.0800,
-                    1.1000,
-                    new PositionProfileData(-2.50, 1.80, -7.50, 10.00, "USD")
-                )),
-                250.00,
-                now()
-            )
+            args -> state.positionsResponse()
         );
 
         registerTool(
@@ -159,7 +155,7 @@ final class ToolRegistry {
                 schema.enumProp(props, req, "status", null, false, "all", "working", "partially_filled", "filled", "cancelled", "rejected", "expired", "all");
                 schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)", false);
             }),
-            args -> new OrderListResponse(List.of(), now())
+            args -> state.ordersResponse()
         );
 
         registerTool(
@@ -199,6 +195,19 @@ final class ToolRegistry {
                     schema.stringProp(orderProps, orderReq, "client_order_id", null, false);
                     schema.stringProp(orderProps, orderReq, "strategy_id", null, false);
                     schema.stringProp(orderProps, orderReq, "comment", null, false);
+                    schema.objectProp(orderProps, orderReq, "stop_loss", "Stop loss protection", false, (slProps, slReq) -> {
+                        schema.enumProp(slProps, slReq, "type", null, true, null, "price", "pips", "percent");
+                        schema.numberProp(slProps, slReq, "value", null, true);
+                    });
+                    schema.objectProp(orderProps, orderReq, "take_profit", "Take profit protection", false, (tpProps, tpReq) -> {
+                        schema.enumProp(tpProps, tpReq, "type", null, true, null, "price", "pips", "percent");
+                        schema.numberProp(tpProps, tpReq, "value", null, true);
+                    });
+                    schema.objectProp(orderProps, orderReq, "trailing_stop", "Trailing stop protection", false, (tsProps, tsReq) -> {
+                        schema.enumProp(tsProps, tsReq, "type", null, true, null, "pips", "percent");
+                        schema.numberProp(tsProps, tsReq, "value", null, true);
+                    });
+                    schema.objectProp(orderProps, orderReq, "profile_data", "Profile-specific fields", false, (pdProps, pdReq) -> {});
                 });
             }),
             args -> {
@@ -213,20 +222,16 @@ final class ToolRegistry {
                     return apexError("APEX_4011", "validation", "limit_price required for limit orders");
                 }
 
-                boolean isMarketOrder = "market".equals(orderType);
-                String clientOrderId = argStr(order, "client_order_id", "");
+                Map<String, Object> acceptance = state.orderAcceptance();
+                if (!Boolean.TRUE.equals(acceptance.get("ok"))) {
+                    return apexError(
+                        String.valueOf(acceptance.get("code")),
+                        String.valueOf(acceptance.get("category")),
+                        String.valueOf(acceptance.get("message"))
+                    );
+                }
 
-                return new OrderPlacementResponse(
-                    "ord_" + UUID.randomUUID().toString().substring(0, 8),
-                    clientOrderId.isEmpty() ? null : clientOrderId,
-                    isMarketOrder ? "filled" : "working",
-                    isMarketOrder ? 1.08755 : null,
-                    isMarketOrder ? quantity : 0.0,
-                    isMarketOrder ? 0.0 : quantity,
-                    isMarketOrder ? "pos_001" : null,
-                    null,
-                    now()
-                );
+                return state.createOrder(args);
             }
         );
 
@@ -242,6 +247,18 @@ final class ToolRegistry {
                     schema.numberProp(modProps, modReq, "limit_price", null, false);
                     schema.numberProp(modProps, modReq, "stop_price", null, false);
                     schema.numberProp(modProps, modReq, "quantity", null, false);
+                    schema.objectProp(modProps, modReq, "stop_loss", "Stop loss protection", false, (slProps, slReq) -> {
+                        schema.enumProp(slProps, slReq, "type", null, true, null, "price", "pips", "percent");
+                        schema.numberProp(slProps, slReq, "value", null, true);
+                    });
+                    schema.objectProp(modProps, modReq, "take_profit", "Take profit protection", false, (tpProps, tpReq) -> {
+                        schema.enumProp(tpProps, tpReq, "type", null, true, null, "price", "pips", "percent");
+                        schema.numberProp(tpProps, tpReq, "value", null, true);
+                    });
+                    schema.objectProp(modProps, modReq, "trailing_stop", "Trailing stop protection", false, (tsProps, tsReq) -> {
+                        schema.enumProp(tsProps, tsReq, "type", null, true, null, "pips", "percent");
+                        schema.numberProp(tsProps, tsReq, "value", null, true);
+                    });
                 });
             }),
             args -> {
@@ -254,6 +271,7 @@ final class ToolRegistry {
                     return apexError("APEX_4011", "validation", "positions may only amend stop_loss, take_profit, or trailing_stop");
                 }
 
+                state.modifyOrder(argStr(args, "target_id", ""));
                 return new OrderModifyResponse(
                     targetType,
                     argStr(args, "target_id", ""),
@@ -273,7 +291,11 @@ final class ToolRegistry {
                 schema.stringProp(props, req, "order_id", null, true);
                 schema.stringProp(props, req, "reason", "Agent-provided reason for audit trail", false);
             }),
-            args -> new OrderCancelResponse(argStr(args, "order_id", ""), "cancelled", null, now())
+            args -> {
+                String orderId = argStr(args, "order_id", "");
+                state.cancelOrder(orderId);
+                return new OrderCancelResponse(orderId, "cancelled", null, now());
+            }
         );
 
         registerTool(
@@ -284,7 +306,13 @@ final class ToolRegistry {
                 schema.stringProp(props, req, "account_id", null, true);
                 schema.stringProp(props, req, "order_id", null, true);
             }),
-            args -> new OrderStatusResponse(argStr(args, "order_id", ""), "working", 0, now())
+            args -> {
+                Object result = state.orderStatus(argStr(args, "order_id", ""));
+                if (result == null) {
+                    return apexError("APEX_4011", "validation", "Unknown order");
+                }
+                return result;
+            }
         );
     }
 
@@ -297,17 +325,7 @@ final class ToolRegistry {
                 schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)", false);
                 schema.stringProp(props, req, "broker_symbol", "Alternative to instrument_id", false);
             }),
-            args -> new MarketQuoteResponse(
-                argStr(args, "instrument_id", "APEX:FX:EURUSD"),
-                argStr(args, "broker_symbol", "EURUSD"),
-                1.08740,
-                1.08760,
-                1.08750,
-                0.00020,
-                now(),
-                true,
-                "open"
-            )
+            args -> state.quoteResponse(argStr(args, "instrument_id", ""), argStr(args, "broker_symbol", ""))
         );
 
         registerTool(
@@ -335,7 +353,7 @@ final class ToolRegistry {
             }),
             args -> {
                 String query = argStr(args, "query", "").toUpperCase();
-                List<SearchInstrument> instruments = "EURUSD".contains(query)
+                List<SearchInstrument> instruments = !query.isEmpty() && "EURUSD".contains(query)
                     ? List.of(new SearchInstrument("APEX:FX:EURUSD", "EURUSD", "Euro / US Dollar", "fx", true))
                     : List.of();
                 return new MarketSearchResponse(instruments);
@@ -416,7 +434,7 @@ final class ToolRegistry {
                 100,
                 50,
                 List.of(),
-                false
+                Boolean.TRUE.equals(((Map<?, ?>) state.readResource(ReferenceTradingState.RISK_URI)).get("kill_switch_active"))
             )
         );
     }
@@ -456,9 +474,9 @@ final class ToolRegistry {
         return List.of("apex.session.*", "apex.account.*", "apex.order.*", "apex.market.*", "apex.risk.*");
     }
 
-    private static ApexErrorEnvelope apexError(String code, String category, String message) {
+    static ApexErrorEnvelope apexError(String code, String category, String message) {
         Integer retryAfter = "rate_limit".equals(category) ? 1 : null;
-        return new ApexErrorEnvelope(new ApexError(code, category, message, UUID.randomUUID().toString(), retryAfter));
+        return new ApexErrorEnvelope(new ApexError(code, category, message, null, UUID.randomUUID().toString(), retryAfter));
     }
 
     private static String now() {
@@ -469,16 +487,12 @@ final class ToolRegistry {
         return Instant.now().plus(hours, ChronoUnit.HOURS).toString();
     }
 
-    private static String nowMinusHours(int hours) {
-        return Instant.now().minus(hours, ChronoUnit.HOURS).toString();
-    }
-
-    private static String argStr(Map<String, Object> args, String key, String defaultValue) {
+    static String argStr(Map<String, Object> args, String key, String defaultValue) {
         Object value = args.get(key);
         return value == null ? defaultValue : value.toString();
     }
 
-    private static double argDouble(Map<String, Object> args, String key, double defaultValue) {
+    static double argDouble(Map<String, Object> args, String key, double defaultValue) {
         Object value = args.get(key);
         if (value == null) {
             return defaultValue;
@@ -489,8 +503,13 @@ final class ToolRegistry {
         return Double.parseDouble(value.toString());
     }
 
+    static Boolean argBool(Map<String, Object> args, String key) {
+        Object value = args.get(key);
+        return value instanceof Boolean bool ? bool : null;
+    }
+
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> argMap(Map<String, Object> args, String key) {
+    static Map<String, Object> argMap(Map<String, Object> args, String key) {
         Object value = args.get(key);
         return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
     }

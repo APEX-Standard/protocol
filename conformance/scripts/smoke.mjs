@@ -25,12 +25,21 @@ try {
   for (const requiredTool of [
     "apex.session.authenticate",
     "apex.session.capabilities",
+    "apex.session.heartbeat",
     "apex.account.summary",
+    "apex.account.positions",
+    "apex.account.orders",
+    "apex.account.history",
     "apex.order.place",
     "apex.order.modify",
     "apex.order.cancel",
+    "apex.order.status",
     "apex.market.quote",
+    "apex.market.snapshot",
+    "apex.market.search",
+    "apex.market.details",
     "apex.risk.check",
+    "apex.risk.limits",
   ]) {
     assert(toolNames.has(requiredTool), `Missing required tool: ${requiredTool}`);
   }

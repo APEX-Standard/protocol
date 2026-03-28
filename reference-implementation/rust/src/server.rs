@@ -1,10 +1,57 @@
-use rmcp::{model::*, tool, Error as McpError, ServerHandler};
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 
-use crate::helpers::{apex_error, hours_ago, hours_from_now, json_result, now_iso};
+use rmcp::{
+    model::*,
+    service::{Peer, RequestContext, RoleServer},
+    tool, Error as McpError, ServerHandler,
+};
+
+use crate::helpers::{apex_error, hours_from_now, json_result, now_iso};
 use crate::models::*;
+use crate::state::{ReferenceTradingState, ACCOUNT_ID, BROKER_SYMBOL, INSTRUMENT_ID};
 
 #[derive(Debug, Clone)]
-pub struct ApexServer;
+pub struct ApexServer {
+    state: Arc<ReferenceTradingState>,
+    peer: Arc<Mutex<Option<Peer<RoleServer>>>>,
+    subscriptions: Arc<Mutex<HashSet<String>>>,
+}
+
+impl ApexServer {
+    pub fn new() -> Self {
+        Self {
+            state: Arc::new(ReferenceTradingState::default()),
+            peer: Arc::new(Mutex::new(None)),
+            subscriptions: Arc::new(Mutex::new(HashSet::new())),
+        }
+    }
+
+    async fn notify_updates(&self, uris: Vec<String>) {
+        let subscribed = {
+            let subscriptions = self
+                .subscriptions
+                .lock()
+                .expect("subscription mutex poisoned");
+            uris.into_iter()
+                .filter(|uri| subscriptions.contains(uri))
+                .collect::<Vec<_>>()
+        };
+
+        let peer = {
+            let peer = self.peer.lock().expect("peer mutex poisoned");
+            peer.clone()
+        };
+
+        if let Some(peer) = peer {
+            for uri in subscribed {
+                let _ = peer
+                    .notify_resource_updated(ResourceUpdatedNotificationParam { uri })
+                    .await;
+            }
+        }
+    }
+}
 
 #[tool(tool_box)]
 impl ApexServer {
@@ -27,7 +74,7 @@ impl ApexServer {
 
         Ok(json_result(&SessionResponse {
             session_id: uuid::Uuid::new_v4().to_string(),
-            account_id: input.account_id.unwrap_or_else(|| "ACC_12345".to_owned()),
+            account_id: input.account_id.unwrap_or_else(|| ACCOUNT_ID.to_owned()),
             expires_at: hours_from_now(1),
             capabilities: CORE_CAPABILITIES
                 .iter()
@@ -69,6 +116,11 @@ impl ApexServer {
                 "FOK".to_owned(),
                 "DAY".to_owned(),
             ],
+            realtime_contract: serde_json::json!({
+                "reconnect_mode": "no_replay",
+                "quote_freshness_ms": 1000,
+                "account_freshness_ms": 2000
+            }),
         }))
     }
 
@@ -87,6 +139,28 @@ impl ApexServer {
     }
 
     #[tool(
+        name = "reference.test.set_realtime_state",
+        description = "Reference-only fault injection for conformance and resilience testing."
+    )]
+    async fn reference_set_realtime_state(
+        &self,
+        #[tool(aggr)] input: ReferenceRealtimeStateInput,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(json_result(&serde_json::json!({
+            "ok": true,
+            "faults": self
+                .state
+                .set_faults(
+                    input.quote_stale,
+                    input.risk_stale,
+                    input.force_sequence_gap,
+                    input.kill_switch_active,
+                    input.partial_fill_next_order,
+                ),
+        })))
+    }
+
+    #[tool(
         name = "apex.account.summary",
         description = "Current account state — balances, margin utilisation, equity."
     )]
@@ -94,19 +168,9 @@ impl ApexServer {
         &self,
         #[tool(aggr)] input: AccountSummaryInput,
     ) -> Result<CallToolResult, McpError> {
-        Ok(json_result(&AccountSummaryResponse {
-            account_id: input.account_id,
-            account_base_currency: "USD".to_owned(),
-            response_currency: input.currency.unwrap_or_else(|| "USD".to_owned()),
-            balance: 10000.0,
-            equity: 10250.0,
-            used_margin: 500.0,
-            free_margin: 9750.0,
-            margin_level_pct: 2050.0,
-            unrealised_pnl: 250.0,
-            realised_pnl_today: 0.0,
-            as_of: now_iso(),
-        }))
+        Ok(json_result(
+            &self.state.account_summary_payload(input.currency),
+        ))
     }
 
     #[tool(
@@ -115,39 +179,9 @@ impl ApexServer {
     )]
     async fn account_positions(
         &self,
-        #[tool(aggr)] input: AccountPositionsInput,
+        #[tool(aggr)] _input: AccountPositionsInput,
     ) -> Result<CallToolResult, McpError> {
-        Ok(json_result(&AccountPositionsResponse {
-            positions: vec![Position {
-                position_id: "pos_001".to_owned(),
-                instrument_id: input
-                    .instrument_id
-                    .unwrap_or_else(|| "APEX:FX:EURUSD".to_owned()),
-                broker_symbol: "EURUSD".to_owned(),
-                side: "buy".to_owned(),
-                quantity: 100000,
-                quantity_unit: "base_units".to_owned(),
-                broker_quantity: "1.0".to_owned(),
-                broker_quantity_unit: "lots".to_owned(),
-                open_price: 1.0850,
-                current_price: 1.0875,
-                unrealised_pnl: 250.0,
-                unrealised_pnl_currency: "USD".to_owned(),
-                used_margin: 500.0,
-                open_time: hours_ago(1),
-                stop_loss: 1.0800,
-                take_profit: 1.1000,
-                profile_data: PositionProfileData {
-                    rollover_long_daily: -2.5,
-                    rollover_short_daily: 1.8,
-                    accrued_rollover: -7.5,
-                    pip_value: 10.0,
-                    pip_value_currency: "USD".to_owned(),
-                },
-            }],
-            total_unrealised_pnl: 250.0,
-            as_of: now_iso(),
-        }))
+        Ok(json_result(&self.state.positions_payload()))
     }
 
     #[tool(
@@ -158,10 +192,7 @@ impl ApexServer {
         &self,
         #[tool(aggr)] _input: AccountOrdersInput,
     ) -> Result<CallToolResult, McpError> {
-        Ok(json_result(&AccountOrdersResponse {
-            orders: vec![],
-            as_of: now_iso(),
-        }))
+        Ok(json_result(&self.state.orders_payload()))
     }
 
     #[tool(
@@ -187,6 +218,10 @@ impl ApexServer {
         &self,
         #[tool(aggr)] input: OrderPlaceInput,
     ) -> Result<CallToolResult, McpError> {
+        if let Err((code, category, message)) = self.state.order_acceptance() {
+            return Ok(json_result(&apex_error(code, category, message, None)));
+        }
+
         if input.order.order_type == "limit" && input.order.limit_price.is_none() {
             return Ok(json_result(&apex_error(
                 "APEX_4011",
@@ -196,23 +231,10 @@ impl ApexServer {
             )));
         }
 
-        let is_market = input.order.order_type == "market";
-
-        Ok(json_result(&OrderPlaceResponse {
-            order_id: format!("ord_{}", &uuid::Uuid::new_v4().to_string()[..8]),
-            client_order_id: input.order.client_order_id,
-            status: if is_market {
-                "filled".to_owned()
-            } else {
-                "working".to_owned()
-            },
-            fill_price: is_market.then_some(1.08755),
-            fill_quantity: if is_market { input.order.quantity } else { 0.0 },
-            remaining_quantity: if is_market { 0.0 } else { input.order.quantity },
-            position_id: is_market.then_some("pos_001".to_owned()),
-            rejection_reason: None,
-            created_at: now_iso(),
-        }))
+        let order_value = serde_json::to_value(&input.order).expect("order should serialize");
+        let (payload, updates) = self.state.create_order(&order_value);
+        self.notify_updates(updates).await;
+        Ok(json_result(&payload))
     }
 
     #[tool(
@@ -236,6 +258,9 @@ impl ApexServer {
             )));
         }
 
+        let updates = self.state.modify_order(&input.target_id);
+        self.notify_updates(updates).await;
+
         Ok(json_result(&OrderModifyResponse {
             target_type: input.target_type,
             target_id: input.target_id,
@@ -253,6 +278,9 @@ impl ApexServer {
         &self,
         #[tool(aggr)] input: OrderCancelInput,
     ) -> Result<CallToolResult, McpError> {
+        let updates = self.state.cancel_order(&input.order_id);
+        self.notify_updates(updates).await;
+
         Ok(json_result(&OrderCancelResponse {
             order_id: input.order_id,
             status: "cancelled".to_owned(),
@@ -269,12 +297,15 @@ impl ApexServer {
         &self,
         #[tool(aggr)] input: OrderStatusInput,
     ) -> Result<CallToolResult, McpError> {
-        Ok(json_result(&OrderStatusResponse {
-            order_id: input.order_id,
-            status: "working".to_owned(),
-            filled_quantity: 0,
-            as_of: now_iso(),
-        }))
+        match self.state.order_status_payload(&input.order_id) {
+            Some(order) => Ok(json_result(&order)),
+            None => Ok(json_result(&apex_error(
+                "APEX_4011",
+                "validation",
+                &format!("Unknown order: {}", input.order_id),
+                None,
+            ))),
+        }
     }
 
     #[tool(
@@ -285,19 +316,11 @@ impl ApexServer {
         &self,
         #[tool(aggr)] input: MarketQuoteInput,
     ) -> Result<CallToolResult, McpError> {
-        Ok(json_result(&MarketQuoteResponse {
-            instrument_id: input
-                .instrument_id
-                .unwrap_or_else(|| "APEX:FX:EURUSD".to_owned()),
-            broker_symbol: input.broker_symbol.unwrap_or_else(|| "EURUSD".to_owned()),
-            bid: 1.08740,
-            ask: 1.08760,
-            mid: 1.08750,
-            spread: 0.00020,
-            timestamp: now_iso(),
-            is_tradeable: true,
-            market_status: "open".to_owned(),
-        }))
+        Ok(json_result(
+            &self
+                .state
+                .quote_payload(input.instrument_id, input.broker_symbol),
+        ))
     }
 
     #[tool(
@@ -323,10 +346,10 @@ impl ApexServer {
         &self,
         #[tool(aggr)] input: MarketSearchInput,
     ) -> Result<CallToolResult, McpError> {
-        let instruments = if "EURUSD".contains(&input.query.to_uppercase()) {
+        let instruments = if !input.query.is_empty() && "EURUSD".contains(&input.query.to_uppercase()) {
             vec![SearchInstrument {
-                instrument_id: "APEX:FX:EURUSD".to_owned(),
-                broker_symbol: "EURUSD".to_owned(),
+                instrument_id: INSTRUMENT_ID.to_owned(),
+                broker_symbol: BROKER_SYMBOL.to_owned(),
                 display_name: "Euro / US Dollar".to_owned(),
                 profile: "fx".to_owned(),
                 is_tradeable: true,
@@ -348,7 +371,7 @@ impl ApexServer {
     ) -> Result<CallToolResult, McpError> {
         Ok(json_result(&MarketDetailsResponse {
             instrument_id: input.instrument_id,
-            broker_symbol: "EURUSD".to_owned(),
+            broker_symbol: BROKER_SYMBOL.to_owned(),
             display_name: "Euro / US Dollar".to_owned(),
             profile: "fx".to_owned(),
             base_currency: "EUR".to_owned(),
@@ -413,7 +436,11 @@ impl ApexServer {
             margin_call_level_pct: 100,
             stop_out_level_pct: 50,
             restricted_instruments: vec![],
-            kill_switch_active: false,
+            kill_switch_active: self
+                .state
+                .read_resource_payload(&crate::state::risk_uri())
+                .and_then(|payload| payload["kill_switch_active"].as_bool())
+                .unwrap_or(false),
         }))
     }
 }
@@ -423,15 +450,108 @@ impl ServerHandler for ApexServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             protocol_version: ProtocolVersion::V_2024_11_05,
-            capabilities: ServerCapabilities {
-                tools: Some(ToolsCapability::default()),
-                ..Default::default()
-            },
+            capabilities: ServerCapabilities::builder()
+                .enable_tools()
+                .enable_resources()
+                .enable_resources_subscribe()
+                .enable_resources_list_changed()
+                .build(),
             server_info: Implementation {
                 name: SERVER_NAME.to_owned(),
                 version: SERVER_VERSION.to_owned(),
             },
             instructions: None,
         }
+    }
+
+    fn set_peer(&mut self, peer: Peer<RoleServer>) {
+        *self.peer.lock().expect("peer mutex poisoned") = Some(peer);
+    }
+
+    fn get_peer(&self) -> Option<Peer<RoleServer>> {
+        self.peer.lock().expect("peer mutex poisoned").clone()
+    }
+
+    async fn list_resources(
+        &self,
+        _request: PaginatedRequestParam,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListResourcesResult, McpError> {
+        let resources = self
+            .state
+            .list_resources()
+            .into_iter()
+            .map(|(name, uri, description)| {
+                RawResource::new(uri, name)
+                    .no_annotation()
+                    .with_description(Some(description))
+                    .with_mime_type(Some("application/json".to_owned()))
+            })
+            .collect();
+
+        Ok(ListResourcesResult {
+            next_cursor: None,
+            resources,
+        })
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParam,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ReadResourceResult, McpError> {
+        let payload = self
+            .state
+            .read_resource_payload(&request.uri)
+            .ok_or_else(|| McpError::resource_not_found("Resource not found", None))?;
+
+        Ok(ReadResourceResult {
+            contents: vec![ResourceContents::TextResourceContents {
+                uri: request.uri,
+                mime_type: Some("application/json".to_owned()),
+                text: serde_json::to_string(&payload).expect("resource payload should serialize"),
+            }],
+        })
+    }
+
+    async fn subscribe(
+        &self,
+        request: SubscribeRequestParam,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<(), McpError> {
+        self.subscriptions
+            .lock()
+            .expect("subscription mutex poisoned")
+            .insert(request.uri);
+        Ok(())
+    }
+
+    async fn unsubscribe(
+        &self,
+        request: UnsubscribeRequestParam,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<(), McpError> {
+        self.subscriptions
+            .lock()
+            .expect("subscription mutex poisoned")
+            .remove(&request.uri);
+        Ok(())
+    }
+}
+
+trait ResourceExt {
+    fn with_description(self, description: Option<String>) -> Self;
+    fn with_mime_type(self, mime_type: Option<String>) -> Self;
+}
+
+impl ResourceExt for Resource {
+    fn with_description(mut self, description: Option<String>) -> Self {
+        self.raw.description = description;
+        self
+    }
+
+    fn with_mime_type(mut self, mime_type: Option<String>) -> Self {
+        self.raw.mime_type = mime_type;
+        self
     }
 }

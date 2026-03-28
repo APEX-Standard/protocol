@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexstandard.org/spec/core/schemas/orders.resource.schema.json",
+  "title": "APEX Orders Resource",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "account_id",
+    "as_of",
+    "orders",
+    "sequence",
+    "stale_after_ms"
+  ],
+  "properties": {
+    "account_id": { "type": "string", "minLength": 1 },
+    "as_of": { "type": "string", "format": "date-time" },
+    "orders": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "order_id",
+          "instrument_id",
+          "broker_symbol",
+          "side",
+          "order_type",
+          "quantity",
+          "quantity_unit",
+          "time_in_force",
+          "status",
+          "filled_quantity",
+          "remaining_quantity",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "order_id": { "type": "string", "minLength": 1 },
+          "client_order_id": { "type": ["string", "null"] },
+          "instrument_id": { "type": "string", "pattern": "^APEX:[A-Z]+:[A-Z0-9:.]+$" },
+          "broker_symbol": { "type": "string", "minLength": 1 },
+          "side": { "type": "string", "enum": ["buy", "sell"] },
+          "order_type": { "type": "string", "enum": ["market", "limit", "stop", "stop_limit"] },
+          "quantity": { "type": "number", "exclusiveMinimum": 0 },
+          "quantity_unit": { "type": "string", "enum": ["base_units", "shares", "contracts"] },
+          "limit_price": { "type": ["number", "null"] },
+          "stop_price": { "type": ["number", "null"] },
+          "time_in_force": { "type": "string", "enum": ["GTC", "IOC", "FOK", "DAY"] },
+          "status": { "type": "string", "enum": ["accepted", "working", "partially_filled", "filled", "cancelled", "rejected", "expired"] },
+          "filled_quantity": { "type": "number", "minimum": 0 },
+          "remaining_quantity": { "type": "number", "minimum": 0 },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "stale_after_ms": { "type": "integer", "minimum": 1 }
+  }
+}

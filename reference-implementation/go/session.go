@@ -42,6 +42,18 @@ func registerSessionTools(s *server.MCPServer) {
 		),
 		handleSessionHeartbeat,
 	)
+
+	s.AddTool(
+		mcp.NewTool("reference.test.set_realtime_state",
+			mcp.WithDescription("Reference-only fault injection for conformance and resilience testing."),
+			mcp.WithBoolean("quote_stale"),
+			mcp.WithBoolean("risk_stale"),
+			mcp.WithBoolean("force_sequence_gap"),
+			mcp.WithBoolean("kill_switch_active"),
+			mcp.WithBoolean("partial_fill_next_order"),
+		),
+		handleSetRealtimeState,
+	)
 }
 
 func handleSessionAuthenticate(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -72,6 +84,11 @@ func handleSessionCapabilities(_ context.Context, _ mcp.CallToolRequest) (*mcp.C
 		RateLimits:          map[string]int{"orders_per_second": 10, "market_data_per_second": 100},
 		SupportedOrderTypes: []string{"market", "limit", "stop", "stop_limit"},
 		SupportedTif:        []string{"GTC", "IOC", "FOK", "DAY"},
+		RealtimeContract: map[string]any{
+			"reconnect_mode":       "no_replay",
+			"quote_freshness_ms":   1000,
+			"account_freshness_ms": 2000,
+		},
 	})
 }
 
@@ -82,5 +99,19 @@ func handleSessionHeartbeat(_ context.Context, _ mcp.CallToolRequest) (*mcp.Call
 	}{
 		Timestamp: nowISO(),
 		Status:    "ok",
+	})
+}
+
+func handleSetRealtimeState(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := request.GetArguments()
+	quoteStale := boolPointer(args, "quote_stale")
+	riskStale := boolPointer(args, "risk_stale")
+	forceSequenceGap := boolPointer(args, "force_sequence_gap")
+	killSwitchActive := boolPointer(args, "kill_switch_active")
+	partialFillNext := boolPointer(args, "partial_fill_next_order")
+
+	return jsonResult(map[string]any{
+		"ok":     true,
+		"faults": state.setRealtimeFaults(quoteStale, riskStale, forceSequenceGap, killSwitchActive, partialFillNext),
 	})
 }

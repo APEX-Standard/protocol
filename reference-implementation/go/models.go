@@ -19,6 +19,7 @@ type capabilitiesResponse struct {
 	RateLimits          map[string]int    `json:"rate_limits"`
 	SupportedOrderTypes []string          `json:"supported_order_types"`
 	SupportedTif        []string          `json:"supported_tif"`
+	RealtimeContract    map[string]any    `json:"realtime_contract,omitempty"`
 }
 
 type accountSummaryResponse struct {
@@ -105,13 +106,6 @@ type orderCancelResponse struct {
 	Status          string `json:"status"`
 	RejectionReason any    `json:"rejection_reason"`
 	CancelledAt     string `json:"cancelled_at"`
-}
-
-type orderStatusResponse struct {
-	OrderID        string `json:"order_id"`
-	Status         string `json:"status"`
-	FilledQuantity int    `json:"filled_quantity"`
-	AsOf           string `json:"as_of"`
 }
 
 type quoteResponse struct {

@@ -10,11 +10,12 @@ import (
 )
 
 type apexErrorBody struct {
-	Code       string `json:"code"`
-	Category   string `json:"category"`
-	Message    string `json:"message"`
-	RequestID  string `json:"request_id"`
-	RetryAfter *int   `json:"retry_after"`
+	Code       string         `json:"code"`
+	Category   string         `json:"category"`
+	Message    string         `json:"message"`
+	Details    map[string]any `json:"details,omitempty"`
+	RequestID  string         `json:"request_id"`
+	RetryAfter *int           `json:"retry_after"`
 }
 
 type apexErrorResponse struct {
@@ -87,6 +88,20 @@ func mapParam(args map[string]any, key string) map[string]any {
 
 	object, _ := value.(map[string]any)
 	return object
+}
+
+func boolPointer(args map[string]any, key string) *bool {
+	value, ok := args[key]
+	if !ok {
+		return nil
+	}
+
+	boolValue, ok := value.(bool)
+	if !ok {
+		return nil
+	}
+
+	return &boolValue
 }
 
 func nowISO() string {

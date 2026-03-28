@@ -7,18 +7,32 @@
   "scripts": {
     "smoke": "node scripts/smoke.mjs",
     "dry-run": "node scripts/dry-run.mjs",
+    "production-smoke": "node scripts/production-smoke.mjs",
+    "production-resilience": "node scripts/production-resilience.mjs",
     "smoke:typescript": "node scripts/smoke.mjs typescript",
     "smoke:go": "node scripts/smoke.mjs go",
-    "smoke:rust": "node scripts/smoke.mjs --command cargo --args '[\"run\",\"--quiet\"]' --cwd ../reference-implementation/rust --name rust",
+    "smoke:rust": "node scripts/smoke.mjs rust",
     "smoke:java": "node scripts/smoke.mjs java",
     "dry-run:typescript": "node scripts/dry-run.mjs typescript",
     "dry-run:java": "node scripts/dry-run.mjs java",
     "dry-run:go": "node scripts/dry-run.mjs go",
-    "dry-run:rust": "node scripts/dry-run.mjs --command cargo --args '[\"run\",\"--quiet\"]' --cwd ../reference-implementation/rust --name rust",
-    "verify:alpha": "node scripts/smoke.mjs typescript && node scripts/smoke.mjs go && node scripts/smoke.mjs --command cargo --args '[\"run\",\"--quiet\"]' --cwd ../reference-implementation/rust --name rust && node scripts/smoke.mjs java && node scripts/dry-run.mjs typescript && node scripts/dry-run.mjs go && node scripts/dry-run.mjs --command cargo --args '[\"run\",\"--quiet\"]' --cwd ../reference-implementation/rust --name rust && node scripts/dry-run.mjs java"
+    "dry-run:rust": "node scripts/dry-run.mjs rust",
+    "production-smoke:typescript": "node scripts/production-smoke.mjs typescript",
+    "production-smoke:go": "node scripts/production-smoke.mjs go",
+    "production-smoke:rust": "node scripts/production-smoke.mjs rust",
+    "production-smoke:java": "node scripts/production-smoke.mjs java",
+    "production-resilience:typescript": "node scripts/production-resilience.mjs typescript",
+    "production-resilience:go": "node scripts/production-resilience.mjs go",
+    "production-resilience:rust": "node scripts/production-resilience.mjs rust",
+    "production-resilience:java": "node scripts/production-resilience.mjs java",
+    "verify:alpha": "node scripts/smoke.mjs typescript && node scripts/smoke.mjs go && node scripts/smoke.mjs rust && node scripts/smoke.mjs java && node scripts/dry-run.mjs typescript && node scripts/dry-run.mjs go && node scripts/dry-run.mjs rust && node scripts/dry-run.mjs java",
+    "verify:production": "node scripts/production-smoke.mjs typescript && node scripts/production-smoke.mjs go && node scripts/production-smoke.mjs rust && node scripts/production-smoke.mjs java && node scripts/production-resilience.mjs typescript && node scripts/production-resilience.mjs go && node scripts/production-resilience.mjs rust && node scripts/production-resilience.mjs java",
+    "verify:all": "npm run verify:alpha && npm run verify:production"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
   },
   "engines": {
     "node": ">=18.0.0"

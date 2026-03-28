@@ -7,7 +7,7 @@ final class ProtocolModels {
     private ProtocolModels() {
     }
 
-    record ApexError(String code, String category, String message, String request_id, Integer retry_after) {
+    record ApexError(String code, String category, String message, Object details, String request_id, Integer retry_after) {
     }
 
     record ApexErrorEnvelope(ApexError error) {
@@ -32,7 +32,8 @@ final class ProtocolModels {
         Object vendor_extensions,
         Map<String, Integer> rate_limits,
         List<String> supported_order_types,
-        List<String> supported_tif
+        List<String> supported_tif,
+        Object realtime_contract
     ) {
     }
 
@@ -110,9 +111,6 @@ final class ProtocolModels {
     }
 
     record OrderCancelResponse(String order_id, String status, Object rejection_reason, String cancelled_at) {
-    }
-
-    record OrderStatusResponse(String order_id, String status, int filled_quantity, String as_of) {
     }
 
     record MarketQuoteResponse(

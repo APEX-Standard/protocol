@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexstandard.org/spec/core/schemas/fills.resource.schema.json",
+  "title": "APEX Fills Resource",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "account_id",
+    "as_of",
+    "fills",
+    "sequence",
+    "stale_after_ms"
+  ],
+  "properties": {
+    "account_id": { "type": "string", "minLength": 1 },
+    "as_of": { "type": "string", "format": "date-time" },
+    "fills": {
+      "type": "array",
+      "items": { "$ref": "fill-event.schema.json" }
+    },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "stale_after_ms": { "type": "integer", "minimum": 1 }
+  }
+}

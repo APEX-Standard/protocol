@@ -1,10 +1,11 @@
 reference-implementation/go/reference-go
+reference-implementation/go/apex-reference
 reference-implementation/java/target/
 reference-implementation/rust/target/
 reference-implementation/typescript/dist/
 reference-implementation/typescript/node_modules/
 conformance/node_modules/
-
+docs/superpowers/
 # Root-level backup directory only
 /backup/
 pom.xml.releaseBackup

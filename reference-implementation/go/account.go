@@ -52,64 +52,15 @@ func registerAccountTools(s *server.MCPServer) {
 }
 
 func handleAccountSummary(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	args := request.GetArguments()
-
-	return jsonResult(accountSummaryResponse{
-		AccountID:           strParam(args, "account_id", ""),
-		AccountBaseCurrency: "USD",
-		ResponseCurrency:    strParam(args, "currency", "USD"),
-		Balance:             10000,
-		Equity:              10250,
-		UsedMargin:          500,
-		FreeMargin:          9750,
-		MarginLevelPct:      2050,
-		UnrealisedPnL:       250,
-		RealisedPnLToday:    0,
-		AsOf:                nowISO(),
-	})
+	return jsonResult(state.accountSummary(strParam(request.GetArguments(), "currency", "USD")))
 }
 
 func handleAccountPositions(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	instrumentID := strParam(request.GetArguments(), "instrument_id", "APEX:FX:EURUSD")
-
-	return jsonResult(accountPositionsResponse{
-		Positions: []position{
-			{
-				PositionID:            "pos_001",
-				InstrumentID:          instrumentID,
-				BrokerSymbol:          "EURUSD",
-				Side:                  "buy",
-				Quantity:              100000,
-				QuantityUnit:          "base_units",
-				BrokerQuantity:        "1.0",
-				BrokerQuantityUnit:    "lots",
-				OpenPrice:             1.0850,
-				CurrentPrice:          1.0875,
-				UnrealisedPnL:         250,
-				UnrealisedPnLCurrency: "USD",
-				UsedMargin:            500,
-				OpenTime:              hoursAgo(1),
-				StopLoss:              1.0800,
-				TakeProfit:            1.1000,
-				ProfileData: profileData{
-					RolloverLongDaily:  -2.5,
-					RolloverShortDaily: 1.8,
-					AccruedRollover:    -7.5,
-					PipValue:           10,
-					PipValueCurrency:   "USD",
-				},
-			},
-		},
-		TotalUnrealisedPnL: 250,
-		AsOf:               nowISO(),
-	})
+	return jsonResult(state.positionsResponse())
 }
 
 func handleAccountOrders(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return jsonResult(orderListResponse{
-		Orders: []any{},
-		AsOf:   nowISO(),
-	})
+	return jsonResult(state.ordersResponse())
 }
 
 func handleAccountHistory(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {

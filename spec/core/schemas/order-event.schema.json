@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexstandard.org/spec/core/schemas/order-event.schema.json",
+  "title": "APEX Order Lifecycle Event Payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "order_id",
+    "client_order_id",
+    "account_id",
+    "instrument_id",
+    "side",
+    "order_type",
+    "quantity",
+    "status",
+    "filled_quantity",
+    "remaining_quantity",
+    "average_fill_price",
+    "reason",
+    "updated_at"
+  ],
+  "properties": {
+    "order_id": { "type": "string", "minLength": 1 },
+    "client_order_id": { "type": ["string", "null"] },
+    "account_id": { "type": "string", "minLength": 1 },
+    "instrument_id": {
+      "type": "string",
+      "pattern": "^APEX:[A-Z]+:[A-Z0-9:.]+$"
+    },
+    "side": {
+      "type": "string",
+      "enum": ["buy", "sell"]
+    },
+    "order_type": {
+      "type": "string",
+      "enum": ["market", "limit", "stop", "stop_limit"]
+    },
+    "quantity": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": ["accepted", "working", "partially_filled", "filled", "cancelled", "rejected", "expired"]
+    },
+    "filled_quantity": { "type": "number", "minimum": 0 },
+    "remaining_quantity": { "type": "number", "minimum": 0 },
+    "average_fill_price": { "type": ["number", "null"] },
+    "reason": { "type": ["string", "null"] },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

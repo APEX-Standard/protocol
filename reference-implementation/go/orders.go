@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -25,6 +23,10 @@ func registerOrderTools(s *server.MCPServer) {
 					"time_in_force":   map[string]any{"type": "string", "description": "Time in force: GTC, IOC, FOK, DAY", "enum": []string{"GTC", "IOC", "FOK", "DAY"}},
 					"limit_price":     map[string]any{"type": "number", "description": "Limit price (required for limit orders)"},
 					"stop_price":      map[string]any{"type": "number", "description": "Stop price (required for stop orders)"},
+					"stop_loss":       map[string]any{"type": "object", "description": "Stop loss protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"price", "pips", "percent"}}, "value": map[string]any{"type": "number"}}},
+					"take_profit":     map[string]any{"type": "object", "description": "Take profit protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"price", "pips", "percent"}}, "value": map[string]any{"type": "number"}}},
+					"trailing_stop":   map[string]any{"type": "object", "description": "Trailing stop protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"pips", "percent"}}, "value": map[string]any{"type": "number"}}},
+					"profile_data":    map[string]any{"type": "object", "description": "Profile-specific fields"},
 					"profile":         map[string]any{"type": "string", "description": "Asset class profile"},
 					"client_order_id": map[string]any{"type": "string", "description": "Client-assigned order ID"},
 					"strategy_id":     map[string]any{"type": "string", "description": "Strategy ID"},
@@ -45,7 +47,10 @@ func registerOrderTools(s *server.MCPServer) {
 				mcp.Properties(map[string]any{
 					"limit_price": map[string]any{"type": "number", "description": "New limit price"},
 					"stop_price":  map[string]any{"type": "number", "description": "New stop price"},
-					"quantity":    map[string]any{"type": "number", "description": "New quantity"},
+					"quantity":      map[string]any{"type": "number", "description": "New quantity"},
+					"stop_loss":     map[string]any{"type": "object", "description": "Stop loss protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"price", "pips", "percent"}}, "value": map[string]any{"type": "number"}}},
+					"take_profit":   map[string]any{"type": "object", "description": "Take profit protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"price", "pips", "percent"}}, "value": map[string]any{"type": "number"}}},
+					"trailing_stop": map[string]any{"type": "object", "description": "Trailing stop protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"pips", "percent"}}, "value": map[string]any{"type": "number"}}},
 				}),
 			),
 		),
@@ -73,6 +78,10 @@ func registerOrderTools(s *server.MCPServer) {
 }
 
 func handleOrderPlace(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if ok, code, category, reason := state.orderAcceptance(); !ok {
+		return jsonResult(apexError(code, category, reason))
+	}
+
 	order := mapParam(request.GetArguments(), "order")
 	if order == nil {
 		return jsonResult(apexError("APEX_4011", "validation", "order is required"))
@@ -88,35 +97,10 @@ func handleOrderPlace(_ context.Context, request mcp.CallToolRequest) (*mcp.Call
 		}
 	}
 
-	isMarketOrder := orderType == "market"
-	var clientOrderValue any
-	if clientOrderID != "" {
-		clientOrderValue = clientOrderID
-	}
+	_ = quantity
+	_ = clientOrderID
 
-	var fillPrice any
-	var positionID any
-	fillQuantity := 0.0
-	remainingQuantity := quantity
-
-	if isMarketOrder {
-		fillPrice = 1.08755
-		fillQuantity = quantity
-		remainingQuantity = 0
-		positionID = "pos_001"
-	}
-
-	return jsonResult(orderPlacementResponse{
-		OrderID:           fmt.Sprintf("ord_%s", uuid.NewString()[:8]),
-		ClientOrderID:     clientOrderValue,
-		Status:            map[bool]string{true: "filled", false: "working"}[isMarketOrder],
-		FillPrice:         fillPrice,
-		FillQuantity:      fillQuantity,
-		RemainingQuantity: remainingQuantity,
-		PositionID:        positionID,
-		RejectionReason:   nil,
-		CreatedAt:         nowISO(),
-	})
+	return jsonResult(state.createOrder(request.GetArguments()))
 }
 
 func handleOrderModify(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -136,6 +120,7 @@ func handleOrderModify(_ context.Context, request mcp.CallToolRequest) (*mcp.Cal
 		}
 	}
 
+	state.modifyOrder(strParam(args, "target_id", ""))
 	return jsonResult(orderModifyResponse{
 		TargetType:      targetType,
 		TargetID:        strParam(args, "target_id", ""),
@@ -146,8 +131,10 @@ func handleOrderModify(_ context.Context, request mcp.CallToolRequest) (*mcp.Cal
 }
 
 func handleOrderCancel(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	orderID := strParam(request.GetArguments(), "order_id", "")
+	state.cancelOrder(orderID)
 	return jsonResult(orderCancelResponse{
-		OrderID:         strParam(request.GetArguments(), "order_id", ""),
+		OrderID:         orderID,
 		Status:          "cancelled",
 		RejectionReason: nil,
 		CancelledAt:     nowISO(),
@@ -155,10 +142,9 @@ func handleOrderCancel(_ context.Context, request mcp.CallToolRequest) (*mcp.Cal
 }
 
 func handleOrderStatus(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return jsonResult(orderStatusResponse{
-		OrderID:        strParam(request.GetArguments(), "order_id", ""),
-		Status:         "working",
-		FilledQuantity: 0,
-		AsOf:           nowISO(),
-	})
+	order, found := state.orderStatus(strParam(request.GetArguments(), "order_id", ""))
+	if !found {
+		return jsonResult(apexError("APEX_4011", "validation", "Unknown order"))
+	}
+	return jsonResult(order)
 }

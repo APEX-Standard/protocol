@@ -94,21 +94,21 @@ fn default_history_limit() -> u32 {
     100
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct PriceStop {
     #[serde(rename = "type")]
     pub stop_type: String,
     pub value: f64,
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct TrailingStop {
     #[serde(rename = "type")]
     pub trailing_type: String,
     pub value: f64,
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct OrderSpec {
     pub instrument_id: String,
     #[serde(default)]
@@ -276,6 +276,21 @@ pub struct CapabilitiesResponse {
     pub rate_limits: serde_json::Value,
     pub supported_order_types: Vec<String>,
     pub supported_tif: Vec<String>,
+    pub realtime_contract: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct ReferenceRealtimeStateInput {
+    #[serde(default)]
+    pub quote_stale: Option<bool>,
+    #[serde(default)]
+    pub risk_stale: Option<bool>,
+    #[serde(default)]
+    pub force_sequence_gap: Option<bool>,
+    #[serde(default)]
+    pub kill_switch_active: Option<bool>,
+    #[serde(default)]
+    pub partial_fill_next_order: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -377,14 +392,6 @@ pub struct OrderCancelResponse {
     pub status: String,
     pub rejection_reason: Option<String>,
     pub cancelled_at: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct OrderStatusResponse {
-    pub order_id: String,
-    pub status: String,
-    pub filled_quantity: i32,
-    pub as_of: String,
 }
 
 #[derive(Debug, Serialize)]

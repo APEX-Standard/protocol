@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexstandard.org/spec/core/schemas/risk.resource.schema.json",
+  "title": "APEX Risk Resource",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "account_id",
+    "as_of",
+    "available_margin",
+    "kill_switch_active",
+    "max_position_size",
+    "max_open_orders",
+    "daily_loss_limit",
+    "daily_loss_used",
+    "restricted_instruments",
+    "sequence",
+    "stale_after_ms"
+  ],
+  "properties": {
+    "account_id": { "type": "string", "minLength": 1 },
+    "as_of": { "type": "string", "format": "date-time" },
+    "available_margin": { "type": "number" },
+    "kill_switch_active": { "type": "boolean" },
+    "max_position_size": { "type": "number", "minimum": 0 },
+    "max_open_orders": { "type": "integer", "minimum": 0 },
+    "daily_loss_limit": { "type": "number" },
+    "daily_loss_used": { "type": "number" },
+    "restricted_instruments": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "margin_call_level_pct": {
+      "type": "number",
+      "minimum": 0
+    },
+    "stop_out_level_pct": {
+      "type": "number",
+      "minimum": 0
+    },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "stale_after_ms": { "type": "integer", "minimum": 1 }
+  }
+}

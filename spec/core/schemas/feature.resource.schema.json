@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexstandard.org/spec/core/schemas/feature.resource.schema.json",
+  "title": "APEX Feature Resource",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "instrument_id",
+    "as_of",
+    "sequence",
+    "stale_after_ms",
+    "quote",
+    "returns",
+    "volatility",
+    "regime",
+    "execution"
+  ],
+  "properties": {
+    "instrument_id": {
+      "type": "string",
+      "pattern": "^APEX:[A-Z]+:[A-Z0-9:.]+$"
+    },
+    "as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "stale_after_ms": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "quote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bid", "ask", "mid", "spread"],
+      "properties": {
+        "bid": { "type": "number" },
+        "ask": { "type": "number" },
+        "mid": { "type": "number" },
+        "spread": { "type": "number", "minimum": 0 }
+      }
+    },
+    "returns": {
+      "type": "object",
+      "required": ["r_1m"],
+      "minProperties": 3,
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "volatility": {
+      "type": "object",
+      "required": ["rv_1m", "rv_5m"],
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "regime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "confidence"],
+      "properties": {
+        "label": {
+          "type": "string",
+          "enum": ["trend_up", "trend_down", "range", "volatile", "illiquid"]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["liquidity_score", "expected_slippage_bps"],
+      "properties": {
+        "liquidity_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "expected_slippage_bps": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

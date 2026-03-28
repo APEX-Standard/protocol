@@ -19,6 +19,11 @@ export const servers = {
     command: "go",
     args: ["run", "."],
   },
+  rust: {
+    cwd: path.join(repoRoot, "reference-implementation", "rust"),
+    command: "cargo",
+    args: ["run", "--quiet"],
+  },
   java: {
     cwd: path.join(repoRoot, "reference-implementation", "java"),
     command: "java",
@@ -120,7 +125,7 @@ export function resolveTarget(argv) {
   }
 
   const serverName = positional[0];
-  assert(serverName, "Usage: node <script> <typescript|go|java> or --command <cmd> [--args '[...]'] [--cwd <dir>] or --config <path>");
+  assert(serverName, "Usage: node <script> <typescript|go|rust|java> or --command <cmd> [--args '[...]'] [--cwd <dir>] or --config <path>");
   return {
     label: serverName,
     config: normalizeConfig(getServerConfig(serverName)),

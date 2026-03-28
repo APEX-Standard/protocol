@@ -2,7 +2,7 @@
 
 **Version:** `0.1.0-alpha`  
 **Status:** Draft — open for comment  
-**Last Updated:** 2026-03-10
+**Last Updated:** 2026-03-27
 
 ---
 
@@ -19,6 +19,29 @@ Layer 1 covers five capability domains:
 | Orders | `apex.order.*` | Order entry, modification, cancellation, status |
 | Market Data | `apex.market.*` | Quotes, snapshots, instrument discovery |
 | Risk | `apex.risk.*` | Pre-trade checks, account limits |
+
+Layer 1 Core is tool-complete for basic interoperability, but APEX is designed for agent-native trading workflows rather than request/response polling alone. Production-grade APEX implementations should therefore expose a realtime state layer over MCP resources and notifications in addition to the mandatory tools defined below.
+
+### Agent-Native Model
+
+APEX adopts the following design principles for agent-native trading:
+
+- Tools are primarily for actions and explicit queries.
+- Resources are the primary interface for live state.
+- MCP subscriptions and notifications are the primary interface for change.
+- Streamable HTTP with SSE is the recommended transport for remote realtime sessions.
+- Agents should consume structured market/account/risk state, not raw unbounded tick text streams.
+- Candle series and derived features are first-class state alongside quotes and order events.
+
+Unless otherwise stated, the tool requirements in this document remain the interoperability baseline. The resource and notification model defined in Section 6 is the production architecture for agent-native APEX sessions, even where the current executable conformance suite has not yet been expanded to test every requirement in that section.
+
+Production capability claims and normative realtime schemas are defined in:
+
+- [`production.md`](./production.md)
+- [`stability.md`](./stability.md)
+- [`execution-semantics.md`](./execution-semantics.md)
+- [`operations.md`](./operations.md)
+- [`schemas/`](./schemas/)
 
 ---
 
@@ -474,7 +497,8 @@ OHLCV candle data.
       "high": 1.0890,
       "low": 1.0840,
       "close": 1.0875,
-      "volume": 125000
+      "volume": 125000,
+      "complete": true
     }
   ]
 }
@@ -617,7 +641,7 @@ All tools return errors in a consistent envelope:
 {
   "error": {
     "code": "APEX_4001",
-    "category": "auth|validation|risk|broker|rate_limit|internal",
+    "category": "auth|validation|risk|operational|broker|rate_limit|internal",
     "message": "Human-readable description",
     "details": {},
     "request_id": "string",
@@ -639,6 +663,8 @@ All tools return errors in a consistent envelope:
 | `APEX_4021` | risk | Position limit exceeded |
 | `APEX_4022` | risk | Daily loss limit reached |
 | `APEX_4023` | risk | Kill switch active |
+| `APEX_4024` | operational | Stale market or risk state |
+| `APEX_4025` | operational | Sequence continuity broken |
 | `APEX_4030` | broker | Market closed |
 | `APEX_4031` | broker | Instrument not tradeable |
 | `APEX_4040` | rate_limit | Request rate exceeded |
@@ -663,3 +689,473 @@ All APEX Protocol tools carry MCP annotations for agent guidance:
 | `apex.order.status` | true | false | true |
 | `apex.market.*` | true | false | true |
 | `apex.risk.*` | true | false | true |
+
+---
+
+## 6. Agent-Native Realtime State Model
+
+### 6.1 Scope
+
+This section defines the production architecture for realtime, agent-native APEX implementations.
+
+The goal is to let an agent maintain live market awareness without repeatedly polling tools for every state transition. A conforming agent-native implementation must expose decision-ready state through MCP resources, support subscriptions to those resources, and deliver change events over MCP notifications.
+
+**Tool responses vs resource schemas:** The tool output shapes defined in Sections 1–5 are the interoperability baseline. Resource schemas (in `schemas/`) extend that shape with realtime metadata fields (`sequence`, `stale_after_ms`). Tool responses are not required to include resource-layer metadata. When a tool returns the same conceptual data as a resource, the tool output should be structurally compatible but may omit `sequence` and `stale_after_ms`.
+
+The recommended division of responsibility is:
+
+- tools for order entry, modification, cancellation, explicit snapshots, and explicit checks
+- resources for continuously changing market, account, and risk state
+- notifications for resource updates and urgent event delivery
+- deterministic code outside the model for feed handling, feature computation, throttling, and hard risk enforcement
+
+### 6.2 Transport
+
+For remote sessions, APEX recommends MCP Streamable HTTP with SSE-enabled server-to-client delivery.
+
+- Clients should use Streamable HTTP for request/response traffic.
+- Clients that require live state should open and maintain the server-to-client SSE stream.
+- Servers must deliver resource updates and urgent notifications over that stream.
+- Servers must support resumable streams when the underlying MCP transport supports SSE event IDs and replay semantics.
+- Servers must document whether update delivery is best-effort or replayable across reconnects.
+- Servers must expose enough metadata for clients to detect stale state, sequence gaps, and replay boundaries.
+
+### 6.3 Resource Categories
+
+Agent-native APEX servers must expose the following resource categories.
+
+Market state:
+
+- `apex://market/quote/{instrument_id}`
+- `apex://market/book/{instrument_id}`
+- `apex://market/trades/{instrument_id}`
+- `apex://market/candles/{instrument_id}?timeframe=M1&limit=200`
+- `apex://market/candles/{instrument_id}?timeframe=M5&limit=200`
+- `apex://market/candles/{instrument_id}?timeframe=H1&limit=200`
+- `apex://market/features/{instrument_id}`
+
+Account state:
+
+- `apex://account/summary/{account_id}`
+- `apex://account/positions/{account_id}`
+- `apex://account/orders/{account_id}`
+- `apex://account/fills/{account_id}`
+- `apex://account/risk/{account_id}`
+
+Agent/runtime state:
+
+- `apex://agent/watchlist`
+- `apex://agent/intents`
+- `apex://agent/decision-context/{instrument_id}`
+- `apex://agent/memory/{strategy_id}`
+
+Resource URIs are stable identifiers for current state, not append-only event logs. If a resource changes frequently, servers must emit update notifications and let clients re-read the resource rather than overloading tool calls.
+
+### 6.4 Quote Resource
+
+**URI:**
+
+```text
+apex://market/quote/APEX:FX:EURUSD
+```
+
+**Schema:**
+
+```json
+{
+  "instrument_id": "APEX:FX:EURUSD",
+  "broker_symbol": "EURUSD",
+  "bid": 1.08740,
+  "ask": 1.08760,
+  "mid": 1.08750,
+  "spread": 0.00020,
+  "timestamp": "ISO8601",
+  "is_tradeable": true,
+  "market_status": "open|closed|pre_market|post_market",
+  "sequence": 184467,
+  "stale_after_ms": 1000
+}
+```
+
+Normative schema: [`schemas/quote.resource.schema.json`](./schemas/quote.resource.schema.json)
+
+Notes:
+
+- `sequence` must increase monotonically for updates within a session.
+- `stale_after_ms` tells the agent when the quote must be considered stale for autonomous trading decisions.
+- Servers must not mark a quote tradeable when the quote is already stale.
+- If a quote is no longer suitable for execution, servers must either publish `is_tradeable: false` or transition the corresponding risk/account state such that autonomous execution is rejected deterministically.
+
+### 6.5 Candle Resource
+
+**URI:**
+
+```text
+apex://market/candles/APEX:FX:EURUSD?timeframe=M1&limit=200
+```
+
+**Schema:**
+
+```json
+{
+  "instrument_id": "APEX:FX:EURUSD",
+  "timeframe": "M1",
+  "partial_candle_included": true,
+  "as_of": "ISO8601",
+  "candles": [
+    {
+      "time": "ISO8601",
+      "open": 1.0850,
+      "high": 1.0890,
+      "low": 1.0840,
+      "close": 1.0875,
+      "volume": 125000,
+      "complete": true
+    }
+  ],
+  "sequence": 1,
+  "stale_after_ms": 60000
+}
+```
+
+Normative schema: [`schemas/candle.resource.schema.json`](./schemas/candle.resource.schema.json)
+
+Requirements:
+
+- Servers must support at least `M1`, `M5`, and `H1`.
+- Servers must clearly distinguish completed candles from the currently forming candle using `complete`.
+- Candle updates must be emitted on candle close, and may also be emitted intrabar when partial candles are exposed.
+- Candle time boundaries must be aligned to the declared timeframe in UTC unless a profile explicitly defines another market convention.
+- If a partial candle is published, its `time` field must refer to the candle open time, not the last tick time.
+
+### 6.6 Feature Resource
+
+The feature resource is the canonical decision-ready market state object for agents.
+
+**URI:**
+
+```text
+apex://market/features/APEX:FX:EURUSD
+```
+
+**Schema:**
+
+```json
+{
+  "instrument_id": "APEX:FX:EURUSD",
+  "as_of": "ISO8601",
+  "sequence": 1,
+  "stale_after_ms": 2000,
+  "quote": {
+    "bid": 1.08740,
+    "ask": 1.08760,
+    "mid": 1.08750,
+    "spread": 0.00020
+  },
+  "returns": {
+    "r_1s": 0.00002,
+    "r_5s": 0.00005,
+    "r_1m": 0.00080
+  },
+  "volatility": {
+    "rv_1m": 0.12,
+    "rv_5m": 0.37,
+    "rv_30m": 0.55
+  },
+  "book": {
+    "top_level_imbalance": 0.21,
+    "depth_imbalance": 0.18,
+    "microprice": 1.08753
+  },
+  "flow": {
+    "trade_intensity_30s": 0.67,
+    "aggressor_imbalance_30s": 0.44
+  },
+  "regime": {
+    "label": "trend_up|trend_down|range|volatile|illiquid",
+    "confidence": 0.81
+  },
+  "execution": {
+    "liquidity_score": 0.79,
+    "expected_slippage_bps": 0.6
+  }
+}
+```
+
+Normative schema: [`schemas/feature.resource.schema.json`](./schemas/feature.resource.schema.json)
+
+Production implementations must expose enough derived state that an agent can reason over trend, volatility, spread, liquidity, and short-horizon flow without parsing raw event streams directly.
+
+The following feature groups are required:
+
+- quote state: `bid`, `ask`, `mid`, `spread`
+- short-horizon returns: at least three windows including `1m`
+- realized volatility: at least `1m` and `5m`
+- execution quality: liquidity and expected slippage estimate
+- regime classification: label plus confidence
+
+Book and flow features are strongly recommended and should be present whenever the broker has access to the underlying market data.
+
+### 6.7 Account and Risk Resources
+
+For autonomous workflows, the account and risk state must also be subscribable:
+
+- `apex://account/summary/{account_id}`
+- `apex://account/positions/{account_id}`
+- `apex://account/orders/{account_id}`
+- `apex://account/fills/{account_id}`
+- `apex://account/risk/{account_id}`
+
+Normative schemas:
+- [`schemas/account-summary.resource.schema.json`](./schemas/account-summary.resource.schema.json)
+- [`schemas/positions.resource.schema.json`](./schemas/positions.resource.schema.json)
+- [`schemas/orders.resource.schema.json`](./schemas/orders.resource.schema.json)
+- [`schemas/fills.resource.schema.json`](./schemas/fills.resource.schema.json)
+- [`schemas/risk.resource.schema.json`](./schemas/risk.resource.schema.json)
+
+At minimum, these resources must include:
+
+- freshness timestamp
+- current positions and open orders
+- available margin and margin utilisation
+- current realised and unrealised P&L
+- broker-enforced risk flags such as kill switch state, trading restrictions, and daily loss status
+- data freshness metadata
+- a monotonically increasing sequence for each resource stream
+
+### 6.8 Decision Context Resource
+
+The decision context resource is a required production convenience resource that packages the current market, candle, account, and risk state for one instrument into a single model-ready object.
+
+**URI:**
+
+```text
+apex://agent/decision-context/APEX:FX:EURUSD
+```
+
+**Schema:**
+
+```json
+{
+  "instrument_id": "APEX:FX:EURUSD",
+  "timestamp": "ISO8601",
+  "sequence": 1,
+  "stale_after_ms": 5000,
+  "market": {
+    "quote_resource": "apex://market/quote/APEX:FX:EURUSD",
+    "feature_resource": "apex://market/features/APEX:FX:EURUSD",
+    "candle_resources": [
+      "apex://market/candles/APEX:FX:EURUSD?timeframe=M1&limit=200",
+      "apex://market/candles/APEX:FX:EURUSD?timeframe=M5&limit=200",
+      "apex://market/candles/APEX:FX:EURUSD?timeframe=H1&limit=200"
+    ]
+  },
+  "account": {
+    "summary_resource": "apex://account/summary/ACC_12345",
+    "positions_resource": "apex://account/positions/ACC_12345",
+    "orders_resource": "apex://account/orders/ACC_12345",
+    "risk_resource": "apex://account/risk/ACC_12345"
+  },
+  "constraints": {
+    "kill_switch_active": false,
+    "max_position_size": 5000000,
+    "max_open_orders": 50
+  }
+}
+```
+
+Normative schema: [`schemas/decision-context.resource.schema.json`](./schemas/decision-context.resource.schema.json)
+
+This resource exists to reduce prompt assembly cost and to provide a stable, broker-independent context object for agent frameworks.
+
+### 6.9 Subscription Semantics
+
+Servers must support MCP resource subscriptions for all realtime resources in this section.
+
+Required semantics:
+
+- clients subscribe to the canonical resource URI
+- when the underlying state changes, the server emits `notifications/resources/updated`
+- the client re-reads the resource to obtain the latest value
+- servers may coalesce high-frequency updates to avoid unnecessary downstream load
+- if an agent requires direct push payloads in addition to resource invalidation, servers may emit APEX-specific notifications as defined below
+- if updates are coalesced, `sequence` must still allow the client to detect missed intermediate states
+- if a replay boundary is crossed and a full replay is not possible, the server must force the client to re-read the resource and treat cached state as potentially incomplete
+- clients must assume subscriptions are level-triggered invalidation signals, not guaranteed delivery of every market micro-event, unless the server explicitly documents stronger delivery semantics
+
+Production implementations must not require agents to poll `apex.market.quote`, `apex.account.positions`, or `apex.account.orders` on a fixed short interval when equivalent realtime resources are available.
+
+### 6.10 Freshness And Staleness
+
+Every realtime resource in this section must include:
+
+- `as_of` or `timestamp`
+- `sequence`
+- a freshness limit expressed as `stale_after_ms` or an equivalent documented field
+
+Autonomous agents and runtimes must treat a resource as stale when:
+
+- current time exceeds `timestamp + stale_after_ms`
+- the transport reconnects and the client cannot prove replay continuity
+- sequence continuity is broken and the resource has not yet been re-read
+
+Production APEX runtimes must refuse autonomous order entry when any required execution input is stale, including at minimum:
+
+- quote state
+- account/risk state
+- instrument trading status
+
+### 6.11 Sequencing, Replay, And Gap Handling
+
+Production realtime feeds require explicit sequence semantics.
+
+- Each subscribable realtime resource must expose a monotonically increasing `sequence`.
+- Each notification that refers to a realtime resource must include the latest known `sequence` for that resource.
+- Servers should preserve replay continuity across transient reconnects whenever the underlying transport supports it.
+- If replay is supported, servers must document the retention window.
+- If replay is not supported, servers must document that reconnection requires a full resource refresh.
+
+Client obligations:
+
+- detect non-monotonic or skipped sequences
+- invalidate local cache on gap detection
+- re-read the affected resource before using it for decisions
+- halt autonomous execution when sequence continuity cannot be restored for execution-critical resources
+
+### 6.12 APEX Notification Taxonomy
+
+In addition to MCP-standard resource update notifications, APEX defines the following recommended notification names for urgent or semantically meaningful events:
+
+- `notifications/apex.market.quote_moved`
+- `notifications/apex.market.candle_closed`
+- `notifications/apex.market.regime_changed`
+- `notifications/apex.market.volatility_spike`
+- `notifications/apex.order.accepted`
+- `notifications/apex.order.filled`
+- `notifications/apex.order.partially_filled`
+- `notifications/apex.order.cancelled`
+- `notifications/apex.order.rejected`
+- `notifications/apex.risk.limit_warning`
+- `notifications/apex.risk.kill_switch_engaged`
+
+Recommended event envelope:
+
+```json
+{
+  "event_id": "string",
+  "event_type": "notifications/apex.order.filled",
+  "account_id": "ACC_12345",
+  "instrument_id": "APEX:FX:EURUSD",
+  "resource_uri": "apex://account/fills/ACC_12345",
+  "timestamp": "ISO8601",
+  "sequence": 184468,
+  "payload": {}
+}
+```
+
+Production event requirements:
+
+- `event_id` must be unique within the session
+- `event_type` must be stable and machine-routable
+- `timestamp` must reflect broker event time or broker processing time; servers must document which
+- `sequence` must be monotonic for the referenced resource stream
+- `resource_uri` must point to the canonical resource that should be refreshed
+
+### 6.13 Order And Fill Event Payloads
+
+Order and fill events are execution-critical and must have stable payloads.
+
+For order lifecycle notifications, `payload` must include:
+
+```json
+{
+  "order_id": "string",
+  "client_order_id": "string|null",
+  "account_id": "string",
+  "instrument_id": "APEX:FX:EURUSD",
+  "side": "buy",
+  "order_type": "market",
+  "quantity": 100000,
+  "status": "accepted|working|partially_filled|filled|cancelled|rejected|expired",
+  "filled_quantity": 10000,
+  "remaining_quantity": 0,
+  "average_fill_price": 1.08755,
+  "reason": null,
+  "updated_at": "ISO8601"
+}
+```
+
+Normative schema: [`schemas/order-event.schema.json`](./schemas/order-event.schema.json)
+
+For fill notifications, `payload` must include:
+
+```json
+{
+  "fill_id": "string",
+  "order_id": "string",
+  "account_id": "string",
+  "instrument_id": "APEX:FX:EURUSD",
+  "side": "buy|sell",
+  "fill_quantity": 10000,
+  "fill_price": 1.08755,
+  "commission": -0.50,
+  "commission_currency": "USD",
+  "liquidity_flag": "maker|taker|unknown",
+  "position_id": "string|null",
+  "timestamp": "ISO8601"
+}
+```
+
+Normative schema: [`schemas/fill-event.schema.json`](./schemas/fill-event.schema.json)
+
+### 6.14 Autonomous Risk Controls
+
+Production autonomous trading requires deterministic controls outside the model.
+
+Every production APEX implementation that permits autonomous order entry must expose and enforce:
+
+- kill switch state
+- maximum position size
+- maximum open orders
+- daily loss status
+- restricted instruments
+- market-hours gating
+- stale-data rejection
+- rate-limit rejection
+
+Risk resources must surface these controls, and risk/order tools must enforce them consistently. A broker must not allow a tool call to succeed when the corresponding risk resource indicates a hard-stop condition unless the resource has already been updated to reflect a cleared state.
+
+Recommended additional controls:
+
+- max notional per instrument
+- max aggregate exposure by asset class
+- max slippage tolerance
+- approval-required mode
+- volatility circuit breaker
+
+### 6.15 Decision Triggers
+
+Production agent-native runtimes should trigger decision evaluation on a bounded set of semantically meaningful events rather than on every feed update.
+
+Recommended trigger classes:
+
+- candle close
+- fill or partial fill
+- order rejection or cancellation
+- regime change
+- volatility spike
+- spread widening beyond configured threshold
+- scheduled review interval
+
+This trigger model should be documented per strategy/runtime and should remain deterministic outside the model.
+
+### 6.16 Realtime Design Guidance
+
+Agent-native APEX implementations should follow these operational rules:
+
+- Raw market feeds should be processed by deterministic code, not directly streamed into the language model.
+- Agents should reason over quotes, candles, features, positions, orders, and risk state as structured objects.
+- The runtime should trigger the agent on meaningful events such as candle close, fill events, regime changes, volatility spikes, or scheduled review intervals.
+- Hard controls such as size limits, kill switches, stale-data rejection, market-hours enforcement, and rate limiting must remain deterministic and outside the model.
+
+In other words: realtime data is necessary for viable autonomous trading, but the model should consume a maintained world state, not the raw tape.

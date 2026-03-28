@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexstandard.org/spec/core/schemas/account-summary.resource.schema.json",
+  "title": "APEX Account Summary Resource",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "account_id",
+    "account_base_currency",
+    "response_currency",
+    "balance",
+    "equity",
+    "used_margin",
+    "free_margin",
+    "margin_level_pct",
+    "unrealised_pnl",
+    "realised_pnl_today",
+    "as_of",
+    "sequence",
+    "stale_after_ms"
+  ],
+  "properties": {
+    "account_id": { "type": "string", "minLength": 1 },
+    "account_base_currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "response_currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "balance": { "type": "number" },
+    "equity": { "type": "number" },
+    "used_margin": { "type": "number" },
+    "free_margin": { "type": "number" },
+    "margin_level_pct": { "type": "number" },
+    "unrealised_pnl": { "type": "number" },
+    "realised_pnl_today": { "type": "number" },
+    "as_of": { "type": "string", "format": "date-time" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "stale_after_ms": { "type": "integer", "minimum": 1 }
+  }
+}

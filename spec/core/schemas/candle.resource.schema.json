@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexstandard.org/spec/core/schemas/candle.resource.schema.json",
+  "title": "APEX Candle Resource",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "instrument_id",
+    "timeframe",
+    "partial_candle_included",
+    "as_of",
+    "sequence",
+    "stale_after_ms",
+    "candles"
+  ],
+  "properties": {
+    "instrument_id": {
+      "type": "string",
+      "pattern": "^APEX:[A-Z]+:[A-Z0-9:.]+$"
+    },
+    "timeframe": {
+      "type": "string",
+      "enum": ["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1", "MN"]
+    },
+    "partial_candle_included": {
+      "type": "boolean"
+    },
+    "as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "stale_after_ms": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "candles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["time", "open", "high", "low", "close", "volume", "complete"],
+        "properties": {
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "open": { "type": "number" },
+          "high": { "type": "number" },
+          "low": { "type": "number" },
+          "close": { "type": "number" },
+          "volume": { "type": "number", "minimum": 0 },
+          "complete": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

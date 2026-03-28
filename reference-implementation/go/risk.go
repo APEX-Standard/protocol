@@ -63,6 +63,6 @@ func handleRiskLimits(_ context.Context, request mcp.CallToolRequest) (*mcp.Call
 		MarginCallLevelPct:    100,
 		StopOutLevelPct:       50,
 		RestrictedInstruments: []any{},
-		KillSwitchActive:      false,
+		KillSwitchActive:      state.isKillSwitchActive(),
 	})
 }
