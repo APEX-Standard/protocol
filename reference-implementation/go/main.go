@@ -85,6 +85,9 @@ func main() {
 
 		response := srv.HandleMessage(context.Background(), append([]byte(nil), line...))
 		if response != nil {
+			if message.Method == "initialize" {
+				response = injectApexVersion(response)
+			}
 			writeJSON(response)
 		}
 

@@ -214,7 +214,8 @@ final class HttpTransport {
         capabilities.putObject("resources").put("subscribe", true).put("listChanged", true);
         result.putObject("serverInfo")
             .put("name", ToolRegistry.SERVER_NAME)
-            .put("version", ToolRegistry.SERVER_VERSION);
+            .put("version", ToolRegistry.SERVER_VERSION)
+            .put("apex_version", "0.1.0-alpha");
         response.set("result", result);
 
         exchange.getResponseHeaders().set("Content-Type", "application/json");

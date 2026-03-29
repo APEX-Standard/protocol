@@ -134,10 +134,10 @@ const results = await client.callTool({
 });
 
 // Get detailed contract spec
-const details = await client.callTool({
+const details = extractPayload(await client.callTool({
   name: "apex.market.details",
   arguments: { instrument_id: "APEX:FX:EURUSD" },
-});
+}));
 
 console.log(`Min trade size: ${details.min_quantity} ${details.quantity_unit}`);
 console.log(`Broker display unit: ${details.broker_quantity_unit}`);

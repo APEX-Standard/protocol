@@ -108,6 +108,16 @@ type orderCancelResponse struct {
 	CancelledAt     string `json:"cancelled_at"`
 }
 
+type positionCloseResponse struct {
+	OrderID           string  `json:"order_id"`
+	PositionID        string  `json:"position_id"`
+	Status            string  `json:"status"`
+	FillPrice         float64 `json:"fill_price"`
+	FillQuantity      float64 `json:"fill_quantity"`
+	RemainingQuantity float64 `json:"remaining_quantity"`
+	ClosedAt          string  `json:"closed_at"`
+}
+
 type quoteResponse struct {
 	InstrumentID string  `json:"instrument_id"`
 	BrokerSymbol string  `json:"broker_symbol"`

@@ -57,6 +57,17 @@ Pause new order entry when:
 
 This halt must happen in code before the LLM is even asked to decide.
 
+### Partial Fill Race Conditions
+
+When an order is `partially_filled`, the agent's position has changed but the order is not yet terminal. If the agent sizes a new order based on current position state while the remaining fill is in flight, the second fill may arrive between the sizing decision and the new order submission — resulting in overexposure.
+
+Before sizing a new order based on position state that includes a partially filled order:
+
+1. Wait for the order to reach a terminal state (`filled`, `cancelled`, `rejected`, `expired`), or
+2. Cancel the remaining quantity via `apex.order.cancel` and confirm the cancellation before proceeding.
+
+Do not make sizing decisions on non-terminal order state. The runtime should enforce this check in code — do not rely on the model to reason about partial fill timing.
+
 ---
 
 ## 4. Give The Model Structured Decision Context

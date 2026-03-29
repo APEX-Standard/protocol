@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { assertNonEmptyString, connectClient, disconnectClient, extractPayload, printCheck, printCapturedStderr, resolveTarget } from "./common.mjs";
+import { assertNonEmptyString, callTool, connectClient, disconnectClient, extractPayload, printCheck, printCapturedStderr, resolveTarget } from "./common.mjs";
 
 const target = resolveTarget(process.argv.slice(2));
 const session = await connectClient(target.config, { verbose: target.verbose });
@@ -121,6 +121,38 @@ try {
   );
   assert.equal(cancelled.status, "cancelled");
   printCheck("cancelled the resting order");
+
+  // --- Concurrent orders ---
+
+  const [concOrder1, concOrder2] = await Promise.all([
+    callTool(client, "apex.order.place", {
+      account_id: "ACC_12345",
+      order: {
+        instrument_id: testOptions.instrumentId,
+        side: "buy",
+        order_type: "market",
+        quantity: 1000,
+        quantity_unit: "base_units",
+        time_in_force: "GTC",
+      },
+    }),
+    callTool(client, "apex.order.place", {
+      account_id: "ACC_12345",
+      order: {
+        instrument_id: testOptions.instrumentId,
+        side: "sell",
+        order_type: "market",
+        quantity: 1000,
+        quantity_unit: "base_units",
+        time_in_force: "GTC",
+      },
+    }),
+  ]);
+  assert(concOrder1.order_id, "Concurrent order 1 should have order_id");
+  assert(concOrder2.order_id, "Concurrent order 2 should have order_id");
+  assert(concOrder1.status === "filled" || concOrder1.status === "accepted", "Concurrent order 1 should be filled or accepted");
+  assert(concOrder2.status === "filled" || concOrder2.status === "accepted", "Concurrent order 2 should be filled or accepted");
+  printCheck("concurrent order placement works without deadlock or corruption");
 
   console.log(`Dry run passed for ${target.label}`);
 } catch (error) {

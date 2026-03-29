@@ -67,7 +67,8 @@ public final class Server {
         capabilities.putObject("resources").put("subscribe", true).put("listChanged", true);
         result.putObject("serverInfo")
             .put("name", ToolRegistry.SERVER_NAME)
-            .put("version", ToolRegistry.SERVER_VERSION);
+            .put("version", ToolRegistry.SERVER_VERSION)
+            .put("apex_version", "0.1.0-alpha");
         return result;
     }
 

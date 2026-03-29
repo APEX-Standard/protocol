@@ -66,7 +66,7 @@
       "properties": {
         "label": {
           "type": "string",
-          "enum": ["trend_up", "trend_down", "range", "volatile", "illiquid"]
+          "enum": ["trend_up", "trend_down", "range", "volatile", "illiquid", "transitional", "other"]
         },
         "confidence": {
           "type": "number",

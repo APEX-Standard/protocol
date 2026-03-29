@@ -147,8 +147,8 @@ func (rb *ReplayBuffer) ReplayAfter(lastEventID string) ([]StoredEvent, bool) {
 			"method":  "notifications/apex.session.gap_fill",
 			"params": map[string]any{
 				"elided_count": gapCount,
-				"from_id":      gapFromID,
-				"to_id":        gapToID,
+				"from_id":      strconv.Itoa(gapFromID),
+				"to_id":        strconv.Itoa(gapToID),
 			},
 		}
 		result = append(result, StoredEvent{

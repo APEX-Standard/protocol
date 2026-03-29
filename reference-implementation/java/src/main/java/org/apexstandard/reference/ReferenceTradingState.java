@@ -154,7 +154,7 @@ final class ReferenceTradingState {
         );
     }
 
-    synchronized ProtocolModels.OrderPlacementResponse createOrder(Map<String, Object> args) {
+    synchronized Object createOrder(Map<String, Object> args) {
         Map<String, Object> order = ToolRegistry.argMap(args, "order");
         String now = Instant.now().toString();
         String orderType = ToolRegistry.argStr(order, "order_type", "market");
@@ -171,7 +171,11 @@ final class ReferenceTradingState {
         orderRecord.put("account_id", ACCOUNT_ID);
         orderRecord.put("instrument_id", ToolRegistry.argStr(order, "instrument_id", INSTRUMENT_ID));
         orderRecord.put("broker_symbol", ToolRegistry.argStr(order, "broker_symbol", BROKER_SYMBOL));
-        orderRecord.put("side", ToolRegistry.argStr(order, "side", "buy"));
+        String side = ToolRegistry.argStr(order, "side", "");
+        if (side.isEmpty() || (!side.equals("buy") && !side.equals("sell"))) {
+            return ToolRegistry.apexError("APEX_4011", "validation", "side is required and must be 'buy' or 'sell'");
+        }
+        orderRecord.put("side", side);
         orderRecord.put("order_type", orderType);
         orderRecord.put("quantity", quantity);
         orderRecord.put("quantity_unit", ToolRegistry.argStr(order, "quantity_unit", "base_units"));
@@ -289,6 +293,87 @@ final class ReferenceTradingState {
             }
         }
         bump(ORDERS_URI, DECISION_CONTEXT_URI);
+    }
+
+    synchronized ProtocolModels.Position findPosition(String positionId) {
+        for (ProtocolModels.Position p : positions) {
+            if (positionId.equals(p.position_id())) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    synchronized ProtocolModels.PositionCloseResponse closePosition(String positionId, Double requestedQuantity) {
+        ProtocolModels.Position pos = findPosition(positionId);
+        if (pos == null) {
+            return null;
+        }
+
+        double closeQuantity = (requestedQuantity != null) ? requestedQuantity : pos.quantity();
+        if (closeQuantity > pos.quantity()) {
+            closeQuantity = pos.quantity();
+        }
+        double remainingQuantity = pos.quantity() - closeQuantity;
+        boolean fullClose = remainingQuantity <= 0;
+
+        // The closing order is in the opposite direction
+        String closeSide = "buy".equals(pos.side()) ? "sell" : "buy";
+        double fillPrice = "sell".equals(closeSide) ? liveBid : liveAsk;
+
+        String now = Instant.now().toString();
+        String orderId = "ord_" + Long.toString(System.nanoTime(), 36);
+
+        // Record the closing order
+        Map<String, Object> orderRecord = new LinkedHashMap<>();
+        orderRecord.put("order_id", orderId);
+        orderRecord.put("client_order_id", null);
+        orderRecord.put("account_id", ACCOUNT_ID);
+        orderRecord.put("instrument_id", pos.instrument_id());
+        orderRecord.put("broker_symbol", pos.broker_symbol());
+        orderRecord.put("side", closeSide);
+        orderRecord.put("order_type", "market");
+        orderRecord.put("quantity", closeQuantity);
+        orderRecord.put("quantity_unit", pos.quantity_unit());
+        orderRecord.put("limit_price", null);
+        orderRecord.put("stop_price", null);
+        orderRecord.put("time_in_force", "IOC");
+        orderRecord.put("status", "filled");
+        orderRecord.put("filled_quantity", closeQuantity);
+        orderRecord.put("remaining_quantity", 0.0);
+        orderRecord.put("average_fill_price", fillPrice);
+        orderRecord.put("reason", "position_close");
+        orderRecord.put("created_at", now);
+        orderRecord.put("updated_at", now);
+        orders.add(orderRecord);
+
+        // Record the fill
+        Map<String, Object> fill = new LinkedHashMap<>();
+        fill.put("fill_id", "fill_" + orderId);
+        fill.put("order_id", orderId);
+        fill.put("account_id", ACCOUNT_ID);
+        fill.put("instrument_id", pos.instrument_id());
+        fill.put("side", closeSide);
+        fill.put("fill_quantity", closeQuantity);
+        fill.put("fill_price", fillPrice);
+        fill.put("commission", -0.5);
+        fill.put("commission_currency", "USD");
+        fill.put("liquidity_flag", "taker");
+        fill.put("position_id", positionId);
+        fill.put("timestamp", now);
+        fills.add(0, fill);
+
+        bump(ORDERS_URI, POSITIONS_URI, FILLS_URI, RISK_URI, DECISION_CONTEXT_URI);
+
+        return new ProtocolModels.PositionCloseResponse(
+            orderId,
+            positionId,
+            fullClose ? "filled" : "partially_filled",
+            fillPrice,
+            closeQuantity,
+            remainingQuantity,
+            now
+        );
     }
 
     synchronized Object orderStatus(String orderId) {

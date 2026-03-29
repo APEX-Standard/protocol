@@ -140,6 +140,21 @@ impl ApexServer {
     }
 
     #[tool(
+        name = "apex.session.acknowledge",
+        description = "Acknowledge receipt of SSE events. Server discards acknowledged events."
+    )]
+    async fn session_acknowledge(
+        &self,
+        #[tool(aggr)] _input: AcknowledgeInput,
+    ) -> Result<CallToolResult, McpError> {
+        // No-op in stdio mode (no replay buffer)
+        Ok(json_result(&serde_json::json!({
+            "acknowledged_through": "0",
+            "buffer_depth": 0,
+        })))
+    }
+
+    #[tool(
         name = "reference.test.set_realtime_state",
         description = "Reference-only fault injection for conformance and resilience testing."
     )]
@@ -169,6 +184,9 @@ impl ApexServer {
         &self,
         #[tool(aggr)] input: AccountSummaryInput,
     ) -> Result<CallToolResult, McpError> {
+        if input.account_id.is_empty() {
+            return Ok(json_result(&apex_error("APEX_4011", "validation", "account_id is required", None)));
+        }
         Ok(json_result(
             &self.state.account_summary_payload(input.currency),
         ))
@@ -291,6 +309,59 @@ impl ApexServer {
     }
 
     #[tool(
+        name = "apex.position.close",
+        description = "Close an open position fully or partially by placing an opposite-direction market order."
+    )]
+    async fn position_close(
+        &self,
+        #[tool(aggr)] input: PositionCloseInput,
+    ) -> Result<CallToolResult, McpError> {
+        if let Err((code, category, message)) = self.state.order_acceptance() {
+            return Ok(json_result(&apex_error(code, category, message, None)));
+        }
+
+        let (instrument_id, side, total_quantity) =
+            match self.state.find_position(&input.position_id) {
+                Some(pos) => pos,
+                None => {
+                    return Ok(json_result(&apex_error(
+                        "APEX_4011",
+                        "validation",
+                        &format!("Unknown position: {}", input.position_id),
+                        None,
+                    )));
+                }
+            };
+
+        let close_quantity = input.quantity.unwrap_or(total_quantity);
+        let close_side = if side == "buy" { "sell" } else { "buy" };
+
+        let (order_payload, updates) = self.state.close_position(
+            &input.position_id,
+            close_quantity,
+            &instrument_id,
+            close_side,
+        );
+        self.notify_updates(updates).await;
+
+        let remaining = total_quantity - close_quantity;
+        let status = if remaining <= 0.0 { "filled" } else { "partially_filled" };
+
+        Ok(json_result(&PositionCloseResponse {
+            order_id: order_payload["order_id"]
+                .as_str()
+                .unwrap_or("")
+                .to_owned(),
+            position_id: input.position_id,
+            status: status.to_owned(),
+            fill_price: order_payload["fill_price"].as_f64().unwrap_or(1.08755),
+            fill_quantity: close_quantity,
+            remaining_quantity: if remaining > 0.0 { remaining } else { 0.0 },
+            closed_at: now_iso(),
+        }))
+    }
+
+    #[tool(
         name = "apex.order.status",
         description = "Query the current state of a single order."
     )]
@@ -317,6 +388,19 @@ impl ApexServer {
         &self,
         #[tool(aggr)] input: MarketQuoteInput,
     ) -> Result<CallToolResult, McpError> {
+        // Validate instrument
+        let has_id = input.instrument_id.as_deref().is_some_and(|s| !s.is_empty());
+        let has_sym = input.broker_symbol.as_deref().is_some_and(|s| !s.is_empty());
+        if !has_id && !has_sym {
+            return Ok(json_result(&apex_error("APEX_4010", "validation", "Unknown instrument", None)));
+        }
+        if has_id && input.instrument_id.as_deref() != Some(INSTRUMENT_ID) {
+            return Ok(json_result(&apex_error("APEX_4010", "validation", "Unknown instrument", None)));
+        }
+        if !has_id && input.broker_symbol.as_deref() != Some(BROKER_SYMBOL) {
+            return Ok(json_result(&apex_error("APEX_4010", "validation", "Unknown instrument", None)));
+        }
+
         Ok(json_result(
             &self
                 .state
@@ -370,6 +454,10 @@ impl ApexServer {
         &self,
         #[tool(aggr)] input: MarketDetailsInput,
     ) -> Result<CallToolResult, McpError> {
+        if input.instrument_id != INSTRUMENT_ID {
+            return Ok(json_result(&apex_error("APEX_4010", "validation", "Unknown instrument", None)));
+        }
+
         Ok(json_result(&MarketDetailsResponse {
             instrument_id: input.instrument_id,
             broker_symbol: BROKER_SYMBOL.to_owned(),
@@ -461,7 +549,9 @@ impl ServerHandler for ApexServer {
                 name: SERVER_NAME.to_owned(),
                 version: SERVER_VERSION.to_owned(),
             },
-            instructions: None,
+            instructions: Some(
+                serde_json::json!({ "apex_version": "0.1.0-alpha" }).to_string(),
+            ),
         }
     }
 

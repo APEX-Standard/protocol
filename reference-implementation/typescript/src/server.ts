@@ -72,11 +72,14 @@ function setupCommon(server: McpServer) {
 /*  Stdio mode                                                         */
 /* ------------------------------------------------------------------ */
 
+const APEX_VERSION = "0.1.0-alpha";
+
 async function startStdio() {
   const server = new McpServer({
     name: SERVER_NAME,
     version: SERVER_VERSION,
-  });
+    apex_version: APEX_VERSION,
+  } as any);
   const state = new ReferenceTradingState();
 
   setupCommon(server);
@@ -147,7 +150,8 @@ async function startHttp(port: number) {
   const server = new McpServer({
     name: SERVER_NAME,
     version: SERVER_VERSION,
-  });
+    apex_version: APEX_VERSION,
+  } as any);
   const state = new ReferenceTradingState();
 
   setupCommon(server);

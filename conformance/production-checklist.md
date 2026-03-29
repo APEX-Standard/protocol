@@ -132,7 +132,7 @@ The reference harness now executes:
 - injected sequence gap detection and sequence-gap rejection checks
 - partial fill lifecycle and event schema validation
 - kill switch order rejection checks
-- HTTP/SSE transport connection and session management (18 mandatory tools including `apex.session.acknowledge`)
+- HTTP/SSE transport connection and session management (19 mandatory tools including `apex.session.acknowledge`)
 - SSE notification delivery (`notifications/resources/updated` and APEX notifications)
 - SSE reconnect with `Last-Event-ID` replay
 - Acknowledgment-driven retention (`apex.session.acknowledge` advances cursor, evicts acknowledged events)

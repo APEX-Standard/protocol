@@ -49,12 +49,18 @@ All four reference implementations are currently:
 | `apex.market.details` | Yes | Yes | Yes | Yes | Yes |
 | `apex.risk.check` | Yes | Yes | Yes | Yes | Yes |
 | `apex.risk.limits` | Yes | Yes | Yes | Yes | Yes |
+| `apex.position.close` | Yes | Yes | Yes | Yes | Yes |
+| `apex.fx.rollover` | Yes | Yes | Yes | Yes | Yes |
+| `apex.fx.exposure` | Yes | Yes | Yes | Yes | Yes |
+| `apex.fx.conversion` | Yes | Yes | Yes | Yes | Yes |
 | `resources/list` | Yes | Yes | Yes | Yes | Yes |
 | `resources/read` | Yes | Yes | Yes | Yes | Yes |
 | `resources/subscribe` | Yes | Yes | Yes | Yes | Yes |
 | `resources/unsubscribe` | Yes | Yes | Yes | Yes | Yes |
 | `notifications/resources/updated` | Yes | Yes | Yes | Yes | Yes |
 | Reference fault injection tool | Yes | Yes | Yes | Yes | Yes |
+| Negative validation: missing required fields | Yes | Yes | Yes | Yes | Yes |
+| Negative validation: unknown instrument | Yes | Yes | Yes | Yes | Yes |
 
 ---
 
@@ -92,6 +98,8 @@ All four reference implementations are currently:
 | Deterministic partial-fill-next-order behavior | Yes | Yes | Yes | Yes | Yes |
 | Normalized order-event schema compliance | Yes | Yes | Yes | Yes | Yes |
 | Normalized fill-event schema compliance | Yes | Yes | Yes | Yes | Yes |
+| Heartbeat latency SLA (avg < 500ms, max < 1000ms) | Yes | Yes | Yes | Yes | Yes |
+| Concurrent order handling | Yes | Yes | Yes | Yes | Yes |
 
 ---
 
@@ -111,6 +119,7 @@ All four reference implementations are currently:
 | `notifications/apex.risk.kill_switch_engaged` | Yes | Yes | Yes | Yes | Yes |
 | Tick engine (2s quote updates) | Yes | Yes | Yes | Yes | Yes |
 | `force_candle_close` test tool | Yes | Yes | Yes | Yes | Yes |
+| `apex_version` in initialize `serverInfo` | Yes | Yes | Yes | Yes | Yes |
 | Session rejection (bogus ID → 404) | Yes | Yes | Yes | Yes | Yes |
 | `apex.session.acknowledge` | Yes | Yes | Yes | Yes | transport-resilience |
 | Acknowledgment-driven retention | Yes | Yes | Yes | Yes | transport-resilience |

@@ -184,4 +184,15 @@ final class ProtocolModels {
         boolean kill_switch_active
     ) {
     }
+
+    record PositionCloseResponse(
+        String order_id,
+        String position_id,
+        String status,
+        double fill_price,
+        double fill_quantity,
+        double remaining_quantity,
+        String closed_at
+    ) {
+    }
 }

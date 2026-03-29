@@ -12,6 +12,7 @@ var coreTools = []string{
 	"apex.session.*",
 	"apex.account.*",
 	"apex.order.*",
+	"apex.position.*",
 	"apex.market.*",
 	"apex.risk.*",
 }
@@ -121,7 +122,11 @@ func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState, httpM
 				return jsonResult(apexError("APEX_4000", "validation", "last_event_id is required"))
 			}
 			if st.replayBuffer == nil {
-				return jsonResult(apexError("APEX_5000", "internal", "Replay buffer not available"))
+				// No-op in stdio mode (no replay buffer)
+				return jsonResult(map[string]any{
+					"acknowledged_through": "0",
+					"buffer_depth":         0,
+				})
 			}
 			ackThrough, depth := st.replayBuffer.Acknowledge(lastEventID)
 			return jsonResult(map[string]any{

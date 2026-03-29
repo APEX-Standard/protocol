@@ -436,13 +436,26 @@ func (s *referenceState) quoteResponse(instrumentID, brokerSymbol string) quoteR
 	}
 }
 
-func (s *referenceState) createOrder(args map[string]any) orderPlacementResponse {
+func (s *referenceState) createOrder(args map[string]any) any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	order := mapParam(args, "order")
+
+	// Validate required order fields
+	side := strParam(order, "side", "")
+	if side == "" {
+		return apexError("APEX_4011", "validation", "side is required")
+	}
+	if side != "buy" && side != "sell" {
+		return apexError("APEX_4011", "validation", "side must be 'buy' or 'sell'")
+	}
+
 	orderType := strParam(order, "order_type", "market")
 	quantity := floatParam(order, "quantity", 0)
+	if quantity <= 0 {
+		return apexError("APEX_4011", "validation", "quantity must be positive")
+	}
 	isMarketOrder := orderType == "market"
 	now := nowISO()
 	orderID := fmt.Sprintf("ord_%s", time.Now().UTC().Format("150405.000"))
@@ -483,7 +496,7 @@ func (s *referenceState) createOrder(args map[string]any) orderPlacementResponse
 		AccountID:         referenceAccountID,
 		InstrumentID:      strParam(order, "instrument_id", referenceInstrumentID),
 		BrokerSymbol:      strParam(order, "broker_symbol", referenceBrokerSymbol),
-		Side:              strParam(order, "side", "buy"),
+		Side:              side,
 		OrderType:         orderType,
 		Quantity:          quantity,
 		QuantityUnit:      strParam(order, "quantity_unit", "base_units"),
@@ -636,6 +649,132 @@ func (s *referenceState) cancelOrder(orderID string) {
 		}
 	}
 	s.bumpLocked(referenceURIs.Orders, referenceURIs.DecisionContext)
+}
+
+func (s *referenceState) closePosition(positionID string, closeQuantity *float64) (*positionCloseResponse, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Find position
+	var pos *position
+	var posIdx int
+	for i := range s.positions {
+		if s.positions[i].PositionID == positionID {
+			pos = &s.positions[i]
+			posIdx = i
+			break
+		}
+	}
+	if pos == nil {
+		return nil, "position not found"
+	}
+
+	// Determine close quantity
+	qty := float64(pos.Quantity)
+	if closeQuantity != nil {
+		qty = *closeQuantity
+	}
+	if qty > float64(pos.Quantity) {
+		qty = float64(pos.Quantity)
+	}
+
+	// Determine opposite side for closing order
+	closeSide := "sell"
+	if pos.Side == "sell" {
+		closeSide = "buy"
+	}
+
+	// Use current market price for fill
+	fillPrice := s.liveBid
+	if closeSide == "buy" {
+		fillPrice = s.liveAsk
+	}
+
+	now := nowISO()
+	orderID := fmt.Sprintf("ord_%s", time.Now().UTC().Format("150405.000"))
+
+	// Create the closing order record
+	record := referenceOrder{
+		OrderID:           orderID,
+		ClientOrderID:     nil,
+		AccountID:         referenceAccountID,
+		InstrumentID:      pos.InstrumentID,
+		BrokerSymbol:      pos.BrokerSymbol,
+		Side:              closeSide,
+		OrderType:         "market",
+		Quantity:          qty,
+		QuantityUnit:      pos.QuantityUnit,
+		LimitPrice:        nil,
+		StopPrice:         nil,
+		TimeInForce:       "GTC",
+		Status:            "filled",
+		FilledQuantity:    qty,
+		RemainingQuantity: 0,
+		AverageFillPrice:  fillPrice,
+		Reason:            nil,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+	s.orders = append(s.orders, record)
+
+	// Add fill record
+	s.fills = append([]map[string]any{{
+		"fill_id":             fmt.Sprintf("fill_%s", orderID),
+		"order_id":            orderID,
+		"account_id":          referenceAccountID,
+		"instrument_id":       pos.InstrumentID,
+		"side":                closeSide,
+		"fill_quantity":       qty,
+		"fill_price":          fillPrice,
+		"commission":          -0.5,
+		"commission_currency": "USD",
+		"liquidity_flag":      "taker",
+		"position_id":         positionID,
+		"timestamp":           now,
+	}}, s.fills...)
+
+	// Update position state
+	remainingQty := float64(pos.Quantity) - qty
+	if remainingQty <= 0 {
+		// Full close: remove position
+		s.positions = append(s.positions[:posIdx], s.positions[posIdx+1:]...)
+		remainingQty = 0
+	} else {
+		// Partial close: reduce quantity
+		s.positions[posIdx].Quantity = int(remainingQty)
+	}
+
+	// Bump resource sequences
+	s.bumpLocked(referenceURIs.Orders, referenceURIs.Positions, referenceURIs.Fills, referenceURIs.Risk, referenceURIs.DecisionContext)
+
+	// Emit notifications in HTTP mode
+	if s.notifyCallback != nil {
+		fillSeq := s.nextSequence(referenceURIs.Fills)
+		s.notifyCallback(orderFilledNotification(record, fillSeq))
+	}
+
+	// Notify resource updates in HTTP mode
+	if s.resourceUpdateCallback != nil {
+		uris := []string{referenceURIs.Orders, referenceURIs.Positions, referenceURIs.Fills, referenceURIs.Risk, referenceURIs.DecisionContext}
+		s.pendingUpdates = nil
+		cb := s.resourceUpdateCallback
+		go cb(uris)
+	}
+
+	closeStatus := "filled"
+	if remainingQty > 0 {
+		closeStatus = "partially_filled"
+	}
+
+	return &positionCloseResponse{
+		OrderID:           orderID,
+		PositionID:        positionID,
+		Status:            closeStatus,
+		FillPrice:         fillPrice,
+		FillQuantity:      qty,
+		RemainingQuantity: remainingQty,
+		ClosedAt:          now,
+	}, ""
 }
 
 func (s *referenceState) isKillSwitchActive() bool {

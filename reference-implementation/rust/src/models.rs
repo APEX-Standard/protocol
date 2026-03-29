@@ -6,10 +6,11 @@ use serde::{Deserialize, Serialize};
 pub const SERVER_NAME: &str = "apex-reference";
 pub const SERVER_VERSION: &str = "0.1.0";
 
-pub const CORE_CAPABILITIES: [&str; 5] = [
+pub const CORE_CAPABILITIES: [&str; 6] = [
     "apex.session.*",
     "apex.account.*",
     "apex.order.*",
+    "apex.position.*",
     "apex.market.*",
     "apex.risk.*",
 ];
@@ -37,6 +38,12 @@ fn default_token_type() -> String {
 pub struct HeartbeatInput {
     /// ISO8601 timestamp
     pub timestamp: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct AcknowledgeInput {
+    /// Last SSE event ID processed
+    pub last_event_id: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -251,6 +258,15 @@ pub struct RiskCheckInput {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+pub struct PositionCloseInput {
+    pub account_id: String,
+    pub position_id: String,
+    /// Partial close quantity. If omitted, the full position is closed.
+    #[serde(default)]
+    pub quantity: Option<f64>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct RiskLimitsInput {
     pub account_id: String,
 }
@@ -392,6 +408,17 @@ pub struct OrderCancelResponse {
     pub status: String,
     pub rejection_reason: Option<String>,
     pub cancelled_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PositionCloseResponse {
+    pub order_id: String,
+    pub position_id: String,
+    pub status: String,
+    pub fill_price: f64,
+    pub fill_quantity: f64,
+    pub remaining_quantity: f64,
+    pub closed_at: String,
 }
 
 #[derive(Debug, Serialize)]

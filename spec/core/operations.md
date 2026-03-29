@@ -75,6 +75,8 @@ A resource is stale when:
 
 - current_time > resource_timestamp + stale_after_ms
 
+A resource is stale when `current_time > reference_timestamp + stale_after_ms`, where `reference_timestamp` is the `as_of` field if present, otherwise the `timestamp` field. When both fields exist, `as_of` takes precedence because it represents the broker's assertion of when the data was last known current, whereas `timestamp` may reflect publication time.
+
 Autonomous runtimes should halt new order submission when any execution-critical resource is stale.
 
 Minimum execution-critical set:
@@ -86,6 +88,19 @@ Minimum execution-critical set:
 - orders
 - risk
 
+#### Recommended `stale_after_ms` Ranges (Non-Normative)
+
+| Freshness Class | Typical Range | Rationale |
+|---|---|---|
+| Quote (FX) | 500–2000 ms | Retail FX quotes update every 100–500 ms |
+| Quote (Crypto) | 200–1000 ms | Exchange websocket feeds update more frequently |
+| Features | 1000–5000 ms | Derived from quotes; computation adds latency |
+| Candles (M1) | 60000–120000 ms | Only stale if an entire candle period passes without update |
+| Account state | 2000–10000 ms | Account snapshots update on fills and periodic sweeps |
+| Risk state | 2000–5000 ms | Must be fresh for autonomous order submission |
+
+These ranges are guidance, not mandates. Brokers may deviate based on their data pipeline characteristics.
+
 ---
 
 ## 3. Sequencing Rules
@@ -93,6 +108,9 @@ Minimum execution-critical set:
 For execution-critical realtime resources:
 
 - `sequence` must be monotonic within the resource stream
+
+The `sequence` counter is per resource URI instance. The sequence for `apex://market/quote/APEX:FX:EURUSD` is independent of the sequence for `apex://market/quote/APEX:FX:GBPJPY`. Implementations must not share a single sequence counter across multiple resource URIs.
+
 - clients must retain the last observed `sequence`
 - if a newly read resource has a lower `sequence` than the last accepted value, the client should treat it as invalid or replayed out of order unless replay mode is explicitly active
 

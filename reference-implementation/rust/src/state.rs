@@ -3,7 +3,7 @@ use std::sync::Mutex;
 
 use serde_json::{json, Value};
 
-use crate::helpers::{hours_ago, now_iso};
+use crate::helpers::{apex_error, hours_ago, now_iso};
 
 pub const ACCOUNT_ID: &str = "ACC_12345";
 pub const INSTRUMENT_ID: &str = "APEX:FX:EURUSD";
@@ -217,13 +217,29 @@ impl ReferenceTradingState {
         };
         let remaining_quantity = quantity - fill_quantity;
 
+        let side = match order["side"].as_str() {
+            Some("buy") | Some("sell") => order["side"].as_str().unwrap(),
+            _ => {
+                let err = apex_error(
+                    "APEX_4011",
+                    "validation",
+                    "side is required and must be 'buy' or 'sell'",
+                    None,
+                );
+                return (
+                    serde_json::to_value(err).expect("error should serialize"),
+                    vec![],
+                );
+            }
+        };
+
         let order_record = json!({
             "order_id": order_id,
             "client_order_id": order.get("client_order_id").cloned().unwrap_or(Value::Null),
             "account_id": ACCOUNT_ID,
             "instrument_id": order["instrument_id"].as_str().unwrap_or(INSTRUMENT_ID),
             "broker_symbol": order.get("broker_symbol").and_then(Value::as_str).unwrap_or(BROKER_SYMBOL),
-            "side": order["side"].as_str().unwrap_or("buy"),
+            "side": side,
             "order_type": order_type,
             "quantity": quantity,
             "quantity_unit": order.get("quantity_unit").and_then(Value::as_str).unwrap_or("base_units"),
@@ -359,6 +375,46 @@ impl ReferenceTradingState {
             }
         }
         self.bump_sequences(&mut inner, &[orders_uri(), decision_context_uri()])
+    }
+
+    /// Look up a position by ID from the positions payload.
+    /// Returns (instrument_id, side, total_quantity) or None if not found.
+    pub fn find_position(&self, position_id: &str) -> Option<(String, String, f64)> {
+        let payload = self.positions_payload();
+        let positions = payload["positions"].as_array()?;
+        for pos in positions {
+            if pos["position_id"].as_str() == Some(position_id) {
+                let instrument_id = pos["instrument_id"]
+                    .as_str()
+                    .unwrap_or(INSTRUMENT_ID)
+                    .to_owned();
+                let side = pos["side"].as_str().unwrap_or("buy").to_owned();
+                let quantity = pos["quantity"].as_f64().unwrap_or(0.0);
+                return Some((instrument_id, side, quantity));
+            }
+        }
+        None
+    }
+
+    /// Close (fully or partially) a position by placing an opposite-direction
+    /// market order. Returns (payload, resource_update_uris).
+    pub fn close_position(
+        &self,
+        position_id: &str,
+        close_quantity: f64,
+        instrument_id: &str,
+        close_side: &str,
+    ) -> (Value, Vec<String>) {
+        let order = json!({
+            "instrument_id": instrument_id,
+            "side": close_side,
+            "order_type": "market",
+            "quantity": close_quantity,
+            "quantity_unit": "base_units",
+            "time_in_force": "IOC",
+            "comment": format!("Close position {position_id}"),
+        });
+        self.create_order(&order)
     }
 
     pub fn cancel_order(&self, order_id: &str) -> Vec<String> {

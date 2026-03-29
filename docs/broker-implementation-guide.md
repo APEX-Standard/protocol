@@ -207,7 +207,15 @@ The gap fill notification:
 }
 ```
 
-Gap fill markers are assigned new event IDs (not the IDs of the elided events). After all logged events are replayed or elided, the server transitions to live streaming where all events are delivered without classification.
+Gap fill markers use the `to_id` of the elided range as their SSE event ID, preserving monotonic ordering. The marker's SSE event ID equals its `to_id` field. After all logged events are replayed or elided, the server transitions to live streaming where all events are delivered without classification.
+
+### 7.9 Session Affinity in Scaled Deployments
+
+Event logs and session state are per-instance by default. In horizontally scaled deployments behind a load balancer, session affinity (sticky sessions) is required to ensure reconnecting clients reach the instance holding their event log.
+
+Configure the load balancer to route requests based on the `Mcp-Session-Id` header. If the header is absent (initial `POST /mcp` for `initialize`), any instance may handle the request.
+
+Alternatively, implementations using shared storage for event logs (file-based on shared disk, Redis, Kafka, or a durable queue) avoid the affinity requirement — any instance can serve any session's replay.
 
 ---
 

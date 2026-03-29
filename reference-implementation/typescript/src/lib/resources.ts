@@ -353,6 +353,17 @@ export class ReferenceTradingState {
     }
   }
 
+  updatePosition(positionId: string, remainingQuantity: number) {
+    if (remainingQuantity <= 0) {
+      this.positions = this.positions.filter((p) => p.position_id !== positionId);
+    } else {
+      const pos = this.positions.find((p) => p.position_id === positionId);
+      if (pos) {
+        pos.quantity = remainingQuantity;
+      }
+    }
+  }
+
   recordFill(fill: Record<string, unknown>) {
     this.fillEvents.unshift(fill);
   }

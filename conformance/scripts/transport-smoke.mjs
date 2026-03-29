@@ -28,6 +28,14 @@ try {
   assert(initResponse.result, "Expected result in initialize response");
   printCheck(`initialize returned session ${sessionId.slice(0, 8)}...`);
 
+  // Check apex_version in server info
+  const serverInfo = initResponse.result?.serverInfo;
+  assert(
+    serverInfo?.apex_version,
+    `Expected apex_version in serverInfo, got: ${JSON.stringify(serverInfo)}`,
+  );
+  printCheck(`server reports apex_version: ${serverInfo.apex_version}`);
+
   /* -- Authenticate -------------------------------------------------- */
 
   const authResult = await httpCallTool(server.baseUrl, sessionId, "apex.session.authenticate", {

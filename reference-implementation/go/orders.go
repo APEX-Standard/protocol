@@ -146,4 +146,46 @@ func registerOrderToolsWithState(s *server.MCPServer, st *referenceState) {
 			return jsonResult(order)
 		},
 	)
+
+	s.AddTool(
+		mcp.NewTool("apex.position.close",
+			mcp.WithDescription("Close an open position fully or partially by executing an opposite-direction market order."),
+			mcp.WithString("account_id", mcp.Required()),
+			mcp.WithString("position_id", mcp.Required()),
+			mcp.WithNumber("quantity", mcp.Description("Partial close quantity. If omitted, closes full position.")),
+		),
+		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			if ok, code, category, reason := st.orderAcceptance(); !ok {
+				if st.notifyCallback != nil {
+					st.mu.Lock()
+					riskSeq := st.nextSequence(referenceURIs.Risk)
+					cb := st.notifyCallback
+					st.mu.Unlock()
+					cb(orderRejectedNotification(code, reason, riskSeq))
+				}
+				return jsonResult(apexError(code, category, reason))
+			}
+
+			args := request.GetArguments()
+			positionID := strParam(args, "position_id", "")
+			if positionID == "" {
+				return jsonResult(apexError("APEX_4011", "validation", "position_id is required"))
+			}
+
+			var closeQuantity *float64
+			if _, ok := args["quantity"]; ok {
+				qty := floatParam(args, "quantity", 0)
+				if qty <= 0 {
+					return jsonResult(apexError("APEX_4011", "validation", "quantity must be positive"))
+				}
+				closeQuantity = &qty
+			}
+
+			result, errMsg := st.closePosition(positionID, closeQuantity)
+			if result == nil {
+				return jsonResult(apexError("APEX_4011", "validation", errMsg))
+			}
+			return jsonResult(result)
+		},
+	)
 }

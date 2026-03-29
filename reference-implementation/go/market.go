@@ -51,7 +51,21 @@ func registerMarketTools(s *server.MCPServer) {
 
 func handleMarketQuote(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
-	return jsonResult(state.quoteResponse(strParam(args, "instrument_id", ""), strParam(args, "broker_symbol", "")))
+	instrumentID := strParam(args, "instrument_id", "")
+	brokerSymbol := strParam(args, "broker_symbol", "")
+
+	// Resolve instrument: accept EURUSD broker symbol as equivalent
+	if instrumentID == "" && brokerSymbol == "" {
+		return jsonResult(apexError("APEX_4010", "validation", "Unknown instrument"))
+	}
+	if instrumentID != "" && instrumentID != referenceInstrumentID {
+		return jsonResult(apexError("APEX_4010", "validation", "Unknown instrument"))
+	}
+	if instrumentID == "" && brokerSymbol != referenceBrokerSymbol {
+		return jsonResult(apexError("APEX_4010", "validation", "Unknown instrument"))
+	}
+
+	return jsonResult(state.quoteResponse(instrumentID, brokerSymbol))
 }
 
 func handleMarketSnapshot(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -82,8 +96,13 @@ func handleMarketSearch(_ context.Context, request mcp.CallToolRequest) (*mcp.Ca
 }
 
 func handleMarketDetails(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	instrumentID := strParam(request.GetArguments(), "instrument_id", "")
+	if instrumentID != referenceInstrumentID {
+		return jsonResult(apexError("APEX_4010", "validation", "Unknown instrument"))
+	}
+
 	return jsonResult(marketDetailsResponse{
-		InstrumentID:       strParam(request.GetArguments(), "instrument_id", ""),
+		InstrumentID:       instrumentID,
 		BrokerSymbol:       "EURUSD",
 		DisplayName:        "Euro / US Dollar",
 		Profile:            "fx",

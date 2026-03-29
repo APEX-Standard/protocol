@@ -43,6 +43,7 @@ final class ToolRegistry {
         registerSessionTools(tools);
         registerAccountTools(tools);
         registerOrderTools(tools);
+        registerPositionTools(tools);
         registerMarketTools(tools);
         registerRiskTools(tools);
 
@@ -194,7 +195,13 @@ final class ToolRegistry {
                 schema.stringProp(props, req, "account_id", null, true);
                 schema.stringProp(props, req, "currency", "Response currency. Defaults to account base currency.", false);
             }),
-            args -> state.accountSummary(argStr(args, "currency", "USD"))
+            args -> {
+                String accountId = argStr(args, "account_id", "");
+                if (accountId.isEmpty()) {
+                    return apexError("APEX_4011", "validation", "account_id is required");
+                }
+                return state.accountSummary(argStr(args, "currency", "USD"));
+            }
         );
 
         registerTool(
@@ -303,7 +310,10 @@ final class ToolRegistry {
                     );
                 }
 
-                ProtocolModels.OrderPlacementResponse result = state.createOrder(args);
+                Object result = state.createOrder(args);
+                if (result instanceof ProtocolModels.ApexErrorEnvelope) {
+                    return result;
+                }
 
                 // Emit order filled/partially filled notification in HTTP mode
                 if (dispatcher != null && "market".equals(orderType)) {
@@ -404,6 +414,60 @@ final class ToolRegistry {
         );
     }
 
+    private void registerPositionTools(Map<String, ToolDefinition> tools) {
+        registerTool(
+            tools,
+            "apex.position.close",
+            "Close an open position fully or partially. Executes as an opposite-direction market order.",
+            schema.objectSchema((props, req) -> {
+                schema.stringProp(props, req, "account_id", null, true);
+                schema.stringProp(props, req, "position_id", null, true);
+                schema.numberProp(props, req, "quantity", "Quantity to close. Omit for full close.", false);
+            }),
+            args -> {
+                String positionId = argStr(args, "position_id", "");
+                if (positionId.isBlank()) {
+                    return apexError("APEX_4011", "validation", "position_id is required");
+                }
+
+                Map<String, Object> acceptance = state.orderAcceptance();
+                if (!Boolean.TRUE.equals(acceptance.get("ok"))) {
+                    if (dispatcher != null) {
+                        int riskSeq = state.getSequence(ReferenceTradingState.RISK_URI);
+                        dispatcher.emit(NotificationDispatcher.orderRejectedNotification(
+                            String.valueOf(acceptance.get("code")),
+                            String.valueOf(acceptance.get("message")),
+                            riskSeq
+                        ));
+                    }
+                    return apexError(
+                        String.valueOf(acceptance.get("code")),
+                        String.valueOf(acceptance.get("category")),
+                        String.valueOf(acceptance.get("message"))
+                    );
+                }
+
+                Double quantity = args.containsKey("quantity") ? argDouble(args, "quantity", 0) : null;
+
+                ProtocolModels.PositionCloseResponse result = state.closePosition(positionId, quantity);
+                if (result == null) {
+                    return apexError("APEX_4011", "validation", "Position not found: " + positionId);
+                }
+
+                // Emit order filled notification in HTTP mode
+                if (dispatcher != null) {
+                    Map<String, Object> lastOrder = state.getLastOrder();
+                    if (lastOrder != null) {
+                        int fillSeq = state.getSequence(ReferenceTradingState.FILLS_URI);
+                        dispatcher.emit(NotificationDispatcher.orderFilledNotification(lastOrder, fillSeq));
+                    }
+                }
+
+                return result;
+            }
+        );
+    }
+
     private void registerMarketTools(Map<String, ToolDefinition> tools) {
         registerTool(
             tools,
@@ -413,7 +477,22 @@ final class ToolRegistry {
                 schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)", false);
                 schema.stringProp(props, req, "broker_symbol", "Alternative to instrument_id", false);
             }),
-            args -> state.quoteResponse(argStr(args, "instrument_id", ""), argStr(args, "broker_symbol", ""))
+            args -> {
+                String instrumentId = argStr(args, "instrument_id", "");
+                String brokerSymbol = argStr(args, "broker_symbol", "");
+                boolean hasId = !instrumentId.isEmpty();
+                boolean hasSym = !brokerSymbol.isEmpty();
+                if (!hasId && !hasSym) {
+                    return apexError("APEX_4010", "validation", "Unknown instrument");
+                }
+                if (hasId && !ReferenceTradingState.INSTRUMENT_ID.equals(instrumentId)) {
+                    return apexError("APEX_4010", "validation", "Unknown instrument");
+                }
+                if (!hasId && !ReferenceTradingState.BROKER_SYMBOL.equals(brokerSymbol)) {
+                    return apexError("APEX_4010", "validation", "Unknown instrument");
+                }
+                return state.quoteResponse(instrumentId, brokerSymbol);
+            }
         );
 
         registerTool(
@@ -453,27 +532,33 @@ final class ToolRegistry {
             "apex.market.details",
             "Full contract specification for an instrument.",
             schema.objectSchema((props, req) -> schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)", true)),
-            args -> new MarketDetailsResponse(
-                argStr(args, "instrument_id", ""),
-                "EURUSD",
-                "Euro / US Dollar",
-                "fx",
-                "EUR",
-                "USD",
-                0.0001,
-                100000,
-                "base_units",
-                "lots",
-                1000,
-                50000000,
-                1000,
-                0.5,
-                0.0,
-                "variable",
-                0.8,
-                List.of(new TradingHours("monday", "00:00", "23:59", "UTC")),
-                Map.of()
-            )
+            args -> {
+                String instrumentId = argStr(args, "instrument_id", "");
+                if (!ReferenceTradingState.INSTRUMENT_ID.equals(instrumentId)) {
+                    return apexError("APEX_4010", "validation", "Unknown instrument");
+                }
+                return new MarketDetailsResponse(
+                    instrumentId,
+                    "EURUSD",
+                    "Euro / US Dollar",
+                    "fx",
+                    "EUR",
+                    "USD",
+                    0.0001,
+                    100000,
+                    "base_units",
+                    "lots",
+                    1000,
+                    50000000,
+                    1000,
+                    0.5,
+                    0.0,
+                    "variable",
+                    0.8,
+                    List.of(new TradingHours("monday", "00:00", "23:59", "UTC")),
+                    Map.of()
+                );
+            }
         );
     }
 
@@ -548,7 +633,8 @@ final class ToolRegistry {
             || "apex.session.acknowledge".equals(name);
         boolean destructive = "apex.order.place".equals(name)
             || "apex.order.modify".equals(name)
-            || "apex.order.cancel".equals(name);
+            || "apex.order.cancel".equals(name)
+            || "apex.position.close".equals(name);
         boolean idempotent = readOnly
             || "apex.session.authenticate".equals(name)
             || "apex.order.cancel".equals(name);
@@ -560,7 +646,7 @@ final class ToolRegistry {
     }
 
     private static List<String> coreTools() {
-        return List.of("apex.session.*", "apex.account.*", "apex.order.*", "apex.market.*", "apex.risk.*");
+        return List.of("apex.session.*", "apex.account.*", "apex.order.*", "apex.position.*", "apex.market.*", "apex.risk.*");
     }
 
     static ApexErrorEnvelope apexError(String code, String category, String message) {

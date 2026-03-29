@@ -264,4 +264,117 @@ export function registerOrderTools(
       };
     },
   );
+
+  server.registerTool(
+    "apex.position.close",
+    {
+      description: "Close an open position fully or partially.",
+      inputSchema: {
+        account_id: z.string(),
+        position_id: z.string(),
+        quantity: z.number().positive().optional().describe("Partial close quantity. Omit for full close."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    },
+    async ({ account_id, position_id, quantity }) => {
+      const orderGate = state.canAcceptOrders();
+      if (!orderGate.ok) {
+        if (emitNotification) {
+          const riskSeq = (state.getRisk() as Record<string, unknown>).sequence as number ?? 1;
+          emitNotification(orderRejectedNotification(
+            orderGate.code ?? "APEX_5000",
+            orderGate.reason ?? "Order rejected",
+            riskSeq,
+          ));
+        }
+        return {
+          structuredContent: apexError(orderGate.code ?? "APEX_5000", orderGate.category ?? "internal", orderGate.reason ?? "Order rejected"),
+          content: [],
+        };
+      }
+
+      const positions = state.getPositions().positions;
+      const position = positions.find((p) => p.position_id === position_id);
+      if (!position) {
+        return {
+          structuredContent: apexError("APEX_4011", "validation", `Unknown position: ${position_id}`),
+          content: [],
+        };
+      }
+
+      const closeQuantity = quantity ?? position.quantity;
+      const closeSide: "buy" | "sell" = position.side === "buy" ? "sell" : "buy";
+      const fillPrice = state.getQuote().mid;
+      const orderId = `ord_${crypto.randomUUID().slice(0, 8)}`;
+      const remainingQuantity = position.quantity - closeQuantity;
+
+      state.createOrUpdateOrder({
+        order_id: orderId,
+        client_order_id: null,
+        account_id,
+        instrument_id: position.instrument_id,
+        broker_symbol: position.broker_symbol,
+        side: closeSide,
+        order_type: "market",
+        quantity: closeQuantity,
+        quantity_unit: position.quantity_unit as "base_units" | "shares" | "contracts",
+        limit_price: null,
+        stop_price: null,
+        time_in_force: "IOC",
+        status: "filled",
+        filled_quantity: closeQuantity,
+        remaining_quantity: 0,
+        average_fill_price: fillPrice,
+        reason: null,
+      });
+
+      state.recordFill({
+        fill_id: `fill_${crypto.randomUUID().slice(0, 8)}`,
+        order_id: orderId,
+        account_id,
+        instrument_id: position.instrument_id,
+        side: closeSide,
+        fill_quantity: closeQuantity,
+        fill_price: fillPrice,
+        commission: -0.5,
+        commission_currency: "USD",
+        liquidity_flag: "taker",
+        position_id,
+        timestamp: nowIso(),
+      });
+
+      state.updatePosition(position_id, remainingQuantity);
+
+      await state.notifyResources(
+        server,
+        state.uris.positions,
+        state.uris.orders,
+        state.uris.fills,
+        state.uris.risk,
+        state.uris.decisionContext,
+      );
+
+      if (emitNotification) {
+        const placedOrder = state.getOrders().orders.find((o) => o.order_id === orderId);
+        if (placedOrder) {
+          const fillSeq = (state.getFills() as Record<string, unknown>).sequence as number ?? 1;
+          emitNotification(orderFilledNotification(placedOrder, fillSeq));
+        }
+      }
+
+      return {
+        structuredContent: {
+          order_id: orderId,
+          position_id,
+          status: "filled" as const,
+          fill_price: fillPrice,
+          fill_quantity: closeQuantity,
+          remaining_quantity: remainingQuantity,
+          rejection_reason: null,
+          closed_at: nowIso(),
+        },
+        content: [],
+      };
+    },
+  );
 }

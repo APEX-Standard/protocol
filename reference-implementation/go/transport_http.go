@@ -261,7 +261,7 @@ func (ht *HttpTransport) handlePost(w http.ResponseWriter, r *http.Request, srv 
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Mcp-Session-Id", sessionID)
-		json.NewEncoder(w).Encode(response)
+		json.NewEncoder(w).Encode(injectApexVersion(response))
 		return
 	}
 

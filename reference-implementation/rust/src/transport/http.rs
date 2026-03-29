@@ -229,6 +229,7 @@ async fn handle_post(
             "serverInfo": {
                 "name": SERVER_NAME,
                 "version": SERVER_VERSION,
+                "apex_version": "0.1.0-alpha",
             }
         });
 
@@ -623,6 +624,15 @@ fn tools_list() -> Value {
                 },
                 "required": ["account_id", "order_id"]
             })),
+            tool_desc("apex.position.close", "Close an open position fully or partially.", json!({
+                "type": "object",
+                "properties": {
+                    "account_id": { "type": "string" },
+                    "position_id": { "type": "string" },
+                    "quantity": { "type": "number", "description": "Partial close quantity. Omit to close the full position." }
+                },
+                "required": ["account_id", "position_id"]
+            })),
             tool_desc("apex.order.status", "Query order state.", json!({
                 "type": "object",
                 "properties": {
@@ -906,8 +916,13 @@ async fn handle_tool_call(
             }))
         }
         "apex.account.summary" => {
-            let currency = args["currency"].as_str().map(|s| s.to_owned());
-            json_result_value(&state.trading_state.account_summary_payload(currency))
+            let account_id = args["account_id"].as_str().unwrap_or("");
+            if account_id.is_empty() {
+                json_result_value(&apex_error("APEX_4011", "validation", "account_id is required", None))
+            } else {
+                let currency = args["currency"].as_str().map(|s| s.to_owned());
+                json_result_value(&state.trading_state.account_summary_payload(currency))
+            }
         }
         "apex.account.positions" => {
             json_result_value(&state.trading_state.positions_payload())
@@ -1034,6 +1049,73 @@ async fn handle_tool_call(
                 cancelled_at: now_iso(),
             })
         }
+        "apex.position.close" => {
+            if let Err((code, category, message)) = state.trading_state.order_acceptance() {
+                let seq = state.trading_state.get_sequence(&crate::state::risk_uri());
+                let notif = notifications::order_rejected(code, message, seq);
+                state.emit_to_session(session_id, notif);
+                json_result_value(&apex_error(code, category, message, None))
+            } else {
+                let position_id = args["position_id"].as_str().unwrap_or("");
+                let requested_quantity = args.get("quantity").and_then(Value::as_f64);
+
+                match state.trading_state.find_position(position_id) {
+                    Some((instrument_id, side, total_quantity)) => {
+                        let close_quantity = requested_quantity.unwrap_or(total_quantity);
+                        let close_side = if side == "buy" { "sell" } else { "buy" };
+
+                        let (order_payload, updates) = state.trading_state.close_position(
+                            position_id,
+                            close_quantity,
+                            &instrument_id,
+                            close_side,
+                        );
+                        state.notify_resource_updates(session_id, &updates).await;
+
+                        // Emit fill notification
+                        let order_id = order_payload["order_id"].as_str().unwrap_or("");
+                        let fill_seq =
+                            state.trading_state.get_sequence(&crate::state::fills_uri());
+                        let account_id = args["account_id"].as_str().unwrap_or(ACCOUNT_ID);
+                        let notif = notifications::order_filled(
+                            order_id,
+                            close_side,
+                            1.08755,
+                            close_quantity,
+                            account_id,
+                            &instrument_id,
+                            fill_seq,
+                        );
+                        state.emit_to_session(session_id, notif);
+
+                        let remaining = total_quantity - close_quantity;
+                        let status = if remaining <= 0.0 {
+                            "filled"
+                        } else {
+                            "partially_filled"
+                        };
+
+                        json_result_value(&PositionCloseResponse {
+                            order_id: order_id.to_owned(),
+                            position_id: position_id.to_owned(),
+                            status: status.to_owned(),
+                            fill_price: order_payload["fill_price"]
+                                .as_f64()
+                                .unwrap_or(1.08755),
+                            fill_quantity: close_quantity,
+                            remaining_quantity: if remaining > 0.0 { remaining } else { 0.0 },
+                            closed_at: now_iso(),
+                        })
+                    }
+                    None => json_result_value(&apex_error(
+                        "APEX_4011",
+                        "validation",
+                        &format!("Unknown position: {position_id}"),
+                        None,
+                    )),
+                }
+            }
+        }
         "apex.order.status" => {
             let order_id = args["order_id"].as_str().unwrap_or("");
             match state.trading_state.order_status_payload(order_id) {
@@ -1049,7 +1131,17 @@ async fn handle_tool_call(
         "apex.market.quote" => {
             let instrument_id = args["instrument_id"].as_str().map(|s| s.to_owned());
             let broker_symbol = args["broker_symbol"].as_str().map(|s| s.to_owned());
-            json_result_value(&state.trading_state.quote_payload(instrument_id, broker_symbol))
+            let has_id = instrument_id.as_deref().is_some_and(|s| !s.is_empty());
+            let has_sym = broker_symbol.as_deref().is_some_and(|s| !s.is_empty());
+            if !has_id && !has_sym {
+                json_result_value(&apex_error("APEX_4010", "validation", "Unknown instrument", None))
+            } else if has_id && instrument_id.as_deref() != Some(INSTRUMENT_ID) {
+                json_result_value(&apex_error("APEX_4010", "validation", "Unknown instrument", None))
+            } else if !has_id && broker_symbol.as_deref() != Some(BROKER_SYMBOL) {
+                json_result_value(&apex_error("APEX_4010", "validation", "Unknown instrument", None))
+            } else {
+                json_result_value(&state.trading_state.quote_payload(instrument_id, broker_symbol))
+            }
         }
         "apex.market.snapshot" => {
             let instrument_id = args["instrument_id"]
@@ -1082,8 +1174,11 @@ async fn handle_tool_call(
         "apex.market.details" => {
             let instrument_id = args["instrument_id"]
                 .as_str()
-                .unwrap_or(INSTRUMENT_ID)
+                .unwrap_or("")
                 .to_owned();
+            if instrument_id != INSTRUMENT_ID {
+                json_result_value(&apex_error("APEX_4010", "validation", "Unknown instrument", None))
+            } else {
             json_result_value(&MarketDetailsResponse {
                 instrument_id,
                 broker_symbol: BROKER_SYMBOL.to_owned(),
@@ -1110,6 +1205,7 @@ async fn handle_tool_call(
                 }],
                 profile_data: json!({}),
             })
+            }
         }
         "apex.risk.check" => {
             let order = args.get("order").cloned().unwrap_or(json!({}));

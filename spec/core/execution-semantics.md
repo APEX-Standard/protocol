@@ -97,6 +97,8 @@ If an order is partially filled:
 
 If `average_fill_price` is exposed on order lifecycle payloads, it must represent the volume-weighted average of all fills accumulated on that order so far.
 
+Brokers operating as principal counterparty (e.g., OTC FX market makers, CFD providers) may permanently report `liquidity_flag: "unknown"`. This is valid and expected — the maker/taker distinction does not apply when the broker is the sole counterparty.
+
 ---
 
 ## 4. Cancel And Modify Semantics
@@ -201,6 +203,10 @@ Implementations should therefore provide:
 - monotonic resource `sequence`
 
 If replay is supported, replayed events must preserve the same identifiers as the original live events.
+
+#### Duplicate Handling via `client_order_id`
+
+Brokers must enforce `client_order_id` uniqueness within a session. A second `apex.order.place` call with the same `client_order_id` must return the result of the first order, not create a new order. This is the primary mechanism for safe retry after transport failures. The `client_order_id` namespace is per session — IDs may be reused across different sessions.
 
 ---
 

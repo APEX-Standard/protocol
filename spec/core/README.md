@@ -54,6 +54,22 @@ As long as they preserve the same APEX resource, tool, and notification semantic
 
 ## 1. Session Domain
 
+#### Version Advertisement
+
+During the MCP `initialize` handshake, the server should include the APEX protocol version in the `serverInfo` metadata:
+
+```json
+{
+  "serverInfo": {
+    "name": "broker-name",
+    "version": "1.0.0",
+    "apex_version": "0.1.0-alpha"
+  }
+}
+```
+
+Agents should check `apex_version` in the `initialize` response before calling any APEX tools. If the version is incompatible, the agent should disconnect gracefully rather than encounter tool-not-found errors.
+
 ### `apex.session.authenticate`
 
 Establish an authenticated trading session. The broker validates credentials directly and binds the result to the MCP session.
@@ -393,6 +409,12 @@ Unified order entry. The canonical order object — composable by asset class pr
 }
 ```
 
+#### Idempotency
+
+Brokers must reject a duplicate `client_order_id` within the same session and return the original order response. If the agent does not provide a `client_order_id`, the broker assigns one. This prevents duplicate order submission on transport retry.
+
+Agents must generate a unique `client_order_id` (e.g., UUID) for every order submission. If a tool call times out without a response, the agent must retry with the same `client_order_id` — the broker will either return the original result or reject the duplicate.
+
 ---
 
 ### `apex.order.modify`
@@ -472,6 +494,35 @@ Query the current state of a single order.
 ```
 
 **Output:** Same schema as single order object from `apex.account.orders`.
+
+---
+
+### `apex.position.close`
+
+Close an open position fully or partially. This is a convenience tool equivalent to placing an opposite-direction market order for the position's quantity. Brokers must support this as a first-class operation.
+
+**Annotations:** `readOnlyHint: false`, `destructiveHint: true`, `idempotentHint: false`
+
+**Input:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `account_id` | string | yes | Account ID |
+| `position_id` | string | yes | Position to close |
+| `quantity` | number | no | Partial close quantity. If omitted, close the full position. |
+
+**Output:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `order_id` | string | The order ID of the closing order |
+| `position_id` | string | The position that was closed |
+| `status` | string | `filled`, `partially_filled`, or `rejected` |
+| `fill_price` | number | Execution price |
+| `fill_quantity` | number | Quantity closed |
+| `remaining_quantity` | number | Remaining position quantity (0 if fully closed) |
+| `rejection_reason` | string | Reason if rejected |
+| `closed_at` | string | ISO 8601 timestamp |
 
 ---
 
@@ -780,10 +831,9 @@ Account state:
 
 Agent/runtime state:
 
-- `apex://agent/watchlist`
-- `apex://agent/intents`
 - `apex://agent/decision-context/{instrument_id}`
-- `apex://agent/memory/{strategy_id}`
+
+The `apex://agent/` namespace is reserved for agent-facing resources. Currently, only `apex://agent/decision-context/{instrument_id}` is defined. Additional agent resources (watchlist, intents, memory) are reserved for future specification.
 
 Resource URIs are stable identifiers for current state, not append-only event logs. If a resource changes frequently, servers must emit update notifications and let clients re-read the resource rather than overloading tool calls.
 
@@ -908,7 +958,7 @@ apex://market/features/APEX:FX:EURUSD
     "aggressor_imbalance_30s": 0.44
   },
   "regime": {
-    "label": "trend_up|trend_down|range|volatile|illiquid",
+    "label": "trend_up|trend_down|range|volatile|illiquid|transitional|other",
     "confidence": 0.81
   },
   "execution": {
@@ -929,6 +979,8 @@ The following feature groups are required:
 - realized volatility: at least `1m` and `5m`
 - execution quality: liquidity and expected slippage estimate
 - regime classification: label plus confidence
+
+Regime labels: `"transitional"` indicates that regime detection identifies a transition state between regimes (e.g., trend exhaustion before reversal or range breakout). `"other"` is an escape hatch for regimes outside the standard taxonomy, allowing broker-specific or strategy-specific labels to degrade gracefully.
 
 Book and flow features are strongly recommended and should be present whenever the broker has access to the underlying market data.
 
@@ -1014,6 +1066,9 @@ Required semantics:
 - when the underlying state changes, the server emits `notifications/resources/updated`
 - the client re-reads the resource to obtain the latest value
 - servers may coalesce high-frequency updates to avoid unnecessary downstream load
+
+When updates are coalesced, a resource read returns the current state at time of read. Intermediate states that were coalesced are never recoverable through resource reads. The `sequence` value at time of read reflects the latest state, not the number of updates the client observed. Agents that need tick-by-tick history should use candle resources or fill events, not resource polling.
+
 - if an agent requires direct push payloads in addition to resource invalidation, servers may emit APEX-specific notifications as defined below
 - if updates are coalesced, `sequence` must still allow the client to detect missed intermediate states
 - if a replay boundary is crossed and a full replay is not possible, the server must force the client to re-read the resource and treat cached state as potentially incomplete
@@ -1046,6 +1101,9 @@ Production APEX runtimes must refuse autonomous order entry when any required ex
 Production realtime feeds require explicit sequence semantics.
 
 - Each subscribable realtime resource must expose a monotonically increasing `sequence`.
+
+The `sequence` counter is per resource URI instance. The sequence for `apex://market/quote/APEX:FX:EURUSD` is independent of the sequence for `apex://market/quote/APEX:FX:GBPJPY`. Implementations must not share a single sequence counter across multiple resource URIs.
+
 - Each notification that refers to a realtime resource must include the latest known `sequence` for that resource.
 - Servers should preserve replay continuity across transient reconnects whenever the underlying transport supports it.
 - If replay is supported, servers must document the retention window.
@@ -1237,7 +1295,7 @@ The following notifications are recommended for richer agent workflows but are n
 
 #### Event Envelope
 
-Every APEX notification follows this envelope structure. The complete event as sent over the wire is a JSON-RPC 2.0 notification wrapping the `params` object:
+Every APEX notification follows this envelope structure. The envelope structure is formalized in [`schemas/notification-envelope.schema.json`](schemas/notification-envelope.schema.json). The complete event as sent over the wire is a JSON-RPC 2.0 notification wrapping the `params` object:
 
 ```json
 {
@@ -1272,6 +1330,10 @@ Production event requirements:
 - `timestamp` must reflect broker event time or broker processing time; servers must document which
 - `sequence` must be monotonic for the referenced resource stream (null for session-level events like `replay_failed`)
 - `resource_uri` must point to the canonical resource that should be refreshed (null when no single resource applies)
+
+#### Cross-Resource Ordering
+
+Notification delivery order within a session's SSE stream is deterministic, but no causal ordering is guaranteed across notifications referencing different resource streams. Agents must not assume that the arrival order of notifications across different resources reflects the true temporal ordering of the underlying events. Use resource timestamps and sequences for temporal reasoning, not notification arrival order.
 
 ### 6.13 Order And Fill Event Payloads
 

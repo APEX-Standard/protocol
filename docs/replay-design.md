@@ -116,7 +116,7 @@ The `elide` events are state snapshots. They were true at one moment but are sup
 }
 ```
 
-Gap fill markers are assigned new event IDs (not the IDs of the elided events). After all logged events are replayed or elided, the server transitions to live streaming where all events are delivered without classification.
+Gap fill markers use the `to_id` of the elided range as their SSE event ID, preserving monotonic ordering. The marker's SSE event ID equals its `to_id` field. After all logged events are replayed or elided, the server transitions to live streaming where all events are delivered without classification.
 
 ---
 

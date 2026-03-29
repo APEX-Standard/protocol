@@ -118,26 +118,32 @@ export function registerSessionTools(server: McpServer, state: ReferenceTradingS
     }),
   );
 
-  if (options?.replayBuffer) {
-    const replayBuffer = options.replayBuffer;
-    server.registerTool(
-      "apex.session.acknowledge",
-      {
-        description: "Acknowledge receipt of SSE events. Server discards acknowledged events.",
-        inputSchema: {
-          last_event_id: z.string().describe("Last SSE event ID processed"),
-        },
-        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+  server.registerTool(
+    "apex.session.acknowledge",
+    {
+      description: "Acknowledge receipt of SSE events. Server discards acknowledged events.",
+      inputSchema: {
+        last_event_id: z.string().describe("Last SSE event ID processed"),
       },
-      async ({ last_event_id }) => {
-        const result = replayBuffer.acknowledge(last_event_id);
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ last_event_id }) => {
+      if (!last_event_id) {
         return {
-          structuredContent: result,
+          structuredContent: apexError("APEX_4011", "validation", "last_event_id is required"),
           content: [],
         };
-      },
-    );
-  }
+      }
+      // No-op in stdio mode (no replay buffer)
+      const result = options?.replayBuffer
+        ? options.replayBuffer.acknowledge(last_event_id)
+        : { acknowledged_through: "0", buffer_depth: 0 };
+      return {
+        structuredContent: result,
+        content: [],
+      };
+    },
+  );
 
   server.registerTool(
     "reference.test.set_realtime_state",

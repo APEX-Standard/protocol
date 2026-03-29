@@ -115,3 +115,38 @@ func hoursAgo(hours int) string {
 func hoursFromNow(hours int) string {
 	return time.Now().UTC().Add(time.Duration(hours) * time.Hour).Format(time.RFC3339)
 }
+
+const apexVersion = "0.1.0-alpha"
+
+// injectApexVersion patches the initialize response to include apex_version
+// in the serverInfo object. This is necessary because the MCP library's
+// Implementation struct does not support extra fields.
+func injectApexVersion(response any) any {
+	if response == nil {
+		return nil
+	}
+
+	// Marshal to JSON, patch, and unmarshal back to map
+	data, err := json.Marshal(response)
+	if err != nil {
+		return response
+	}
+
+	var envelope map[string]any
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return response
+	}
+
+	result, ok := envelope["result"].(map[string]any)
+	if !ok {
+		return response
+	}
+
+	serverInfo, ok := result["serverInfo"].(map[string]any)
+	if !ok {
+		return response
+	}
+
+	serverInfo["apex_version"] = apexVersion
+	return envelope
+}

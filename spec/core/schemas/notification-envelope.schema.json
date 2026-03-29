@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexstandard.org/schemas/notification-envelope.schema.json",
+  "title": "APEX Notification Envelope",
+  "description": "Structured envelope for all APEX-specific notifications (order events, market events, risk events, session events).",
+  "type": "object",
+  "required": ["event_id", "event_type", "timestamp", "sequence"],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "description": "Stable unique identifier for this event"
+    },
+    "event_type": {
+      "type": "string",
+      "description": "The APEX notification type (e.g., apex.order.filled, apex.market.candle_closed)"
+    },
+    "account_id": {
+      "type": "string",
+      "description": "Account associated with this event, if applicable"
+    },
+    "instrument_id": {
+      "type": "string",
+      "pattern": "^APEX:[A-Z]+:[A-Z0-9:.]+$",
+      "description": "Instrument associated with this event, if applicable"
+    },
+    "resource_uri": {
+      "type": "string",
+      "description": "The resource URI affected by this event, if applicable"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when the event occurred"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Monotonic sequence number for ordering"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Event-type-specific payload data"
+    }
+  },
+  "additionalProperties": false
+}

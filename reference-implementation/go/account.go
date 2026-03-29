@@ -52,7 +52,12 @@ func registerAccountTools(s *server.MCPServer) {
 }
 
 func handleAccountSummary(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return jsonResult(state.accountSummary(strParam(request.GetArguments(), "currency", "USD")))
+	args := request.GetArguments()
+	accountID := strParam(args, "account_id", "")
+	if accountID == "" {
+		return jsonResult(apexError("APEX_4011", "validation", "account_id is required"))
+	}
+	return jsonResult(state.accountSummary(strParam(args, "currency", "USD")))
 }
 
 func handleAccountPositions(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

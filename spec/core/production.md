@@ -96,6 +96,7 @@ The event log storage mechanism is an implementation choice. In-memory buffers, 
 - `apex.order.modify`
 - `apex.order.cancel`
 - `apex.order.status`
+- `apex.position.close`
 - `apex.market.quote`
 - `apex.market.snapshot`
 - `apex.market.details`
@@ -136,6 +137,7 @@ Every execution-relevant realtime resource must include:
 - `notifications/apex.market.candle_closed`
 - `notifications/apex.risk.kill_switch_engaged`
 - `notifications/apex.session.gap_fill`
+- `notifications/apex.session.replay_failed`
 
 Notification payloads should include:
 

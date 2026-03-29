@@ -5,6 +5,7 @@ export const CORE_TOOL_CAPABILITIES = [
   "apex.session.*",
   "apex.account.*",
   "apex.order.*",
+  "apex.position.*",
   "apex.market.*",
   "apex.risk.*",
 ] as const;

@@ -193,6 +193,12 @@ export function extractPayload(result) {
   return JSON.parse(text);
 }
 
+export async function callTool(client, name, args) {
+  return extractPayload(
+    await client.callTool({ name, arguments: args }),
+  );
+}
+
 export function assertApexError(payload, code) {
   assert(payload?.error, `Expected APEX error payload, got ${JSON.stringify(payload)}`);
   assert.equal(payload.error.code, code);
