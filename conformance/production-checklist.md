@@ -36,7 +36,11 @@ A broker may claim `APEX Production Autonomous` only if all items in Sections 1-
 - SSE server-to-client updates function over a long-lived connection.
 - Disconnect and reconnect behavior is documented.
 - Replay semantics are documented.
-- If replay is supported, retention windows are documented and honored.
+- Acknowledgment-driven event log is implemented (`apex.session.acknowledge` advances the retention cursor).
+- Retention windows are documented and honored (`max_retention_events`, `max_retention_seconds`).
+- During replay, execution events (fills, rejections, kill switch) are replayed faithfully.
+- During replay, ephemeral events (`notifications/resources/updated`, `candle_closed`) are collapsed into `notifications/apex.session.gap_fill` markers.
+- `replay_failed` with reason `"event_id_outside_log"` is emitted when requested events have been evicted.
 
 ---
 
@@ -85,6 +89,7 @@ A broker may claim `APEX Production Autonomous` only if all items in Sections 1-
 - `notifications/apex.order.rejected` is emitted on order rejection.
 - `notifications/apex.market.candle_closed` is emitted on candle close.
 - `notifications/apex.risk.kill_switch_engaged` is emitted when the broker enters a hard-stop state.
+- `notifications/apex.session.gap_fill` is emitted during replay to indicate elided ephemeral events (with `elided_count`, `from_id`, `to_id`).
 
 ---
 
@@ -127,12 +132,16 @@ The reference harness now executes:
 - injected sequence gap detection and sequence-gap rejection checks
 - partial fill lifecycle and event schema validation
 - kill switch order rejection checks
-- HTTP/SSE transport connection and session management
+- HTTP/SSE transport connection and session management (18 mandatory tools including `apex.session.acknowledge`)
 - SSE notification delivery (`notifications/resources/updated` and APEX notifications)
 - SSE reconnect with `Last-Event-ID` replay
-- Replay buffer exhaustion and `replay_failed` notification
+- Acknowledgment-driven retention (`apex.session.acknowledge` advances cursor, evicts acknowledged events)
+- Gap fill during replay (ephemeral events elided, `notifications/apex.session.gap_fill` markers emitted)
+- Acknowledgment-based eviction and `replay_failed` with reason `"event_id_outside_log"`
+- Post-failure recovery after replay failure
 - Live market data streaming (quote updates, candle close via `force_candle_close`)
 - Session rejection for invalid session IDs (bogus ID returns 404)
+- Capability validation for `max_retention_events`, `max_retention_seconds`, and `notifications/apex.session.gap_fill`
 
 ## Recommended Future Executable Tests
 

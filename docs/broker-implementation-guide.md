@@ -109,7 +109,7 @@ Expose a single `/mcp` endpoint that handles three HTTP methods:
 
 - **POST** — Client sends JSON-RPC requests (initialize, tool calls, resource reads). Server responds with a JSON-RPC response. On `initialize`, generate a unique `Mcp-Session-Id` and return it as a response header.
 - **GET** — Client opens a persistent SSE stream for server-pushed notifications. Requires a valid `Mcp-Session-Id` header and `Accept: text/event-stream`. Only one SSE stream is allowed per session; if a second GET arrives, close the previous stream before opening the new one.
-- **DELETE** — Client terminates the session. Close the SSE stream, discard the replay buffer, stop the tick engine, and invalidate the `Mcp-Session-Id`.
+- **DELETE** — Client terminates the session. Close the SSE stream, discard the event log, stop the tick engine, and invalidate the `Mcp-Session-Id`.
 
 ### 7.2 Session Management
 
@@ -133,31 +133,81 @@ data: {"jsonrpc":"2.0","method":"notifications/resources/updated","params":{"uri
 - `event` — Always `message`.
 - `data` — The full JSON-RPC 2.0 notification object.
 
-### 7.4 Replay Buffer
+### 7.4 Event Log
 
-Maintain a fixed-size ring buffer of SSE events per session. Guidance:
+Maintain a per-session event log for replay. The storage mechanism is an implementation choice:
 
-- **Minimum size:** 1000 events. This covers typical reconnect windows for active trading sessions.
-- **Scope:** Per session. Each `Mcp-Session-Id` has its own independent buffer.
-- **Eviction:** Drop the oldest events when the buffer is full.
-- **Cleanup:** Discard the buffer when the session is terminated (DELETE) or the server shuts down.
+- **In-memory buffer** — Simplest. Bounded by max retention count. Lost on restart.
+- **File-based log** — FIX-style sequential file. Survives restarts. Cheap storage.
+- **Durable queue** — Redis, Kafka, or similar. For scaled deployments with shared state.
+
+Requirements:
+
+- **Scope:** Per session. Each `Mcp-Session-Id` has its own independent log.
+- **Retention:** Retain events until the agent calls `apex.session.acknowledge` with the event ID. Discard events at or before the acknowledged ID.
+- **Maximum retention:** Enforce a safety cap (event count, time window, or both) to bound growth when the agent has not acknowledged. Document the limit in `apex.session.capabilities` under `realtime_contract`.
+- **Default maximum:** Reference implementations use 10000 events in-memory.
+- **Cleanup:** Discard the log when the session is terminated (DELETE) or the server shuts down.
 
 ### 7.5 `Last-Event-ID` Handling on GET Reconnect
 
 When a client reconnects with a GET request that includes the `Last-Event-ID` header:
 
 1. Look up the session by `Mcp-Session-Id`.
-2. Find the event after the given `Last-Event-ID` in the replay buffer.
-3. Replay all buffered events from that point forward as SSE frames with their original IDs.
+2. Find the event after the given `Last-Event-ID` in the event log.
+3. During replay, classify each event and apply gap fill rules (see Section 7.8). Only `required` events are sent with original IDs; consecutive `elide` events are collapsed into `gap_fill` markers.
 4. Continue streaming new events on the same connection.
 
 ### 7.6 Replay Failure
 
-If `Last-Event-ID` is outside the replay buffer (too old or unknown):
+If `Last-Event-ID` is outside the event log (evicted due to max retention exceeded, or unknown):
 
 1. Open the SSE stream normally (new events only).
-2. Send a `notifications/apex.session.replay_failed` notification as the first event, with payload: `{ "reason": "event_id_outside_buffer", "last_available_id": <int> }`.
-3. The client must treat this as a sequence discontinuity: discard cached state, re-read all resources, and re-establish baseline before resuming autonomous execution.
+2. Send `notifications/apex.session.replay_failed` as the first event, with payload: `{ "reason": "event_id_outside_log", "last_available_id": <int> }`.
+3. The client treats this as a sequence discontinuity: discard cached state, re-read all resources, re-establish baseline before resuming autonomous execution.
+
+With acknowledgment-driven retention, replay failure only occurs when the server's max retention is exceeded with unacknowledged events.
+
+### 7.7 Handling `apex.session.acknowledge`
+
+When the agent calls `apex.session.acknowledge`:
+
+1. Parse `last_event_id` as an integer.
+2. Discard all events in the session's event log with ID ≤ `last_event_id`.
+3. Return `acknowledged_through` (the acknowledged ID) and `buffer_depth` (count of remaining unacknowledged events).
+4. If `last_event_id` is higher than any event the server has sent, return the highest sent event ID as `acknowledged_through`.
+
+In stdio mode, return `acknowledged_through: "0"` and `buffer_depth: 0`.
+
+### 7.8 Gap Fill During Replay
+
+During replay (events sent after `Last-Event-ID` reconnect), classify each logged event:
+
+**`required`** — Send with original event ID:
+- `notifications/apex.order.filled`
+- `notifications/apex.order.partially_filled`
+- `notifications/apex.order.rejected`
+- `notifications/apex.risk.kill_switch_engaged`
+
+**`elide`** — Do not replay individually. Collapse consecutive elided events into a single gap fill marker:
+- `notifications/resources/updated`
+- `notifications/apex.market.candle_closed`
+
+The gap fill notification:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "notifications/apex.session.gap_fill",
+  "params": {
+    "elided_count": 47,
+    "from_id": "12",
+    "to_id": "58"
+  }
+}
+```
+
+Gap fill markers are assigned new event IDs (not the IDs of the elided events). After all logged events are replayed or elided, the server transitions to live streaming where all events are delivered without classification.
 
 ---
 

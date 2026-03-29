@@ -88,6 +88,7 @@ type referenceState struct {
 	resourceUpdateCallback func(uris []string)
 	onAuthenticated        func()
 	tickEngine             *TickEngine
+	replayBuffer           *ReplayBuffer
 }
 
 func newReferenceState() *referenceState {
@@ -699,6 +700,23 @@ func registerForceCandeCloseToolWithState(s *server.MCPServer, st *referenceStat
 			return jsonResult(map[string]any{
 				"closed":    true,
 				"timeframe": timeframe,
+			})
+		},
+	)
+}
+
+// registerStopTicksToolWithState registers the test-only stop ticks tool.
+func registerStopTicksToolWithState(s *server.MCPServer, st *referenceState) {
+	s.AddTool(
+		mcp.NewTool("reference.test.stop_ticks",
+			mcp.WithDescription("Stop the tick engine. Test-only tool for deterministic event counts."),
+		),
+		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			if st.tickEngine != nil {
+				st.tickEngine.Stop()
+			}
+			return jsonResult(map[string]any{
+				"stopped": true,
 			})
 		},
 	)

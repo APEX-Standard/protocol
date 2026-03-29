@@ -109,7 +109,18 @@ const reader = sseResponse.body.getReader();
 // ... parse SSE frames for notifications/resources/updated and APEX notifications
 ```
 
-Every SSE frame includes a monotonic integer `id:` field. If the SSE connection drops, reconnect with the `Last-Event-ID` header set to the last received SSE event ID. The server will replay missed events from its session replay buffer. If the requested event ID has been evicted from the buffer, the server sends a `notifications/apex.session.replay_failed` notification instead -- treat this as a sequence discontinuity, discard cached state, re-read all resources, and re-establish your execution baseline before resuming autonomous trading.
+Every SSE frame includes a monotonic integer `id:` field. If the SSE connection drops, reconnect with the `Last-Event-ID` header set to the last received SSE event ID. The server replays execution-critical events (fills, rejections, kill switch) from its event log and collapses ephemeral market data notifications into `gap_fill` markers.
+
+Periodically acknowledge processed events to allow the server to reclaim storage:
+
+```typescript
+await client.callTool({
+  name: "apex.session.acknowledge",
+  arguments: { last_event_id: String(lastProcessedEventId) },
+});
+```
+
+After any reconnect, re-read all resources to rebuild current state — the replay provides execution history, not current state. If the requested event ID has been evicted from the log, the server sends `notifications/apex.session.replay_failed` — discard cached state, re-read all resources, and re-establish your execution baseline before resuming autonomous trading.
 
 ---
 

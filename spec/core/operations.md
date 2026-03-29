@@ -128,15 +128,28 @@ After reconnect:
 
 ### 4.2 Session Replay
 
-Session-scoped replay using SSE event IDs as cursors.
+Session-scoped replay using SSE event IDs as cursors with acknowledgment-driven retention and gap fill.
 
 - Server assigns a monotonic integer `id` to every SSE event within a session.
 - Client reconnects with `Last-Event-ID` header containing the last received event ID.
-- Server replays all buffered events after that ID, then continues streaming.
-- If `Last-Event-ID` is outside the buffer (too old or unknown), server sends `notifications/apex.session.replay_failed` and streams new events only.
+- Server replays execution-critical events (`required` classification) after that ID, collapsing ephemeral events (`elide` classification) into `gap_fill` markers. Then continues streaming.
+- If `Last-Event-ID` is outside the event log (evicted or unknown), server sends `notifications/apex.session.replay_failed` and streams new events only.
 - Client must treat replay failure as a sequence discontinuity: discard cached state, re-read all resources, re-establish baseline.
+- Client must re-read all resources after any reconnect, regardless of replay success. The replay provides execution history, not current state.
 
-This mode is appropriate for reference implementations and alpha brokers. It provides meaningful reconnect support without requiring durable event persistence.
+#### Replay Classification
+
+Notifications classified `required` carry unique execution data that the agent cannot reconstruct from current resource state (fills, rejections, kill switch events). Notifications classified `elide` are ephemeral — their information is superseded by the current resource state that the agent re-reads on reconnect.
+
+#### Acknowledgment-Driven Retention
+
+The agent advances the server's retention cursor by calling `apex.session.acknowledge` with the last fully processed event ID. The server discards events at or before the acknowledged ID.
+
+- Agents must acknowledge periodically to allow the server to reclaim storage.
+- Servers enforce a maximum retention limit (event count, time window, or both) as a safety cap. When the limit is exceeded, the oldest unacknowledged events are evicted.
+- The maximum retention limit is documented in `apex.session.capabilities` under `realtime_contract`.
+
+This model is inspired by the FIX protocol's message store, sequence reset, and gap fill mechanisms. The agent controls the retention lifecycle. Replay delivers only execution-critical events. Ephemeral state is rebuilt from current resources.
 
 ### 4.3 Replay Modes (Best-Effort And Guaranteed)
 
@@ -225,13 +238,13 @@ Implementations should advertise operationally important facts in capabilities:
   "realtime_contract": {
     "transport_mode": "streamable_http",
     "reconnect_mode": "session_replay",
-    "replay_buffer_size": 1000,
+    "max_retention_events": 10000,
     "quote_freshness_ms": 1000,
     "account_freshness_ms": 2000
   }
 }
 ```
 
-For implementations using `best_effort_replay` or `guaranteed_replay`, use the corresponding `reconnect_mode` value and replace `replay_buffer_size` with `replay_window_events` documenting the retention window in event count or duration.
+For implementations using `best_effort_replay` or `guaranteed_replay`, use the corresponding `reconnect_mode` value and adjust `max_retention_events` and `max_retention_seconds` to document the retention window.
 
 This does not replace resource-level metadata. It complements it.

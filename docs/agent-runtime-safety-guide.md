@@ -39,6 +39,8 @@ For each cached resource, store:
 
 The runtime, not the model, should decide whether the state is fresh enough to trade.
 
+Call `apex.session.acknowledge` with the last processed SSE event ID after each decision cycle or at least every 30 seconds. This advances the server's retention cursor and ensures replay remains available across longer disconnection windows. On reconnect, the server replays only execution-critical events and collapses ephemeral market data into gap fill markers — re-read all resources regardless to rebuild current state.
+
 ---
 
 ## 3. Halt Autonomy Deterministically

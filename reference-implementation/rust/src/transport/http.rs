@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::convert::Infallible;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use axum::extract::State;
@@ -15,7 +15,7 @@ use tokio::sync::{broadcast, Mutex};
 use crate::helpers::{apex_error, hours_from_now, now_iso};
 use crate::models::*;
 use crate::notifications;
-use crate::replay_buffer::{ReplayBuffer, ReplayResult};
+use crate::replay_buffer::{ReplayBuffer, ReplayItem, ReplayResult};
 use crate::state::{ReferenceTradingState, ACCOUNT_ID, BROKER_SYMBOL, INSTRUMENT_ID};
 use crate::tick_engine::{TickEngine, TickEvent};
 
@@ -35,9 +35,10 @@ struct SessionData {
     subscriptions: HashSet<String>,
     #[allow(dead_code)]
     initialized: bool,
-    /// Generation counter for SSE streams. Incremented on each new GET to
-    /// ensure only one SSE stream per session is active at a time.
-    sse_generation: Arc<AtomicU64>,
+    /// Cancellation flag for the current SSE stream.  When a new GET arrives,
+    /// the previous flag is set to `true` so the old stream exits on the next
+    /// event or timeout.
+    sse_cancelled: Arc<AtomicBool>,
 }
 
 impl HttpState {
@@ -214,7 +215,7 @@ async fn handle_post(
                 SessionData {
                     subscriptions: HashSet::new(),
                     initialized: true,
-                    sse_generation: Arc::new(AtomicU64::new(0)),
+                    sse_cancelled: Arc::new(AtomicBool::new(false)),
                 },
             );
         }
@@ -314,14 +315,16 @@ async fn handle_get(
         }
     };
 
-    let sse_gen = {
-        let sessions = state.sessions.lock().await;
-        match sessions.get(&session_id) {
+    let cancel_flag = {
+        let mut sessions = state.sessions.lock().await;
+        match sessions.get_mut(&session_id) {
             Some(session) => {
-                // Increment generation — any previous SSE stream for this
-                // session will observe the change and terminate itself.
-                let gen = session.sse_generation.fetch_add(1, Ordering::SeqCst) + 1;
-                (gen, Arc::clone(&session.sse_generation))
+                // Cancel any previous SSE stream for this session.
+                session.sse_cancelled.store(true, Ordering::SeqCst);
+                // Create a new cancel flag for the incoming stream.
+                let flag = Arc::new(AtomicBool::new(false));
+                session.sse_cancelled = flag.clone();
+                flag
             }
             None => {
                 return (
@@ -332,26 +335,44 @@ async fn handle_get(
             }
         }
     };
-    let (my_generation, generation_ref) = sse_gen;
 
     let last_event_id = headers
         .get("last-event-id")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_owned());
 
-    // Pre-compute replay events synchronously before starting the stream
+    // Pre-compute replay items synchronously before starting the stream.
+    // The replay buffer now classifies events: required ones are sent verbatim,
+    // consecutive non-required events are collapsed into gap_fill markers.
     let replay_events: Vec<(String, String)> = if let Some(last_id) = &last_event_id {
         match state.replay_buffer.replay_after(last_id) {
-            ReplayResult::Events(events) => events
+            ReplayResult::Items(items) => items
                 .into_iter()
-                .map(|e| {
-                    let data = serde_json::to_string(&e.message).unwrap_or_default();
-                    (e.id.to_string(), data)
+                .map(|item| match item {
+                    ReplayItem::Event(e) => {
+                        let data = serde_json::to_string(&e.message).unwrap_or_default();
+                        (e.id.to_string(), data)
+                    }
+                    ReplayItem::GapFill {
+                        id,
+                        elided_count,
+                        from_id,
+                        to_id,
+                    } => {
+                        let notif = ReplayBuffer::gap_fill_notification(
+                            id,
+                            elided_count,
+                            from_id,
+                            to_id,
+                        );
+                        let data = serde_json::to_string(&notif).unwrap_or_default();
+                        (id.to_string(), data)
+                    }
                 })
                 .collect(),
             ReplayResult::Failed { oldest_available_id } => {
                 let notif = notifications::replay_failed(
-                    "Events before this point have been evicted from the replay buffer",
+                    "event_id_outside_log",
                     oldest_available_id,
                 );
                 let event_id = state.replay_buffer.next_event_id();
@@ -369,8 +390,7 @@ async fn handle_get(
     let stream = async_stream::stream! {
         // First, yield any pre-computed replay events
         for (event_id, data) in replay_events {
-            // Check if a newer SSE stream has superseded us
-            if generation_ref.load(Ordering::SeqCst) != my_generation {
+            if cancel_flag.load(Ordering::SeqCst) {
                 break;
             }
             yield Ok::<_, Infallible>(
@@ -381,14 +401,16 @@ async fn handle_get(
             );
         }
 
-        // Then stream live events
+        // Then stream live events.
         loop {
-            // Check if a newer SSE stream has superseded us
-            if generation_ref.load(Ordering::SeqCst) != my_generation {
+            if cancel_flag.load(Ordering::SeqCst) {
                 break;
             }
             match rx.recv().await {
                 Ok((_sid, event_id, message)) => {
+                    if cancel_flag.load(Ordering::SeqCst) {
+                        break;
+                    }
                     let data = serde_json::to_string(&message).unwrap_or_default();
                     yield Ok::<_, Infallible>(
                         Event::default()
@@ -529,6 +551,13 @@ fn tools_list() -> Value {
                 "properties": { "timestamp": { "type": "string" } },
                 "required": ["timestamp"]
             })),
+            tool_desc("apex.session.acknowledge", "Acknowledge receipt of events through a given event ID.", json!({
+                "type": "object",
+                "properties": {
+                    "last_event_id": { "type": "string", "description": "The highest event ID the client has processed" }
+                },
+                "required": ["last_event_id"]
+            })),
             tool_desc("apex.account.summary", "Current account state.", json!({
                 "type": "object",
                 "properties": {
@@ -668,6 +697,10 @@ fn tools_list() -> Value {
                 },
                 "required": ["timeframe"]
             })),
+            tool_desc("reference.test.stop_ticks", "Stop the tick engine. Test-only tool for deterministic event counts.", json!({
+                "type": "object",
+                "properties": {}
+            })),
         ]
     })
 }
@@ -792,7 +825,8 @@ async fn handle_tool_call(
                 realtime_contract: json!({
                     "transport_mode": "streamable_http",
                     "reconnect_mode": "session_replay",
-                    "replay_buffer_size": 1000,
+                    "max_retention_events": 10000,
+                    "max_retention_seconds": 0,
                     "quote_freshness_ms": 1000,
                     "account_freshness_ms": 2000,
                     "tick_interval_ms": 2000,
@@ -802,7 +836,8 @@ async fn handle_tool_call(
                         "notifications/apex.order.rejected",
                         "notifications/apex.market.candle_closed",
                         "notifications/apex.risk.kill_switch_engaged",
-                        "notifications/apex.session.replay_failed"
+                        "notifications/apex.session.replay_failed",
+                        "notifications/apex.session.gap_fill"
                     ]
                 }),
             })
@@ -812,6 +847,15 @@ async fn handle_tool_call(
                 timestamp: now_iso(),
                 status: "ok".to_owned(),
             })
+        }
+        "apex.session.acknowledge" => {
+            let last_event_id = args["last_event_id"].as_str().unwrap_or("0");
+            let (acknowledged_through, buffer_depth) =
+                state.replay_buffer.acknowledge(last_event_id);
+            json_result_value(&json!({
+                "acknowledged_through": acknowledged_through,
+                "buffer_depth": buffer_depth,
+            }))
         }
         "reference.test.set_realtime_state" => {
             let was_kill_switch = state
@@ -850,6 +894,15 @@ async fn handle_tool_call(
             tool_result_structured(&json!({
                 "closed": true,
                 "timeframe": timeframe,
+            }))
+        }
+        "reference.test.stop_ticks" => {
+            let mut engine_guard = state.tick_engine.lock().await;
+            if let Some(engine) = engine_guard.as_mut() {
+                engine.stop();
+            }
+            tool_result_structured(&json!({
+                "stopped": true,
             }))
         }
         "apex.account.summary" => {

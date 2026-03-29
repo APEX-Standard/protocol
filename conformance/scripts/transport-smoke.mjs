@@ -53,6 +53,43 @@ try {
   );
   printCheck("capabilities report streamable_http transport with session_replay");
 
+  // Validate acknowledgment-driven retention capabilities
+  assert(
+    typeof caps.realtime_contract?.max_retention_events === "number" &&
+      caps.realtime_contract.max_retention_events > 0,
+    `Expected max_retention_events > 0, got ${caps.realtime_contract?.max_retention_events}`,
+  );
+  assert(
+    typeof caps.realtime_contract?.max_retention_seconds === "number" &&
+      caps.realtime_contract.max_retention_seconds >= 0,
+    `Expected max_retention_seconds >= 0, got ${caps.realtime_contract?.max_retention_seconds}`,
+  );
+  printCheck(
+    `retention caps: max_retention_events=${caps.realtime_contract.max_retention_events}, max_retention_seconds=${caps.realtime_contract.max_retention_seconds}`,
+  );
+
+  // Validate apex.session.acknowledge is in the tools list
+  const toolsListResponse = await httpPost(server.baseUrl, sessionId, {
+    jsonrpc: "2.0",
+    id: 50,
+    method: "tools/list",
+    params: {},
+  });
+  const toolsList = (toolsListResponse.json?.result?.tools ?? []).map((t) => t.name);
+  assert(
+    toolsList.includes("apex.session.acknowledge"),
+    `Expected apex.session.acknowledge in tools list, got: ${toolsList.filter(t => t.includes("session")).join(", ")}`,
+  );
+  printCheck("apex.session.acknowledge is present in tools list");
+
+  // Validate notifications/apex.session.gap_fill is in notification types
+  const notificationTypes = caps.realtime_contract?.notifications ?? [];
+  assert(
+    notificationTypes.includes("notifications/apex.session.gap_fill"),
+    `Expected notifications/apex.session.gap_fill in notification types, got: ${JSON.stringify(notificationTypes)}`,
+  );
+  printCheck("notifications/apex.session.gap_fill is in notification types");
+
   /* -- Open SSE stream ----------------------------------------------- */
 
   const sse = openSseStream(server.baseUrl, sessionId);

@@ -31,7 +31,7 @@ final class HttpTransport {
     private final int port;
     private final ReferenceTradingState state;
     private final Map<String, ToolDefinition> tools;
-    private final ReplayBuffer replayBuffer = new ReplayBuffer();
+    private final ReplayBuffer replayBuffer;
     private final ConcurrentHashMap<String, SessionState> sessions = new ConcurrentHashMap<>();
     private final NotificationDispatcher dispatcher;
     private TickEngine tickEngine;
@@ -50,12 +50,14 @@ final class HttpTransport {
     }
 
     HttpTransport(ObjectMapper mapper, int port, ReferenceTradingState state,
-                  Map<String, ToolDefinition> tools, NotificationDispatcher dispatcher) {
+                  Map<String, ToolDefinition> tools, NotificationDispatcher dispatcher,
+                  ReplayBuffer replayBuffer) {
         this.mapper = mapper;
         this.port = port;
         this.state = state;
         this.tools = tools;
         this.dispatcher = dispatcher;
+        this.replayBuffer = replayBuffer;
     }
 
     void setTickEngine(TickEngine tickEngine) {
@@ -282,9 +284,9 @@ final class HttpTransport {
                 replayFailed.put("params", replayParams);
                 writeSseEvent(session, replayFailed);
             } else {
-                // Replay events
-                for (ReplayBuffer.StoredEvent event : result.events()) {
-                    writeSseEventWithId(session, event.id(), event.message());
+                // Replay events (with gap_fill classification)
+                for (ReplayBuffer.ReplayItem item : result.items()) {
+                    writeSseEventWithId(session, item.id(), item.message());
                 }
             }
         }

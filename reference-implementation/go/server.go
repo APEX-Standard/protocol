@@ -30,6 +30,7 @@ func newServerWithState(s *referenceState, httpMode bool) *server.MCPServer {
 	registerRiskToolsWithState(srv, s)
 	if httpMode {
 		registerForceCandeCloseToolWithState(srv, s)
+		registerStopTicksToolWithState(srv, s)
 	}
 	return srv
 }

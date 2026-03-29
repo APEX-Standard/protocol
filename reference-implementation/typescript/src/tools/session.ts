@@ -9,11 +9,13 @@ import {
 } from "../lib/constants.js";
 import { apexError, hoursFromNow, nowIso } from "../lib/helpers.js";
 import type { ReferenceTradingState } from "../lib/resources.js";
+import type { ReplayBuffer } from "../lib/replay-buffer.js";
 import { z } from "zod";
 
 export interface SessionToolOptions {
   transportMode?: "stdio" | "streamable_http";
   onAuthenticated?: () => void;
+  replayBuffer?: ReplayBuffer;
 }
 
 export function registerSessionTools(server: McpServer, state: ReferenceTradingState, options?: SessionToolOptions): void {
@@ -77,7 +79,8 @@ export function registerSessionTools(server: McpServer, state: ReferenceTradingS
           ? {
               transport_mode: "streamable_http",
               reconnect_mode: "session_replay",
-              replay_buffer_size: 1000,
+              max_retention_events: 10000,
+              max_retention_seconds: 0,
               quote_freshness_ms: 1000,
               account_freshness_ms: 2000,
               tick_interval_ms: 2000,
@@ -88,6 +91,7 @@ export function registerSessionTools(server: McpServer, state: ReferenceTradingS
                 "notifications/apex.market.candle_closed",
                 "notifications/apex.risk.kill_switch_engaged",
                 "notifications/apex.session.replay_failed",
+                "notifications/apex.session.gap_fill",
               ],
             }
           : {
@@ -113,6 +117,27 @@ export function registerSessionTools(server: McpServer, state: ReferenceTradingS
       content: [],
     }),
   );
+
+  if (options?.replayBuffer) {
+    const replayBuffer = options.replayBuffer;
+    server.registerTool(
+      "apex.session.acknowledge",
+      {
+        description: "Acknowledge receipt of SSE events. Server discards acknowledged events.",
+        inputSchema: {
+          last_event_id: z.string().describe("Last SSE event ID processed"),
+        },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      },
+      async ({ last_event_id }) => {
+        const result = replayBuffer.acknowledge(last_event_id);
+        return {
+          structuredContent: result,
+          content: [],
+        };
+      },
+    );
+  }
 
   server.registerTool(
     "reference.test.set_realtime_state",

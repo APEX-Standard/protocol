@@ -154,7 +154,6 @@ pub fn kill_switch_engaged(risk_sequence: u64) -> Value {
 
 pub fn replay_failed(reason: &str, last_available_id: Option<u64>) -> Value {
     // replay_failed uses a simpler format (not the full APEX envelope)
-    // to match the TypeScript SDK's EventStore behavior
     json!({
         "jsonrpc": "2.0",
         "method": "notifications/apex.session.replay_failed",

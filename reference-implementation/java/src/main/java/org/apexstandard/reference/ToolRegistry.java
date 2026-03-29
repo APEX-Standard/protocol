@@ -21,13 +21,20 @@ final class ToolRegistry {
     private final ReferenceTradingState state;
     private final String transportMode;
     private final NotificationDispatcher dispatcher;
+    private final ReplayBuffer replayBuffer;
 
     ToolRegistry(ObjectMapper mapper, ReferenceTradingState state, String transportMode, NotificationDispatcher dispatcher) {
+        this(mapper, state, transportMode, dispatcher, null);
+    }
+
+    ToolRegistry(ObjectMapper mapper, ReferenceTradingState state, String transportMode,
+                 NotificationDispatcher dispatcher, ReplayBuffer replayBuffer) {
         this.mapper = mapper;
         this.schema = new SchemaBuilder(mapper);
         this.state = state;
         this.transportMode = transportMode != null ? transportMode : "stdio";
         this.dispatcher = dispatcher;
+        this.replayBuffer = replayBuffer;
     }
 
     Map<String, ToolDefinition> createTools() {
@@ -83,21 +90,23 @@ final class ToolRegistry {
             args -> {
                 Object realtimeContract;
                 if ("streamable_http".equals(transportMode)) {
-                    realtimeContract = Map.of(
-                        "transport_mode", "streamable_http",
-                        "reconnect_mode", "session_replay",
-                        "replay_buffer_size", 1000,
-                        "quote_freshness_ms", 1000,
-                        "account_freshness_ms", 2000,
-                        "tick_interval_ms", 2000,
-                        "notifications", List.of(
+                    realtimeContract = Map.ofEntries(
+                        Map.entry("transport_mode", "streamable_http"),
+                        Map.entry("reconnect_mode", "session_replay"),
+                        Map.entry("max_retention_events", 10000),
+                        Map.entry("max_retention_seconds", 0),
+                        Map.entry("quote_freshness_ms", 1000),
+                        Map.entry("account_freshness_ms", 2000),
+                        Map.entry("tick_interval_ms", 2000),
+                        Map.entry("notifications", List.of(
                             "notifications/apex.order.filled",
                             "notifications/apex.order.partially_filled",
                             "notifications/apex.order.rejected",
                             "notifications/apex.market.candle_closed",
                             "notifications/apex.risk.kill_switch_engaged",
-                            "notifications/apex.session.replay_failed"
-                        )
+                            "notifications/apex.session.replay_failed",
+                            "notifications/apex.session.gap_fill"
+                        ))
                     );
                 } else {
                     realtimeContract = Map.of(
@@ -128,6 +137,19 @@ final class ToolRegistry {
             "Keep-alive ping. Hub marks session degraded if response exceeds 500ms.",
             schema.objectSchema((props, req) -> schema.stringProp(props, req, "timestamp", "ISO8601 timestamp", true)),
             args -> new HeartbeatResponse(now(), "ok")
+        );
+
+        registerTool(
+            tools,
+            "apex.session.acknowledge",
+            "Acknowledge receipt of SSE events through a given event ID. Acknowledged events may be pruned from the replay buffer.",
+            schema.objectSchema((props, req) -> schema.stringProp(props, req, "last_event_id", "The SSE event ID through which all events have been processed", true)),
+            args -> {
+                if (replayBuffer == null) {
+                    return Map.of("acknowledged_through", "0", "buffer_depth", 0);
+                }
+                return replayBuffer.acknowledge(argStr(args, "last_event_id", "0"));
+            }
         );
 
         registerTool(
@@ -522,7 +544,8 @@ final class ToolRegistry {
             || name.startsWith("apex.risk.")
             || "apex.order.status".equals(name)
             || "apex.session.capabilities".equals(name)
-            || "apex.session.heartbeat".equals(name);
+            || "apex.session.heartbeat".equals(name)
+            || "apex.session.acknowledge".equals(name);
         boolean destructive = "apex.order.place".equals(name)
             || "apex.order.modify".equals(name)
             || "apex.order.cancel".equals(name);

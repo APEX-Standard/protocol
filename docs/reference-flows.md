@@ -78,9 +78,12 @@
 
 1. Agent's SSE connection drops (network interruption, timeout)
 2. Agent sends GET `/mcp` with `Mcp-Session-Id` and `Last-Event-ID` headers
-3. Server looks up session, finds buffered events after the given ID
-4. Server replays missed events as SSE frames with original IDs
-5. Server continues streaming new events on the same connection
-6. If `Last-Event-ID` is outside the replay buffer, server sends `notifications/apex.session.replay_failed`
-7. Agent treats replay failure as sequence discontinuity: discards cached state, re-reads all resources
-8. Agent re-establishes execution baseline before resuming autonomous trading
+3. Server looks up session, walks event log from cursor
+4. Server replays execution-critical events (fills, rejections, kill switch) with original IDs
+5. Server collapses consecutive ephemeral events (resource updates, candle closes) into `gap_fill` markers
+6. Server transitions to live streaming (all events, no classification)
+7. Agent processes replayed execution events, reconciles what happened during the gap
+8. Agent re-reads all resources to rebuild current state
+9. Agent calls `apex.session.acknowledge` with the last processed event ID
+10. Agent re-establishes execution baseline before resuming autonomous trading
+11. If `Last-Event-ID` is outside the event log, server sends `replay_failed` instead — agent discards all cached state and rebuilds from scratch

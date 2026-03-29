@@ -206,7 +206,7 @@ CFD positions held overnight incur financing charges based on the underlying pos
 The standard calculation is:
 
 ```
-Daily Financing = Position Value × (LIBOR/SOFR + Broker Spread) / 365
+Daily Financing = Position Value × (Reference Rate + Broker Spread) / 365
 ```
 
 Brokers must disclose the financing rate methodology in `apex.market.details` under `profile_data.financing_rate_basis` and `profile_data.financing_spread_pct`.

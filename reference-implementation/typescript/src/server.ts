@@ -103,10 +103,46 @@ async function startHttp(port: number) {
   const app = express();
   app.use(express.json());
 
+  const replayBuffer = new ReplayBuffer();
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
-    eventStore: new ReplayBuffer(),
+    eventStore: replayBuffer,
   });
+
+  // Guard against SSE cancel race condition.
+  // The SDK's ReadableStream cancel callback unconditionally deletes '_GET_stream'
+  // from _streamMapping. If the old stream's cancel fires after a new stream is
+  // registered under the same key, it removes the new stream. We intercept delete
+  // to only allow it when the entry's controller matches what was most recently set.
+  {
+    const webTransport = (transport as any);
+    const streamMapping: Map<string, any> = webTransport._streamMapping;
+    if (streamMapping) {
+      let currentStandaloneController: any = null;
+      const standaloneSseStreamId = webTransport._standaloneSseStreamId ?? "_GET_stream";
+
+      const originalSet = streamMapping.set.bind(streamMapping);
+      const originalDelete = streamMapping.delete.bind(streamMapping);
+
+      streamMapping.set = function(key: string, value: any) {
+        if (key === standaloneSseStreamId && value?.controller) {
+          currentStandaloneController = value.controller;
+        }
+        return originalSet(key, value);
+      } as typeof streamMapping.set;
+
+      streamMapping.delete = function(key: string) {
+        if (key === standaloneSseStreamId) {
+          const current = streamMapping.get(key);
+          if (current && current.controller !== currentStandaloneController) {
+            // Stale cancel callback — a new stream has replaced us. Skip.
+            return false;
+          }
+        }
+        return originalDelete(key);
+      } as typeof streamMapping.delete;
+    }
+  }
 
   const server = new McpServer({
     name: SERVER_NAME,
@@ -202,6 +238,7 @@ async function startHttp(port: number) {
 
   registerSessionTools(server, state, {
     transportMode: "streamable_http",
+    replayBuffer,
     onAuthenticated: () => {
       tickEngine.start();
       console.error("Tick engine started after authentication");
@@ -227,19 +264,31 @@ async function startHttp(port: number) {
     },
   );
 
+  /* -- Test-only: stop tick engine ---------------------------------- */
+
+  server.registerTool(
+    "reference.test.stop_ticks",
+    {
+      description: "Stop the tick engine. Test-only tool for deterministic event counts.",
+      inputSchema: {},
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async () => {
+      tickEngine.stop();
+      return { structuredContent: { stopped: true }, content: [] };
+    },
+  );
+
   /* -- Express routes ---------------------------------------------- */
 
   app.post("/mcp", (req, res) => {
     transport.handleRequest(req, res, req.body);
   });
   app.get("/mcp", (req, res) => {
-    // When a client reconnects with Last-Event-ID, close the previous
-    // standalone SSE stream so the SDK does not reject the reconnection
-    // with 409 Conflict.  This compensates for the fact that client-side
-    // aborts are not always detected by the server in Node.js/Express.
-    if (req.headers["last-event-id"]) {
-      transport.closeStandaloneSSEStream();
-    }
+    // Always close any previous standalone SSE stream before handling a new GET.
+    // Client-side aborts are not reliably detected by Node.js, so the old stream
+    // may still be in the mapping. This prevents 409 conflicts.
+    transport.closeStandaloneSSEStream();
     transport.handleRequest(req, res);
   });
   app.delete("/mcp", (req, res) => {

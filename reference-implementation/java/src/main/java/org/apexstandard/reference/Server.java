@@ -220,10 +220,11 @@ public final class Server {
     private static void runHttp(int port) throws IOException {
         ReferenceTradingState httpState = new ReferenceTradingState();
         NotificationDispatcher dispatcher = new NotificationDispatcher();
+        ReplayBuffer replayBuffer = new ReplayBuffer();
 
-        Map<String, ToolDefinition> httpTools = new ToolRegistry(MAPPER, httpState, "streamable_http", dispatcher).createTools();
+        Map<String, ToolDefinition> httpTools = new ToolRegistry(MAPPER, httpState, "streamable_http", dispatcher, replayBuffer).createTools();
 
-        HttpTransport transport = new HttpTransport(MAPPER, port, httpState, httpTools, dispatcher);
+        HttpTransport transport = new HttpTransport(MAPPER, port, httpState, httpTools, dispatcher, replayBuffer);
 
         // Set up tick engine
         TickEngine tickEngine = new TickEngine();
@@ -284,6 +285,21 @@ public final class Server {
                 String timeframe = ToolRegistry.argStr(args, "timeframe", "M1");
                 tickEngine.forceCandleClose(timeframe);
                 return Map.of("closed", true, "timeframe", timeframe);
+            }
+        ));
+
+        // Register stop_ticks tool
+        httpTools.put("reference.test.stop_ticks", new ToolDefinition(
+            "reference.test.stop_ticks",
+            "Stop the tick engine. Test-only tool for deterministic event counts.",
+            new SchemaBuilder(MAPPER).objectSchema((props, req) -> {}),
+            MAPPER.createObjectNode()
+                .put("readOnlyHint", false)
+                .put("destructiveHint", false)
+                .put("idempotentHint", true),
+            args -> {
+                tickEngine.stop();
+                return Map.of("stopped", true);
             }
         ));
 

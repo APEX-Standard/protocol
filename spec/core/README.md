@@ -115,7 +115,15 @@ Query the full capability manifest of a connected broker. Returns all supported 
     "market_data_per_second": 100
   },
   "supported_order_types": ["market", "limit", "stop", "stop_limit"],
-  "supported_tif": ["GTC", "IOC", "FOK", "DAY"]
+  "supported_tif": ["GTC", "IOC", "FOK", "DAY"],
+  "realtime_contract": {
+    "transport_mode": "streamable_http",
+    "reconnect_mode": "session_replay",
+    "max_retention_events": 10000,
+    "max_retention_seconds": 0,
+    "quote_freshness_ms": 1000,
+    "account_freshness_ms": 2000
+  }
 }
 ```
 
@@ -125,8 +133,29 @@ Query the full capability manifest of a connected broker. Returns all supported 
 
 Keep-alive ping. Brokers should respond within 500ms or the hub marks the session degraded.
 
-**Input:** `{ "timestamp": "ISO8601" }`  
+**Input:** `{ "timestamp": "ISO8601" }`
 **Output:** `{ "timestamp": "ISO8601", "status": "ok" }`
+
+---
+
+### `apex.session.acknowledge`
+
+Acknowledge receipt of SSE events through the given event ID. The server discards events at or before the acknowledged ID to reclaim storage. In stdio mode this tool is a no-op.
+
+**Annotations:** `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`
+
+**Input:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `last_event_id` | string | yes | The last SSE event ID the agent has fully processed |
+
+**Output:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `acknowledged_through` | string | The event ID acknowledged |
+| `buffer_depth` | integer | Number of unacknowledged events remaining in the event log |
 
 ---
 
@@ -1031,7 +1060,7 @@ Client obligations:
 
 ### 6.12 APEX Notification Taxonomy
 
-In addition to MCP-standard resource update notifications, APEX defines the following notification types. The first five are mandatory for Production Realtime implementations. The remaining are recommended for richer agent-native workflows.
+In addition to MCP-standard resource update notifications, APEX defines the following notification types. The first seven are mandatory for Production Realtime implementations. The remaining are recommended for richer agent-native workflows.
 
 #### Mandatory Notifications
 
@@ -1042,7 +1071,8 @@ In addition to MCP-standard resource update notifications, APEX defines the foll
 | `notifications/apex.order.rejected` | Order is rejected (stale data, kill switch, risk limit, etc.) |
 | `notifications/apex.market.candle_closed` | A candle bar completes on a wall-clock boundary |
 | `notifications/apex.risk.kill_switch_engaged` | Kill switch is activated |
-| `notifications/apex.session.replay_failed` | SSE reconnect replay cannot be satisfied from the buffer |
+| `notifications/apex.session.replay_failed` | SSE reconnect replay cannot be satisfied from the event log |
+| `notifications/apex.session.gap_fill` | Consecutive ephemeral notifications were elided during replay |
 
 #### Mandatory Payload Shapes
 
@@ -1175,14 +1205,24 @@ Each mandatory notification must include a `params` object following the event e
     "timestamp": "2026-03-27T14:33:00.000Z",
     "sequence": null,
     "payload": {
-      "reason": "event_id_outside_buffer",
+      "reason": "event_id_outside_event_log",
       "last_available_id": 502
     }
   }
 }
 ```
 
-When the server cannot satisfy a `Last-Event-ID` reconnect request because the requested event has been evicted from the replay buffer, it sends this notification as the first event on the new SSE stream. The client must treat this as a sequence discontinuity: discard cached state, re-read all resources, and re-establish baseline before resuming autonomous execution.
+Sent when the client reconnects with a `Last-Event-ID` that has been evicted from the event log. With acknowledgment-driven retention, this only occurs when the server's maximum retention limit is exceeded with unacknowledged events. The client must treat this as a sequence discontinuity: discard cached state, re-read all resources, and re-establish baseline before resuming autonomous execution.
+
+- `notifications/apex.session.gap_fill` — Emitted during replay to indicate that consecutive ephemeral notifications were elided. Carries `elided_count`, `from_id`, and `to_id`. The agent must re-read all resources on reconnect; the gap fill marker indicates the range of skipped resource-update notifications.
+
+#### Replay Classification
+
+Each notification is classified for replay behavior:
+
+- **`required`**: `apex.order.filled`, `apex.order.partially_filled`, `apex.order.rejected`, `apex.risk.kill_switch_engaged` — replayed with original event IDs on reconnect.
+- **`elide`**: `notifications/resources/updated`, `apex.market.candle_closed` — collapsed into `apex.session.gap_fill` markers during replay. Current resource state supersedes.
+- **Always sent**: `apex.session.replay_failed`, `apex.session.gap_fill` — meta-notifications about the replay mechanism itself.
 
 #### Recommended Additional Notifications
 

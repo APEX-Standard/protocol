@@ -61,12 +61,13 @@ func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState, httpM
 			var realtimeContract map[string]any
 			if httpMode {
 				realtimeContract = map[string]any{
-					"transport_mode":     "streamable_http",
-					"reconnect_mode":     "session_replay",
-					"replay_buffer_size": 1000,
-					"quote_freshness_ms": 1000,
-					"account_freshness_ms": 2000,
-					"tick_interval_ms":   2000,
+					"transport_mode":         "streamable_http",
+					"reconnect_mode":         "session_replay",
+					"max_retention_events":   10000,
+					"max_retention_seconds":  0,
+					"quote_freshness_ms":     1000,
+					"account_freshness_ms":   2000,
+					"tick_interval_ms":       2000,
 					"notifications": []string{
 						"notifications/apex.order.filled",
 						"notifications/apex.order.partially_filled",
@@ -74,6 +75,7 @@ func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState, httpM
 						"notifications/apex.market.candle_closed",
 						"notifications/apex.risk.kill_switch_engaged",
 						"notifications/apex.session.replay_failed",
+						"notifications/apex.session.gap_fill",
 					},
 				}
 			} else {
@@ -105,6 +107,28 @@ func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState, httpM
 			mcp.WithString("timestamp", mcp.Required(), mcp.Description("ISO8601 timestamp")),
 		),
 		handleSessionHeartbeat,
+	)
+
+	s.AddTool(
+		mcp.NewTool("apex.session.acknowledge",
+			mcp.WithDescription("Acknowledge receipt of events through last_event_id, allowing the broker to trim the replay buffer."),
+			mcp.WithString("last_event_id", mcp.Required(), mcp.Description("The ID of the last event the client has successfully processed")),
+		),
+		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := request.GetArguments()
+			lastEventID := strParam(args, "last_event_id", "")
+			if lastEventID == "" {
+				return jsonResult(apexError("APEX_4000", "validation", "last_event_id is required"))
+			}
+			if st.replayBuffer == nil {
+				return jsonResult(apexError("APEX_5000", "internal", "Replay buffer not available"))
+			}
+			ackThrough, depth := st.replayBuffer.Acknowledge(lastEventID)
+			return jsonResult(map[string]any{
+				"acknowledged_through": ackThrough,
+				"buffer_depth":         depth,
+			})
+		},
 	)
 
 	s.AddTool(

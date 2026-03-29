@@ -462,6 +462,7 @@ export function openSseStream(baseUrl, sessionId, lastEventId) {
 
   function close() {
     controller.abort();
+    return streamPromise.catch(() => {}); // swallow AbortError
   }
 
   return { events, waitForEvents, close, streamPromise };

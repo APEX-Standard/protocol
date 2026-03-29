@@ -40,14 +40,50 @@ An implementation claiming `APEX Production Realtime` must satisfy all of the fo
 - Document replay behavior across reconnects.
 - Expose enough metadata for clients to detect stale state and sequence discontinuity.
 
-### 1.1.1 Replay Buffer
+### 1.1.1 Replay, Acknowledgment, and Gap Fill
 
-Production Realtime implementations that support `session_replay` should maintain a per-session event buffer of at least 1000 events. The buffer is used with SSE event IDs and the `Last-Event-ID` header for reconnect replay.
+Production Realtime implementations must maintain a per-session event log used with SSE event IDs and the `Last-Event-ID` header for reconnect replay.
 
 - Every event pushed to the SSE stream must carry a monotonic integer `id` (transmitted as a string per the SSE spec).
-- On reconnect, the client sends `Last-Event-ID` with the last received event ID; the server replays all buffered events after that ID, then continues streaming.
-- If the requested `Last-Event-ID` is outside the buffer (evicted or unknown), the server sends `notifications/apex.session.replay_failed` as the first event on the new stream and continues with live events only.
-- Buffer scope is per session. Each `Mcp-Session-Id` has its own buffer. The buffer is discarded on session teardown (DELETE) or server shutdown.
+- On reconnect, the client sends `Last-Event-ID` with the last received event ID; the server replays events from the log using the classification and gap fill rules below.
+- If the requested `Last-Event-ID` is outside the log (evicted or unknown), the server sends `notifications/apex.session.replay_failed` as the first event on the new stream and continues with live events only.
+- Event log scope is per session. Each `Mcp-Session-Id` has its own log. The log is discarded on session teardown (DELETE) or server shutdown.
+
+#### Replay Classification
+
+Each notification type is classified for replay:
+
+| Classification | Notification Types | Replay Behavior |
+|---|---|---|
+| `required` | `apex.order.filled`, `apex.order.partially_filled`, `apex.order.rejected`, `apex.risk.kill_switch_engaged` | Replayed with original event IDs |
+| `elide` | `notifications/resources/updated`, `apex.market.candle_closed` | Collapsed into `gap_fill` markers |
+
+During replay, the server:
+
+1. Walks the event log from the cursor.
+2. Sends all `required` events with their original IDs.
+3. Collapses consecutive `elide` events into a single `notifications/apex.session.gap_fill` notification: `{ "elided_count": N, "from_id": "first_skipped", "to_id": "last_skipped" }`.
+4. After replay completes, transitions to live streaming (all events, no classification).
+
+The agent must re-read all resources after reconnect regardless of whether gap fill markers are present. The replay delivers execution history (fills, rejections, kill switch events) that cannot be reconstructed from current resource state.
+
+#### Acknowledgment
+
+The agent controls event retention by calling `apex.session.acknowledge` with the last processed event ID. The server discards all events at or before the acknowledged ID.
+
+- Agents must call `apex.session.acknowledge` periodically (recommended: every 30 seconds or after each decision cycle) to allow the server to reclaim storage.
+- If the agent never acknowledges, the server retains all events subject to its maximum retention limit.
+
+#### Maximum Retention
+
+Servers enforce a maximum retention limit to bound storage growth when the agent has not acknowledged. The limit is expressed as a maximum event count, a maximum time window, or both. When the limit is exceeded, the server evicts the oldest unacknowledged events.
+
+- The maximum retention limit must be documented in the `realtime_contract` section of `apex.session.capabilities` via `max_retention_events` and `max_retention_seconds`.
+- Reference implementations use an in-memory event log with a default maximum of 10000 events.
+
+#### Storage
+
+The event log storage mechanism is an implementation choice. In-memory buffers, file-based sequential logs (as in FIX), durable queues, or any storage that preserves event ordering and supports cursor-based replay. File-based or durable storage enables replay to survive server restarts.
 
 ### 1.2 Mandatory Tools
 
@@ -66,6 +102,7 @@ Production Realtime implementations that support `session_replay` should maintai
 - `apex.risk.check`
 - `apex.risk.limits`
 - `apex.session.heartbeat`
+- `apex.session.acknowledge`
 - `apex.account.history`
 - `apex.market.search`
 
@@ -98,6 +135,7 @@ Every execution-relevant realtime resource must include:
 - `notifications/apex.order.rejected`
 - `notifications/apex.market.candle_closed`
 - `notifications/apex.risk.kill_switch_engaged`
+- `notifications/apex.session.gap_fill`
 
 Notification payloads should include:
 

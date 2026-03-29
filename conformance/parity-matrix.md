@@ -112,13 +112,17 @@ All four reference implementations are currently:
 | Tick engine (2s quote updates) | Yes | Yes | Yes | Yes | Yes |
 | `force_candle_close` test tool | Yes | Yes | Yes | Yes | Yes |
 | Session rejection (bogus ID → 404) | Yes | Yes | Yes | Yes | Yes |
+| `apex.session.acknowledge` | Yes | Yes | Yes | Yes | transport-resilience |
+| Acknowledgment-driven retention | Yes | Yes | Yes | Yes | transport-resilience |
+| Gap fill (elide ephemeral on replay) | Yes | Yes | Yes | Yes | transport-resilience |
+| `gap_fill` notification | Yes | Yes | Yes | Yes | transport-resilience |
 
 ---
 
 ## Notes
 
 - The parity claim is intentionally scoped to the **alpha spec and current conformance coverage**.
-- In stdio mode, the reconnect contract is `no_replay`. In HTTP mode, the reconnect contract is `session_replay` with a 1000-event ring buffer.
+- In stdio mode, the reconnect contract is `no_replay`. In HTTP mode, the reconnect contract is `session_replay` with acknowledgment-driven retention (max 10000 events) and gap fill for ephemeral event elision during replay.
 - Order and fill schema validation is performed against normalized event payloads derived from the orders and fills resources.
 - The references are protocol-complete for alpha, but they are still reference servers, not real broker/exchange integrations.
 

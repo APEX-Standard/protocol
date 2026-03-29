@@ -136,6 +136,9 @@ func StartHTTPServer(port int) {
 	httpState := newReferenceState()
 	ht := NewHttpTransport(httpState)
 
+	// Wire replay buffer into state so session tools can access it
+	httpState.replayBuffer = ht.replayBuffer
+
 	// Create the MCP server
 	srv := newServerWithState(httpState, true)
 
@@ -385,7 +388,7 @@ func (ht *HttpTransport) handleGet(w http.ResponseWriter, r *http.Request) {
 				"jsonrpc": "2.0",
 				"method":  "notifications/apex.session.replay_failed",
 				"params": map[string]any{
-					"reason":             "Events before this point have been evicted from the replay buffer",
+					"reason":             "event_id_outside_log",
 					"last_available_id":  fmt.Sprintf("%d", oldestID),
 					"requested_event_id": lastEventID,
 				},
