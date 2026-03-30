@@ -22,9 +22,9 @@ An agent that successfully trades EUR/USD through Broker A needs a completely di
 
 Multiply this across 20 brokers and 5 asset classes. Each combination is a bespoke integration. The cost is not just engineering time — it is ongoing maintenance as each broker independently evolves its API, deprecates endpoints, changes authentication, or restructures its market data feeds.
 
-This is the same problem the web faced before HTTP. Every network service had its own protocol. FTP for files. Gopher for menus. Proprietary protocols for everything else. HTTP did not replace what those services did — it standardized how clients talked to them.
+This is the same problem electronic trading faced before FIX. Every broker had its own wire format, its own order lifecycle, its own way of reporting fills. FIX did not replace what those brokers did — it standardized how counterparties talked to them. The result was an explosion of electronic connectivity.
 
-APEX is the HTTP of trading. It is a universal interoperability layer between AI agents and financial brokers. It standardizes the vocabulary (tool names), the nouns (instrument identifiers, order schemas, position models), the transport expectations (MCP over HTTP with SSE), and the operational semantics (freshness, sequencing, replay, safety). Brokers implement the standard. Agents consume it. The bespoke integration disappears.
+If MCP is the HTTP of agentic communication — standardizing how agents talk to servers — then APEX is the FIX of agentic trading. It standardizes the vocabulary (tool names), the nouns (instrument identifiers, order schemas, position models), the operational semantics (freshness, sequencing, replay, safety), and the safety guarantees that make autonomous execution possible. Brokers implement the standard. Agents consume it. The bespoke integration disappears.
 
 ---
 
@@ -73,7 +73,7 @@ APEX adds what MCP intentionally does not define:
 - An instrument identity system that canonicalizes symbols across brokers
 - Asset-class profiles that extend the baseline for FX, CFD, crypto, and future asset classes
 
-The relationship is analogous to HTTP and REST. HTTP defines how messages travel. REST defines how to structure an API over HTTP. MCP defines how agents communicate with servers. APEX defines how to structure a trading system over MCP.
+The relationship mirrors how FIX built on TCP/IP. MCP defines how agents communicate with servers. APEX defines how to structure a trading system over MCP — the vocabulary, the schemas, the lifecycle semantics, and the safety guarantees.
 
 ---
 
@@ -309,7 +309,7 @@ APEX is not the first attempt to standardize financial messaging. It is informed
 
 **OpenAPI / Swagger.** OpenAPI standardized how REST APIs describe themselves — endpoints, schemas, request/response formats. APEX does something similar for trading: it standardizes the tool vocabulary, the schema shapes, and the capability discovery mechanism. But APEX is not just an API description format. It defines behavioral semantics (order lifecycle, replay, freshness) that OpenAPI intentionally leaves to the implementer.
 
-**MCP.** The Model Context Protocol is the foundation APEX builds on. MCP standardized how AI agents communicate with external systems — tools for actions, resources for state, subscriptions for change. APEX is the first domain-specific protocol layer built on MCP for a regulated, real-time, high-stakes vertical. The relationship is like HTTP to the web: MCP provides the transport and interaction model, APEX provides the domain semantics.
+**MCP.** The Model Context Protocol is the foundation APEX builds on. MCP standardized how AI agents communicate with external systems — tools for actions, resources for state, subscriptions for change. APEX is the first domain-specific protocol layer built on MCP for a regulated, real-time, high-stakes vertical. MCP is to APEX what TCP/IP was to FIX: it provides the transport and interaction model, while APEX provides the domain semantics.
 
 **SWIFT.** The Society for Worldwide Interbank Financial Telecommunication standardized financial messaging between banks — payment instructions, securities transactions, trade confirmations. SWIFT solved the same interoperability problem APEX addresses, but for interbank communication rather than agent-to-broker communication. SWIFT's message types (MT and MX) are the conceptual ancestor of APEX's notification taxonomy.
 
