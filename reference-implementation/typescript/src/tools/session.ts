@@ -75,6 +75,10 @@ export function registerSessionTools(server: McpServer, state: ReferenceTradingS
         rate_limits: { orders_per_second: 10, market_data_per_second: 100 },
         supported_order_types: [...SUPPORTED_ORDER_TYPES],
         supported_tif: [...SUPPORTED_TIF],
+        production_profiles: {
+          realtime: true,
+          autonomous: false,
+        },
         realtime_contract: transportMode === "streamable_http"
           ? {
               transport_mode: "streamable_http",

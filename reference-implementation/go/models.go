@@ -17,9 +17,10 @@ type capabilitiesResponse struct {
 	Profiles            map[string]string `json:"profiles"`
 	VendorExtensions    any               `json:"vendor_extensions"`
 	RateLimits          map[string]int    `json:"rate_limits"`
-	SupportedOrderTypes []string          `json:"supported_order_types"`
-	SupportedTif        []string          `json:"supported_tif"`
-	RealtimeContract    map[string]any    `json:"realtime_contract,omitempty"`
+	SupportedOrderTypes  []string          `json:"supported_order_types"`
+	SupportedTif         []string          `json:"supported_tif"`
+	ProductionProfiles   map[string]bool   `json:"production_profiles"`
+	RealtimeContract     map[string]any    `json:"realtime_contract,omitempty"`
 }
 
 type accountSummaryResponse struct {

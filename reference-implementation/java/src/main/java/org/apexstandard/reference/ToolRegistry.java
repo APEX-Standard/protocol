@@ -46,6 +46,9 @@ final class ToolRegistry {
         registerPositionTools(tools);
         registerMarketTools(tools);
         registerRiskTools(tools);
+        registerFxTools(tools);
+        registerCfdTools(tools);
+        registerCryptoTools(tools);
 
         return tools;
     }
@@ -127,6 +130,7 @@ final class ToolRegistry {
                     Map.of("orders_per_second", 10, "market_data_per_second", 100),
                     List.of("market", "limit", "stop", "stop_limit"),
                     List.of("GTC", "IOC", "FOK", "DAY"),
+                    Map.of("realtime", true, "autonomous", false),
                     realtimeContract
                 );
             }
@@ -612,6 +616,329 @@ final class ToolRegistry {
         );
     }
 
+    private void registerFxTools(Map<String, ToolDefinition> tools) {
+        registerTool(
+            tools,
+            "apex.fx.rollover",
+            "Query swap/rollover rates for an FX instrument. Rates are expressed in account currency per lot per night.",
+            schema.objectSchema((props, req) -> {
+                schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)", true);
+                schema.stringProp(props, req, "as_of", "ISO8601 timestamp — defaults to now", false);
+            }),
+            args -> {
+                String instrumentId = argStr(args, "instrument_id", "");
+                if (!ReferenceTradingState.INSTRUMENT_ID.equals(instrumentId)) {
+                    return apexError("APEX_4010", "validation", "Unknown instrument");
+                }
+
+                return new FxRolloverResponse(
+                    ReferenceTradingState.INSTRUMENT_ID,
+                    ReferenceTradingState.BROKER_SYMBOL,
+                    -0.5,
+                    0.3,
+                    "USD",
+                    "lot",
+                    100000,
+                    "Wednesday",
+                    nextRolloverTime(),
+                    now()
+                );
+            }
+        );
+
+        registerTool(
+            tools,
+            "apex.fx.exposure",
+            "Net currency exposure across open FX positions. Critical for agents managing portfolio-level currency risk.",
+            schema.objectSchema((props, req) -> {
+                schema.stringProp(props, req, "account_id", "Trading account ID", true);
+                schema.stringProp(props, req, "base_currency", "Denominate all exposures in this currency", true);
+            }),
+            args -> {
+                String accountId = argStr(args, "account_id", "");
+                if (accountId.isEmpty()) {
+                    return apexError("APEX_4011", "validation", "account_id is required");
+                }
+                String baseCurrency = argStr(args, "base_currency", "USD");
+
+                // Compute EUR exposure from current positions
+                var positionsResponse = state.positionsResponse();
+                var positions = positionsResponse.positions();
+
+                long eurNetUnits = 0;
+                List<String> contributingPositions = new java.util.ArrayList<>();
+
+                for (var pos : positions) {
+                    if (ReferenceTradingState.INSTRUMENT_ID.equals(pos.instrument_id())) {
+                        int qty = pos.quantity();
+                        if ("buy".equals(pos.side())) {
+                            eurNetUnits += qty;
+                        } else {
+                            eurNetUnits -= qty;
+                        }
+                        contributingPositions.add(pos.position_id());
+                    }
+                }
+
+                double rate = 1.0875;
+                double valueInBase = "EUR".equals(baseCurrency) ? eurNetUnits : eurNetUnits * rate;
+                String netDirection = eurNetUnits > 0 ? "long" : eurNetUnits < 0 ? "short" : "flat";
+
+                return new FxExposureResponse(
+                    accountId,
+                    baseCurrency,
+                    List.of(new ExposureEntry(
+                        "EUR",
+                        eurNetUnits,
+                        netDirection,
+                        valueInBase,
+                        List.copyOf(contributingPositions)
+                    )),
+                    Math.abs(valueInBase),
+                    now()
+                );
+            }
+        );
+
+        registerTool(
+            tools,
+            "apex.fx.conversion",
+            "Real-time cross-currency conversion rate. Used by agents to calculate P&L in a target currency.",
+            schema.objectSchema((props, req) -> {
+                schema.stringProp(props, req, "from_currency", "Source currency code (e.g. EUR)", true);
+                schema.stringProp(props, req, "to_currency", "Target currency code (e.g. USD)", true);
+                schema.numberProp(props, req, "amount", "Amount to convert", true);
+            }),
+            args -> {
+                String fromCurrency = argStr(args, "from_currency", "");
+                String toCurrency = argStr(args, "to_currency", "");
+                double amount = argDouble(args, "amount", 0);
+
+                if (fromCurrency.isEmpty() || toCurrency.isEmpty()) {
+                    return apexError("APEX_4011", "validation", "from_currency, to_currency, and amount are all required");
+                }
+
+                double midRate = 1.0875;
+                double rate;
+
+                if (fromCurrency.equals(toCurrency)) {
+                    rate = 1.0;
+                } else if ("EUR".equals(fromCurrency) && "USD".equals(toCurrency)) {
+                    rate = midRate;
+                } else if ("USD".equals(fromCurrency) && "EUR".equals(toCurrency)) {
+                    rate = 1.0 / midRate;
+                } else {
+                    return apexError("APEX_4010", "validation", "Unsupported currency pair");
+                }
+
+                return new FxConversionResponse(
+                    fromCurrency,
+                    toCurrency,
+                    Math.round(rate * 10000000.0) / 10000000.0,
+                    Math.round(amount * rate * 100.0) / 100.0,
+                    now()
+                );
+            }
+        );
+    }
+
+    private void registerCfdTools(Map<String, ToolDefinition> tools) {
+        registerTool(
+            tools,
+            "apex.cfd.corporate_actions",
+            "Query upcoming corporate actions for CFD instruments. Reference implementation returns an empty array.",
+            schema.objectSchema((props, req) -> {
+                schema.stringProp(props, req, "account_id", "Trading account ID", true);
+                schema.stringProp(props, req, "instrument_id", "Filter by APEX canonical instrument ID", false);
+                schema.stringProp(props, req, "from", "ISO8601 start date", false);
+                schema.stringProp(props, req, "to", "ISO8601 end date", false);
+            }),
+            args -> {
+                String accountId = argStr(args, "account_id", "");
+                if (accountId.isEmpty()) {
+                    return apexError("APEX_4011", "validation", "account_id is required");
+                }
+                return new CfdCorporateActionsResponse(List.of());
+            }
+        );
+
+        registerTool(
+            tools,
+            "apex.cfd.dividend_adjustment",
+            "Query dividend adjustments for CFD positions. Reference implementation returns an empty array.",
+            schema.objectSchema((props, req) -> {
+                schema.stringProp(props, req, "account_id", "Trading account ID", true);
+                schema.stringProp(props, req, "status", "Filter by status (default: all)", false);
+                schema.stringProp(props, req, "from", "ISO8601 start date", false);
+                schema.stringProp(props, req, "to", "ISO8601 end date", false);
+            }),
+            args -> {
+                String accountId = argStr(args, "account_id", "");
+                if (accountId.isEmpty()) {
+                    return apexError("APEX_4011", "validation", "account_id is required");
+                }
+                return new CfdDividendAdjustmentResponse(List.of());
+            }
+        );
+    }
+
+    private void registerCryptoTools(Map<String, ToolDefinition> tools) {
+        final String PERP_INSTRUMENT_ID = "APEX:CRYPTO:PERP:BTCUSDT";
+        final String PERP_BROKER_SYMBOL = "BTCUSDT";
+
+        registerTool(
+            tools,
+            "apex.crypto.funding_rate",
+            "Query funding rate for a perpetual instrument. Returns simulated data for BTCUSDT.",
+            schema.objectSchema((props, req) -> {
+                schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:CRYPTO:PERP:BTCUSDT)", true);
+            }),
+            args -> {
+                String instrumentId = argStr(args, "instrument_id", "");
+                if (!PERP_INSTRUMENT_ID.equals(instrumentId)) {
+                    return apexError("APEX_4010", "validation", "Unknown instrument");
+                }
+
+                long[] funding = nextFundingTime();
+                String fundingTimeStr = Instant.ofEpochMilli(funding[0]).toString();
+                long countdown = funding[1];
+
+                return new CryptoFundingRateResponse(
+                    PERP_INSTRUMENT_ID,
+                    PERP_BROKER_SYMBOL,
+                    0.0001,
+                    0.1095,
+                    0.00012,
+                    8,
+                    fundingTimeStr,
+                    countdown,
+                    50000.00,
+                    50050.00,
+                    now()
+                );
+            }
+        );
+
+        registerTool(
+            tools,
+            "apex.crypto.liquidation_estimate",
+            "Estimate liquidation price for a perpetual position based on leverage and margin mode.",
+            schema.objectSchema((props, req) -> {
+                schema.stringProp(props, req, "account_id", "Trading account ID", true);
+                schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:CRYPTO:PERP:BTCUSDT)", true);
+                schema.stringProp(props, req, "side", "Position side: buy or sell", true);
+                schema.numberProp(props, req, "quantity", "Position quantity", true);
+                schema.numberProp(props, req, "leverage", "Leverage multiplier", true);
+                schema.stringProp(props, req, "margin_mode", "Margin mode: cross or isolated", true);
+                schema.numberProp(props, req, "entry_price", "Entry price", true);
+            }),
+            args -> {
+                String instrumentId = argStr(args, "instrument_id", "");
+                if (!PERP_INSTRUMENT_ID.equals(instrumentId)) {
+                    return apexError("APEX_4010", "validation", "Unknown instrument");
+                }
+
+                String side = argStr(args, "side", "buy");
+                double quantity = argDouble(args, "quantity", 0);
+                double leverage = argDouble(args, "leverage", 1);
+                double entryPrice = argDouble(args, "entry_price", 0);
+
+                double marginRequired = (entryPrice * quantity) / leverage;
+                double maintenanceMargin = marginRequired / 2;
+
+                double liquidationPrice;
+                if ("buy".equals(side)) {
+                    liquidationPrice = entryPrice * (1 - (1.0 / leverage) * 0.95);
+                } else {
+                    liquidationPrice = entryPrice * (1 + (1.0 / leverage) * 0.95);
+                }
+                liquidationPrice = Math.round(liquidationPrice * 100.0) / 100.0;
+
+                double distancePct = Math.round(Math.abs(entryPrice - liquidationPrice) / entryPrice * 100.0 * 100.0) / 100.0;
+
+                return new CryptoLiquidationEstimateResponse(
+                    PERP_INSTRUMENT_ID,
+                    side,
+                    entryPrice,
+                    liquidationPrice,
+                    Math.round(marginRequired * 100.0) / 100.0,
+                    Math.round(maintenanceMargin * 100.0) / 100.0,
+                    "USDT",
+                    distancePct,
+                    List.of()
+                );
+            }
+        );
+
+        registerTool(
+            tools,
+            "apex.crypto.transfer",
+            "Transfer funds between wallets (spot, futures, funding). Reference implementation simulates instant completion.",
+            schema.objectSchema((props, req) -> {
+                schema.stringProp(props, req, "account_id", "Trading account ID", true);
+                schema.enumProp(props, req, "from_wallet", "Source wallet", true, null, "spot", "futures", "funding");
+                schema.enumProp(props, req, "to_wallet", "Destination wallet", true, null, "spot", "futures", "funding");
+                schema.stringProp(props, req, "currency", "Currency to transfer (e.g. USDT)", true);
+                schema.numberProp(props, req, "amount", "Amount to transfer", true);
+            }),
+            args -> {
+                String accountId = argStr(args, "account_id", "");
+                String fromWallet = argStr(args, "from_wallet", "");
+                String toWallet = argStr(args, "to_wallet", "");
+                String currency = argStr(args, "currency", "");
+                double amount = argDouble(args, "amount", 0);
+
+                if (accountId.isEmpty() || fromWallet.isEmpty() || toWallet.isEmpty() || currency.isEmpty()) {
+                    return apexError("APEX_4011", "validation", "All fields are required: account_id, from_wallet, to_wallet, currency, amount");
+                }
+
+                if (fromWallet.equals(toWallet)) {
+                    return apexError("APEX_4011", "validation", "from_wallet and to_wallet must be different");
+                }
+
+                return new CryptoTransferResponse(
+                    UUID.randomUUID().toString(),
+                    fromWallet,
+                    toWallet,
+                    currency,
+                    amount,
+                    "completed",
+                    null,
+                    now()
+                );
+            }
+        );
+    }
+
+    /**
+     * Compute the next 8-hour funding boundary (00:00, 08:00, 16:00 UTC).
+     * Returns [epochMillis, countdownSeconds].
+     */
+    private static long[] nextFundingTime() {
+        Instant now = Instant.now();
+        java.time.ZonedDateTime utcNow = now.atZone(java.time.ZoneOffset.UTC);
+        int currentHour = utcNow.getHour();
+        int nextBoundary = ((currentHour / 8) + 1) * 8;
+        java.time.ZonedDateTime next;
+        if (nextBoundary >= 24) {
+            next = utcNow.plusDays(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+        } else {
+            next = utcNow.withHour(nextBoundary).withMinute(0).withSecond(0).withNano(0);
+        }
+        long countdownSeconds = Math.max(0, java.time.Duration.between(now, next.toInstant()).getSeconds());
+        return new long[]{ next.toInstant().toEpochMilli(), countdownSeconds };
+    }
+
+    private static String nextRolloverTime() {
+        Instant now = Instant.now();
+        java.time.ZonedDateTime utcNow = now.atZone(java.time.ZoneOffset.UTC);
+        java.time.ZonedDateTime today21 = utcNow.withHour(21).withMinute(0).withSecond(0).withNano(0);
+        if (!today21.toInstant().isAfter(now)) {
+            today21 = today21.plusDays(1);
+        }
+        return today21.toInstant().toString();
+    }
+
     private void registerTool(
         Map<String, ToolDefinition> tools,
         String name,
@@ -627,6 +954,10 @@ final class ToolRegistry {
         boolean readOnly = name.startsWith("apex.account.")
             || name.startsWith("apex.market.")
             || name.startsWith("apex.risk.")
+            || name.startsWith("apex.fx.")
+            || name.startsWith("apex.cfd.")
+            || "apex.crypto.funding_rate".equals(name)
+            || "apex.crypto.liquidation_estimate".equals(name)
             || "apex.order.status".equals(name)
             || "apex.session.capabilities".equals(name)
             || "apex.session.heartbeat".equals(name)

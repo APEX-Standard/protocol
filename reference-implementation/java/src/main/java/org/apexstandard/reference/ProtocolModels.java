@@ -33,6 +33,7 @@ final class ProtocolModels {
         Map<String, Integer> rate_limits,
         List<String> supported_order_types,
         List<String> supported_tif,
+        Map<String, Boolean> production_profiles,
         Object realtime_contract
     ) {
     }
@@ -185,6 +186,49 @@ final class ProtocolModels {
     ) {
     }
 
+    // FX profile records
+
+    record FxRolloverResponse(
+        String instrument_id,
+        String broker_symbol,
+        double rollover_long,
+        double rollover_short,
+        String rollover_currency,
+        String rollover_per,
+        int lot_size,
+        String triple_rollover_day,
+        String next_rollover_time,
+        String as_of
+    ) {
+    }
+
+    record ExposureEntry(
+        String currency,
+        long net_units,
+        String net_direction,
+        double value_in_base,
+        List<String> contributing_positions
+    ) {
+    }
+
+    record FxExposureResponse(
+        String account_id,
+        String base_currency,
+        List<ExposureEntry> exposures,
+        double total_gross_exposure,
+        String as_of
+    ) {
+    }
+
+    record FxConversionResponse(
+        String from_currency,
+        String to_currency,
+        double rate,
+        double converted_amount,
+        String timestamp
+    ) {
+    }
+
     record PositionCloseResponse(
         String order_id,
         String position_id,
@@ -193,6 +237,56 @@ final class ProtocolModels {
         double fill_quantity,
         double remaining_quantity,
         String closed_at
+    ) {
+    }
+
+    // CFD profile records
+
+    record CfdCorporateActionsResponse(List<Object> corporate_actions) {
+    }
+
+    record CfdDividendAdjustmentResponse(List<Object> adjustments) {
+    }
+
+    // Crypto profile records
+
+    record CryptoFundingRateResponse(
+        String instrument_id,
+        String broker_symbol,
+        double current_rate,
+        double current_rate_annualised,
+        double predicted_rate,
+        int funding_interval_hours,
+        String next_funding_time,
+        long countdown_seconds,
+        double index_price,
+        double mark_price,
+        String timestamp
+    ) {
+    }
+
+    record CryptoLiquidationEstimateResponse(
+        String instrument_id,
+        String side,
+        double entry_price,
+        double liquidation_price,
+        double margin_required,
+        double maintenance_margin,
+        String margin_currency,
+        double distance_pct,
+        List<Object> warnings
+    ) {
+    }
+
+    record CryptoTransferResponse(
+        String transfer_id,
+        String from_wallet,
+        String to_wallet,
+        String currency,
+        double amount,
+        String status,
+        Object rejection_reason,
+        String completed_at
     ) {
     }
 }

@@ -13,6 +13,9 @@ func registerAccountTools(s *server.MCPServer) {
 			mcp.WithDescription("Current account state — balances, margin utilisation, equity."),
 			mcp.WithString("account_id", mcp.Required()),
 			mcp.WithString("currency", mcp.Description("Response currency. Defaults to account base currency.")),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 		),
 		handleAccountSummary,
 	)
@@ -23,6 +26,9 @@ func registerAccountTools(s *server.MCPServer) {
 			mcp.WithString("account_id", mcp.Required()),
 			mcp.WithString("instrument_id", mcp.Description("APEX canonical instrument ID (e.g. APEX:FX:EURUSD)")),
 			mcp.WithString("profile", mcp.Description("Asset class profile filter")),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 		),
 		handleAccountPositions,
 	)
@@ -33,6 +39,9 @@ func registerAccountTools(s *server.MCPServer) {
 			mcp.WithString("account_id", mcp.Required()),
 			mcp.WithString("status", mcp.Description("Filter by order status"), mcp.Enum("working", "partially_filled", "filled", "cancelled", "rejected", "expired", "all")),
 			mcp.WithString("instrument_id", mcp.Description("APEX canonical instrument ID (e.g. APEX:FX:EURUSD)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 		),
 		handleAccountOrders,
 	)
@@ -46,6 +55,9 @@ func registerAccountTools(s *server.MCPServer) {
 			mcp.WithString("event_type", mcp.Description("Event type filter"), mcp.Enum("trade", "funding", "cash", "corporate_action", "all")),
 			mcp.WithNumber("limit", mcp.Description("Maximum number of events to return (1-500, default 100)")),
 			mcp.WithString("cursor", mcp.Description("Pagination cursor")),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 		),
 		handleAccountHistory,
 	)

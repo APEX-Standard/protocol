@@ -203,6 +203,66 @@ try {
   assertApexError(badClose, "APEX_4011");
   printCheck("position close rejects unknown position");
 
+  // --- Behavioral conformance: core tools ---
+
+  const positions = await callTool(client, "apex.account.positions", {
+    account_id: "ACC_12345",
+  });
+  // Response may have positions at top level or nested
+  const posArray = positions.positions ?? positions;
+  assert(Array.isArray(posArray) || typeof positions === "object", "Expected positions data");
+  printCheck("account positions returned");
+
+  const orders = await callTool(client, "apex.account.orders", {
+    account_id: "ACC_12345",
+    status: "all",
+  });
+  const ordArray = orders.orders ?? orders;
+  assert(Array.isArray(ordArray) || typeof orders === "object", "Expected orders data");
+  printCheck("account orders returned");
+
+  const history = await callTool(client, "apex.account.history", {
+    account_id: "ACC_12345",
+    from: "2025-01-01T00:00:00Z",
+    to: new Date().toISOString(),
+    event_type: "all",
+    limit: 10,
+  });
+  assert(Array.isArray(history.events), "Expected events array");
+  printCheck("account history returned");
+
+  // Use the market order placed earlier in the position close test
+  const orderStatus = await callTool(client, "apex.order.status", {
+    account_id: "ACC_12345",
+    order_id: marketOrderForClose.order_id,
+  });
+  assert(orderStatus.order_id, "Expected order_id in status response");
+  assert(orderStatus.status, "Expected status field");
+  printCheck("order status returned");
+
+  const snapshot = await callTool(client, "apex.market.snapshot", {
+    instrument_id: "APEX:FX:EURUSD",
+    timeframe: "M1",
+    from: "2025-01-01T00:00:00Z",
+    limit: 10,
+  });
+  assert(snapshot.instrument_id === "APEX:FX:EURUSD", "Expected EURUSD snapshot");
+  assert(Array.isArray(snapshot.candles), "Expected candles array");
+  printCheck("market snapshot returned");
+
+  const searchResults = await callTool(client, "apex.market.search", {
+    query: "EUR",
+    limit: 10,
+  });
+  assert(Array.isArray(searchResults.instruments) || Array.isArray(searchResults.results), "Expected instruments/results array");
+  printCheck("market search returned");
+
+  const riskLimits = await callTool(client, "apex.risk.limits", {
+    account_id: "ACC_12345",
+  });
+  assert(typeof riskLimits.kill_switch_active === "boolean" || riskLimits.kill_switch_active !== undefined, "Expected kill_switch_active");
+  printCheck("risk limits returned");
+
   // --- Negative validation tests ---
   // These tests accept either APEX errors (in-band) or MCP SDK validation errors (thrown).
   // TypeScript uses Zod for input validation → MCP SDK rejects before handler.
@@ -258,33 +318,73 @@ try {
   assert(Math.max(...heartbeatTimes) < 1000, `Heartbeat max latency ${Math.max(...heartbeatTimes)}ms exceeds 1000ms`);
   printCheck(`heartbeat latency: avg=${Math.round(avgLatency)}ms, max=${Math.max(...heartbeatTimes)}ms`);
 
-  // --- FX profile tools (optional — not all implementations register profile tools in stdio mode) ---
+  // --- FX profile tools ---
 
-  async function tryProfileTool(toolName, args, checks, label) {
-    try {
-      const result = await callTool(client, toolName, args);
-      checks(result);
-      printCheck(label);
-    } catch (e) {
-      // Tool not found in this mode — skip gracefully
-      printCheck(`${label} (skipped — tool not available)`);
-    }
-  }
+  const rollover = await callTool(client, "apex.fx.rollover", { instrument_id: "APEX:FX:EURUSD" });
+  assert.equal(rollover.instrument_id, "APEX:FX:EURUSD", "Expected EURUSD rollover");
+  assert(typeof rollover.rollover_long === "number", "Expected numeric rollover_long");
+  assert(typeof rollover.rollover_short === "number", "Expected numeric rollover_short");
+  assert(rollover.rollover_currency, "Expected rollover_currency");
+  printCheck("FX rollover rates returned");
 
-  await tryProfileTool("apex.fx.rollover", { instrument_id: "APEX:FX:EURUSD" }, (r) => {
-    assert(r.instrument_id === "APEX:FX:EURUSD", "Expected EURUSD rollover");
-    assert(typeof r.rollover_long === "number", "Expected numeric rollover_long");
-    assert(typeof r.rollover_short === "number", "Expected numeric rollover_short");
-  }, "FX rollover rates returned");
+  const exposure = await callTool(client, "apex.fx.exposure", { account_id: "ACC_12345", base_currency: "USD" });
+  assert(Array.isArray(exposure.exposures), "Expected exposures array");
+  assert(exposure.as_of, "Expected as_of timestamp");
+  printCheck("FX currency exposure returned");
 
-  await tryProfileTool("apex.fx.exposure", { account_id: "ACC_12345", base_currency: "USD" }, (r) => {
-    assert(Array.isArray(r.exposures), "Expected exposures array");
-  }, "FX currency exposure returned");
+  const conversion = await callTool(client, "apex.fx.conversion", { from_currency: "EUR", to_currency: "USD", amount: 1000 });
+  assert(typeof conversion.rate === "number", "Expected numeric conversion rate");
+  assert(typeof conversion.converted_amount === "number", "Expected numeric converted_amount");
+  assert(conversion.converted_amount > 0, "Expected positive converted_amount");
+  printCheck("FX conversion returned");
 
-  await tryProfileTool("apex.fx.conversion", { from_currency: "EUR", to_currency: "USD", amount: 1000 }, (r) => {
-    assert(typeof r.rate === "number", "Expected numeric conversion rate");
-    assert(typeof r.converted_amount === "number", "Expected numeric converted_amount");
-  }, "FX conversion returned");
+  // --- CFD profile tools ---
+
+  const corpActions = await callTool(client, "apex.cfd.corporate_actions", { account_id: "ACC_12345" });
+  assert(Array.isArray(corpActions.corporate_actions), "Expected corporate_actions array");
+  printCheck("CFD corporate actions returned");
+
+  const dividends = await callTool(client, "apex.cfd.dividend_adjustment", { account_id: "ACC_12345" });
+  assert(Array.isArray(dividends.adjustments), "Expected adjustments array");
+  printCheck("CFD dividend adjustments returned");
+
+  // --- Crypto profile tools ---
+
+  const fundingRate = await callTool(client, "apex.crypto.funding_rate", { instrument_id: "APEX:CRYPTO:PERP:BTCUSDT" });
+  assert.equal(fundingRate.instrument_id, "APEX:CRYPTO:PERP:BTCUSDT", "Expected BTCUSDT funding rate");
+  assert(typeof fundingRate.current_rate === "number", "Expected numeric current_rate");
+  assert(typeof fundingRate.funding_interval_hours === "number", "Expected numeric funding_interval_hours");
+  assert(typeof fundingRate.index_price === "number", "Expected numeric index_price");
+  assert(typeof fundingRate.mark_price === "number", "Expected numeric mark_price");
+  printCheck("Crypto funding rate returned");
+
+  const liqEstimate = await callTool(client, "apex.crypto.liquidation_estimate", {
+    account_id: "ACC_12345",
+    instrument_id: "APEX:CRYPTO:PERP:BTCUSDT",
+    side: "buy",
+    quantity: 1.0,
+    leverage: 10,
+    margin_mode: "isolated",
+    entry_price: 50000.00,
+  });
+  assert(typeof liqEstimate.liquidation_price === "number", "Expected numeric liquidation_price");
+  assert(liqEstimate.liquidation_price < 50000, "Expected liquidation below entry for long");
+  assert(typeof liqEstimate.margin_required === "number", "Expected numeric margin_required");
+  assert(typeof liqEstimate.distance_pct === "number", "Expected numeric distance_pct");
+  printCheck("Crypto liquidation estimate returned");
+
+  const transfer = await callTool(client, "apex.crypto.transfer", {
+    account_id: "ACC_12345",
+    from_wallet: "spot",
+    to_wallet: "futures",
+    currency: "USDT",
+    amount: 1000.00,
+  });
+  assert(transfer.transfer_id, "Expected transfer_id");
+  assert.equal(transfer.from_wallet, "spot", "Expected from_wallet spot");
+  assert.equal(transfer.to_wallet, "futures", "Expected to_wallet futures");
+  assert(transfer.status === "completed" || transfer.status === "pending", "Expected completed or pending status");
+  printCheck("Crypto wallet transfer returned");
 
   console.log(`Smoke suite passed for ${target.label}`);
 } catch (error) {

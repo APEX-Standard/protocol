@@ -28,6 +28,9 @@ func newServerWithState(s *referenceState, httpMode bool) *server.MCPServer {
 	registerOrderToolsWithState(srv, s)
 	registerMarketTools(srv)
 	registerRiskToolsWithState(srv, s)
+	registerFxToolsWithState(srv, s)
+	registerCfdToolsWithState(srv, s)
+	registerCryptoToolsWithState(srv, s)
 	if httpMode {
 		registerForceCandeCloseToolWithState(srv, s)
 		registerStopTicksToolWithState(srv, s)

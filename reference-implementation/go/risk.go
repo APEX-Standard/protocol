@@ -15,6 +15,9 @@ func registerRiskToolsWithState(s *server.MCPServer, st *referenceState) {
 	s.AddTool(
 		mcp.NewTool("apex.risk.check",
 			mcp.WithDescription("Pre-trade margin and exposure check. Call before placing large orders."),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 			mcp.WithString("account_id", mcp.Required()),
 			mcp.WithObject("order", mcp.Required(), mcp.Description("Order to check"),
 				mcp.Properties(map[string]any{
@@ -49,6 +52,9 @@ func registerRiskToolsWithState(s *server.MCPServer, st *referenceState) {
 	s.AddTool(
 		mcp.NewTool("apex.risk.limits",
 			mcp.WithDescription("Current account-level risk limits and utilisation."),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 			mcp.WithString("account_id", mcp.Required()),
 		),
 		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

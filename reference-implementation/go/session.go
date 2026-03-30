@@ -29,6 +29,9 @@ func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState, httpM
 			mcp.WithString("token_type", mcp.Description("Token type: jwt or oauth2"), mcp.Enum("jwt", "oauth2")),
 			mcp.WithString("account_id", mcp.Description("Optional — broker may derive from token")),
 			mcp.WithString("hub_session_id", mcp.Description("Optional session reference from caller")),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 		),
 		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := request.GetArguments()
@@ -57,6 +60,9 @@ func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState, httpM
 	s.AddTool(
 		mcp.NewTool("apex.session.capabilities",
 			mcp.WithDescription("Query the full capability manifest of this broker implementation."),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 		),
 		func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			var realtimeContract map[string]any
@@ -95,9 +101,10 @@ func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState, httpM
 				Profiles:            map[string]string{"fx": serverVersion},
 				VendorExtensions:    nil,
 				RateLimits:          map[string]int{"orders_per_second": 10, "market_data_per_second": 100},
-				SupportedOrderTypes: []string{"market", "limit", "stop", "stop_limit"},
-				SupportedTif:        []string{"GTC", "IOC", "FOK", "DAY"},
-				RealtimeContract:    realtimeContract,
+				SupportedOrderTypes:  []string{"market", "limit", "stop", "stop_limit"},
+				SupportedTif:         []string{"GTC", "IOC", "FOK", "DAY"},
+				ProductionProfiles:   map[string]bool{"realtime": true, "autonomous": false},
+				RealtimeContract:     realtimeContract,
 			})
 		},
 	)
@@ -106,6 +113,9 @@ func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState, httpM
 		mcp.NewTool("apex.session.heartbeat",
 			mcp.WithDescription("Keep-alive ping. Hub marks session degraded if response exceeds 500ms."),
 			mcp.WithString("timestamp", mcp.Required(), mcp.Description("ISO8601 timestamp")),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 		),
 		handleSessionHeartbeat,
 	)
@@ -114,12 +124,15 @@ func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState, httpM
 		mcp.NewTool("apex.session.acknowledge",
 			mcp.WithDescription("Acknowledge receipt of events through last_event_id, allowing the broker to trim the replay buffer."),
 			mcp.WithString("last_event_id", mcp.Required(), mcp.Description("The ID of the last event the client has successfully processed")),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 		),
 		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := request.GetArguments()
 			lastEventID := strParam(args, "last_event_id", "")
 			if lastEventID == "" {
-				return jsonResult(apexError("APEX_4000", "validation", "last_event_id is required"))
+				return jsonResult(apexError("APEX_4011", "validation", "last_event_id is required"))
 			}
 			if st.replayBuffer == nil {
 				// No-op in stdio mode (no replay buffer)

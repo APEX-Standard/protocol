@@ -15,6 +15,9 @@ func registerOrderToolsWithState(s *server.MCPServer, st *referenceState) {
 	s.AddTool(
 		mcp.NewTool("apex.order.place",
 			mcp.WithDescription("Unified order entry across all asset classes. Profile-composable."),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithString("account_id", mcp.Required()),
 			mcp.WithObject("order", mcp.Required(), mcp.Description("Order specification"),
 				mcp.Properties(map[string]any{
@@ -71,6 +74,9 @@ func registerOrderToolsWithState(s *server.MCPServer, st *referenceState) {
 	s.AddTool(
 		mcp.NewTool("apex.order.modify",
 			mcp.WithDescription("Amend a working order or an open position's protection settings."),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithString("account_id", mcp.Required()),
 			mcp.WithString("target_type", mcp.Required(), mcp.Enum("order", "position")),
 			mcp.WithString("target_id", mcp.Required()),
@@ -116,6 +122,9 @@ func registerOrderToolsWithState(s *server.MCPServer, st *referenceState) {
 	s.AddTool(
 		mcp.NewTool("apex.order.cancel",
 			mcp.WithDescription("Cancel a working or partially filled order."),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithIdempotentHintAnnotation(true),
 			mcp.WithString("account_id", mcp.Required()),
 			mcp.WithString("order_id", mcp.Required()),
 			mcp.WithString("reason", mcp.Description("Agent-provided reason for audit trail")),
@@ -135,6 +144,9 @@ func registerOrderToolsWithState(s *server.MCPServer, st *referenceState) {
 	s.AddTool(
 		mcp.NewTool("apex.order.status",
 			mcp.WithDescription("Query the current state of a single order."),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 			mcp.WithString("account_id", mcp.Required()),
 			mcp.WithString("order_id", mcp.Required()),
 		),
@@ -150,6 +162,9 @@ func registerOrderToolsWithState(s *server.MCPServer, st *referenceState) {
 	s.AddTool(
 		mcp.NewTool("apex.position.close",
 			mcp.WithDescription("Close an open position fully or partially by executing an opposite-direction market order."),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithString("account_id", mcp.Required()),
 			mcp.WithString("position_id", mcp.Required()),
 			mcp.WithNumber("quantity", mcp.Description("Partial close quantity. If omitted, closes full position.")),

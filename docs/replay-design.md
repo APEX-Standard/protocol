@@ -179,3 +179,11 @@ The event log storage mechanism is an implementation choice:
 - **Durable queue** — Redis, Kafka, or similar. For scaled deployments with shared state across instances.
 
 The protocol does not mandate a storage mechanism. It mandates the behavioral contract: events are retained until acknowledged or max retention is exceeded, replay classifies events and applies gap fill, and the agent re-reads all resources on reconnect.
+
+---
+
+## Related Design Documents
+
+- [Transport Design](transport-design.md) — the HTTP/SSE transport layer on which replay operates, including the `Last-Event-ID` reconnect mechanism and SSE event stream architecture
+- [Session Design](session-design.md) — the session lifecycle that scopes event logs, subscriptions, and replay cursors
+- [Freshness Design](freshness-design.md) — the staleness model that determines when the agent must re-read resources after replay completes

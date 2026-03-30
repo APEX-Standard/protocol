@@ -26,6 +26,9 @@ import { registerAccountTools } from "./tools/account.js";
 import { registerMarketTools } from "./tools/market.js";
 import { registerOrderTools } from "./tools/orders.js";
 import { registerRiskTools } from "./tools/risk.js";
+import { registerFxTools } from "./tools/fx.js";
+import { registerCfdTools } from "./tools/cfd.js";
+import { registerCryptoTools } from "./tools/crypto.js";
 import { registerSessionTools } from "./tools/session.js";
 
 import { z } from "zod";
@@ -90,6 +93,9 @@ async function startStdio() {
   registerOrderTools(server, state);
   registerMarketTools(server, state);
   registerRiskTools(server, state);
+  registerFxTools(server, state);
+  registerCfdTools(server, state);
+  registerCryptoTools(server, state);
 
   await server.connect(new StdioServerTransport());
   console.error(`APEX Protocol Reference Server v${SERVER_VERSION} running`);
@@ -253,6 +259,9 @@ async function startHttp(port: number) {
   registerOrderTools(server, state, emitNotification);
   registerMarketTools(server, state);
   registerRiskTools(server, state);
+  registerFxTools(server, state);
+  registerCfdTools(server, state);
+  registerCryptoTools(server, state);
 
   /* -- Test-only: force candle close ------------------------------- */
 

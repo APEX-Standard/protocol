@@ -292,6 +292,7 @@ pub struct CapabilitiesResponse {
     pub rate_limits: serde_json::Value,
     pub supported_order_types: Vec<String>,
     pub supported_tif: Vec<String>,
+    pub production_profiles: serde_json::Value,
     pub realtime_contract: serde_json::Value,
 }
 
@@ -497,6 +498,76 @@ pub struct RiskCheckResponse {
     pub rejection_reason: Option<String>,
 }
 
+// FX profile input/output models
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct FxRolloverInput {
+    /// APEX canonical instrument ID (e.g. APEX:FX:EURUSD)
+    pub instrument_id: String,
+    /// ISO8601 timestamp — defaults to now
+    #[serde(default)]
+    pub as_of: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FxRolloverResponse {
+    pub instrument_id: String,
+    pub broker_symbol: String,
+    pub rollover_long: f64,
+    pub rollover_short: f64,
+    pub rollover_currency: String,
+    pub rollover_per: String,
+    pub lot_size: i64,
+    pub triple_rollover_day: String,
+    pub next_rollover_time: String,
+    pub as_of: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct FxExposureInput {
+    /// Trading account ID
+    pub account_id: String,
+    /// Denominate all exposures in this currency
+    pub base_currency: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExposureEntry {
+    pub currency: String,
+    pub net_units: i64,
+    pub net_direction: String,
+    pub value_in_base: f64,
+    pub contributing_positions: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FxExposureResponse {
+    pub account_id: String,
+    pub base_currency: String,
+    pub exposures: Vec<ExposureEntry>,
+    pub total_gross_exposure: f64,
+    pub as_of: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct FxConversionInput {
+    /// Source currency code (e.g. EUR)
+    pub from_currency: String,
+    /// Target currency code (e.g. USD)
+    pub to_currency: String,
+    /// Amount to convert
+    pub amount: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FxConversionResponse {
+    pub from_currency: String,
+    pub to_currency: String,
+    pub rate: f64,
+    pub converted_amount: f64,
+    pub timestamp: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct RiskLimitsResponse {
     pub account_id: String,
@@ -508,4 +579,130 @@ pub struct RiskLimitsResponse {
     pub stop_out_level_pct: i64,
     pub restricted_instruments: Vec<serde_json::Value>,
     pub kill_switch_active: bool,
+}
+
+// CFD profile input/output models
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CfdCorporateActionsInput {
+    /// Trading account ID
+    pub account_id: String,
+    /// Filter by APEX canonical instrument ID
+    #[serde(default)]
+    pub instrument_id: Option<String>,
+    /// ISO8601 start date
+    #[serde(default)]
+    pub from: Option<String>,
+    /// ISO8601 end date
+    #[serde(default)]
+    pub to: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CfdCorporateActionsResponse {
+    pub corporate_actions: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CfdDividendAdjustmentInput {
+    /// Trading account ID
+    pub account_id: String,
+    /// Filter by status (default: all)
+    #[serde(default = "default_status_all")]
+    pub status: String,
+    /// ISO8601 start date
+    #[serde(default)]
+    pub from: Option<String>,
+    /// ISO8601 end date
+    #[serde(default)]
+    pub to: Option<String>,
+}
+
+fn default_status_all() -> String {
+    "all".to_owned()
+}
+
+#[derive(Debug, Serialize)]
+pub struct CfdDividendAdjustmentResponse {
+    pub adjustments: Vec<serde_json::Value>,
+}
+
+// Crypto profile input/output models
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CryptoFundingRateInput {
+    /// APEX canonical instrument ID (e.g. APEX:CRYPTO:PERP:BTCUSDT)
+    pub instrument_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CryptoFundingRateResponse {
+    pub instrument_id: String,
+    pub broker_symbol: String,
+    pub current_rate: f64,
+    pub current_rate_annualised: f64,
+    pub predicted_rate: f64,
+    pub funding_interval_hours: i32,
+    pub next_funding_time: String,
+    pub countdown_seconds: i64,
+    pub index_price: f64,
+    pub mark_price: f64,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CryptoLiquidationEstimateInput {
+    /// Trading account ID
+    pub account_id: String,
+    /// APEX canonical instrument ID (e.g. APEX:CRYPTO:PERP:BTCUSDT)
+    pub instrument_id: String,
+    /// Position side: buy or sell
+    pub side: String,
+    /// Position quantity
+    pub quantity: f64,
+    /// Leverage multiplier
+    pub leverage: f64,
+    /// Margin mode: cross or isolated
+    pub margin_mode: String,
+    /// Entry price
+    pub entry_price: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CryptoLiquidationEstimateResponse {
+    pub instrument_id: String,
+    pub side: String,
+    pub entry_price: f64,
+    pub liquidation_price: f64,
+    pub margin_required: f64,
+    pub maintenance_margin: f64,
+    pub margin_currency: String,
+    pub distance_pct: f64,
+    pub warnings: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CryptoTransferInput {
+    /// Trading account ID
+    pub account_id: String,
+    /// Source wallet: spot, futures, or funding
+    pub from_wallet: String,
+    /// Destination wallet: spot, futures, or funding
+    pub to_wallet: String,
+    /// Currency to transfer (e.g. USDT)
+    pub currency: String,
+    /// Amount to transfer
+    pub amount: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CryptoTransferResponse {
+    pub transfer_id: String,
+    pub from_wallet: String,
+    pub to_wallet: String,
+    pub currency: String,
+    pub amount: f64,
+    pub status: String,
+    pub rejection_reason: Option<String>,
+    pub completed_at: String,
 }

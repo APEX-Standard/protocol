@@ -12,7 +12,7 @@ use axum::Router;
 use serde_json::{json, Value};
 use tokio::sync::{broadcast, Mutex};
 
-use crate::helpers::{apex_error, hours_from_now, now_iso};
+use crate::helpers::{apex_error, hours_from_now, next_funding_time, next_rollover_time, now_iso};
 use crate::models::*;
 use crate::notifications;
 use crate::replay_buffer::{ReplayBuffer, ReplayItem, ReplayResult};
@@ -534,6 +534,7 @@ async fn dispatch_method(
 fn tools_list() -> Value {
     json!({
         "tools": [
+            // session.authenticate: mutating (creates session), non-destructive, idempotent
             tool_desc("apex.session.authenticate", "Establish an authenticated trading session.", json!({
                 "type": "object",
                 "properties": {
@@ -543,22 +544,26 @@ fn tools_list() -> Value {
                     "hub_session_id": { "type": "string" }
                 },
                 "required": ["token"]
-            })),
+            }), ann_mutating_idempotent()),
+            // session.capabilities: read-only
             tool_desc("apex.session.capabilities", "Query the full capability manifest.", json!({
                 "type": "object", "properties": {}
-            })),
+            }), ann_read_only()),
+            // session.heartbeat: read-only
             tool_desc("apex.session.heartbeat", "Keep-alive ping.", json!({
                 "type": "object",
                 "properties": { "timestamp": { "type": "string" } },
                 "required": ["timestamp"]
-            })),
+            }), ann_read_only()),
+            // session.acknowledge: read-only
             tool_desc("apex.session.acknowledge", "Acknowledge receipt of events through a given event ID.", json!({
                 "type": "object",
                 "properties": {
                     "last_event_id": { "type": "string", "description": "The highest event ID the client has processed" }
                 },
                 "required": ["last_event_id"]
-            })),
+            }), ann_read_only()),
+            // account.summary: read-only
             tool_desc("apex.account.summary", "Current account state.", json!({
                 "type": "object",
                 "properties": {
@@ -566,7 +571,8 @@ fn tools_list() -> Value {
                     "currency": { "type": "string" }
                 },
                 "required": ["account_id"]
-            })),
+            }), ann_read_only()),
+            // account.positions: read-only
             tool_desc("apex.account.positions", "All open positions.", json!({
                 "type": "object",
                 "properties": {
@@ -575,7 +581,8 @@ fn tools_list() -> Value {
                     "profile": { "type": "string" }
                 },
                 "required": ["account_id"]
-            })),
+            }), ann_read_only()),
+            // account.orders: read-only
             tool_desc("apex.account.orders", "Known orders.", json!({
                 "type": "object",
                 "properties": {
@@ -584,7 +591,8 @@ fn tools_list() -> Value {
                     "instrument_id": { "type": "string" }
                 },
                 "required": ["account_id"]
-            })),
+            }), ann_read_only()),
+            // account.history: read-only
             tool_desc("apex.account.history", "Closed trades and funding events.", json!({
                 "type": "object",
                 "properties": {
@@ -596,7 +604,8 @@ fn tools_list() -> Value {
                     "cursor": { "type": "string" }
                 },
                 "required": ["account_id", "from", "to"]
-            })),
+            }), ann_read_only()),
+            // order.place: destructive, non-idempotent
             tool_desc("apex.order.place", "Unified order entry.", json!({
                 "type": "object",
                 "properties": {
@@ -604,7 +613,8 @@ fn tools_list() -> Value {
                     "order": { "type": "object" }
                 },
                 "required": ["account_id", "order"]
-            })),
+            }), ann_destructive()),
+            // order.modify: destructive, non-idempotent
             tool_desc("apex.order.modify", "Amend a working order.", json!({
                 "type": "object",
                 "properties": {
@@ -614,7 +624,8 @@ fn tools_list() -> Value {
                     "modifications": { "type": "object" }
                 },
                 "required": ["account_id", "target_type", "target_id", "modifications"]
-            })),
+            }), ann_destructive()),
+            // order.cancel: destructive, idempotent
             tool_desc("apex.order.cancel", "Cancel a working order.", json!({
                 "type": "object",
                 "properties": {
@@ -623,7 +634,8 @@ fn tools_list() -> Value {
                     "reason": { "type": "string" }
                 },
                 "required": ["account_id", "order_id"]
-            })),
+            }), ann_destructive_idempotent()),
+            // position.close: destructive, non-idempotent
             tool_desc("apex.position.close", "Close an open position fully or partially.", json!({
                 "type": "object",
                 "properties": {
@@ -632,7 +644,8 @@ fn tools_list() -> Value {
                     "quantity": { "type": "number", "description": "Partial close quantity. Omit to close the full position." }
                 },
                 "required": ["account_id", "position_id"]
-            })),
+            }), ann_destructive()),
+            // order.status: read-only
             tool_desc("apex.order.status", "Query order state.", json!({
                 "type": "object",
                 "properties": {
@@ -640,14 +653,16 @@ fn tools_list() -> Value {
                     "order_id": { "type": "string" }
                 },
                 "required": ["account_id", "order_id"]
-            })),
+            }), ann_read_only()),
+            // market.quote: read-only
             tool_desc("apex.market.quote", "Current bid/ask/mid.", json!({
                 "type": "object",
                 "properties": {
                     "instrument_id": { "type": "string" },
                     "broker_symbol": { "type": "string" }
                 }
-            })),
+            }), ann_read_only()),
+            // market.snapshot: read-only
             tool_desc("apex.market.snapshot", "OHLCV candle data.", json!({
                 "type": "object",
                 "properties": {
@@ -658,7 +673,8 @@ fn tools_list() -> Value {
                     "limit": { "type": "integer", "default": 200 }
                 },
                 "required": ["instrument_id", "timeframe", "from"]
-            })),
+            }), ann_read_only()),
+            // market.search: read-only
             tool_desc("apex.market.search", "Discover instruments.", json!({
                 "type": "object",
                 "properties": {
@@ -667,14 +683,16 @@ fn tools_list() -> Value {
                     "limit": { "type": "integer", "default": 20 }
                 },
                 "required": ["query"]
-            })),
+            }), ann_read_only()),
+            // market.details: read-only
             tool_desc("apex.market.details", "Full contract specification.", json!({
                 "type": "object",
                 "properties": {
                     "instrument_id": { "type": "string" }
                 },
                 "required": ["instrument_id"]
-            })),
+            }), ann_read_only()),
+            // risk.check: read-only
             tool_desc("apex.risk.check", "Pre-trade margin check.", json!({
                 "type": "object",
                 "properties": {
@@ -682,14 +700,16 @@ fn tools_list() -> Value {
                     "order": { "type": "object" }
                 },
                 "required": ["account_id", "order"]
-            })),
+            }), ann_read_only()),
+            // risk.limits: read-only
             tool_desc("apex.risk.limits", "Account risk limits.", json!({
                 "type": "object",
                 "properties": {
                     "account_id": { "type": "string" }
                 },
                 "required": ["account_id"]
-            })),
+            }), ann_read_only()),
+            // reference.test tools: mutating, non-destructive, idempotent (fault injection)
             tool_desc("reference.test.set_realtime_state", "Fault injection for testing.", json!({
                 "type": "object",
                 "properties": {
@@ -699,27 +719,137 @@ fn tools_list() -> Value {
                     "kill_switch_active": { "type": "boolean" },
                     "partial_fill_next_order": { "type": "boolean" }
                 }
-            })),
+            }), ann_mutating_idempotent()),
             tool_desc("reference.test.force_candle_close", "Force-close a partial candle.", json!({
                 "type": "object",
                 "properties": {
                     "timeframe": { "type": "string", "enum": ["M1", "M5", "H1"] }
                 },
                 "required": ["timeframe"]
-            })),
+            }), ann_mutating_idempotent()),
             tool_desc("reference.test.stop_ticks", "Stop the tick engine. Test-only tool for deterministic event counts.", json!({
                 "type": "object",
                 "properties": {}
-            })),
+            }), ann_mutating_idempotent()),
+            // fx.rollover: read-only
+            tool_desc("apex.fx.rollover", "Query swap/rollover rates for an FX instrument.", json!({
+                "type": "object",
+                "properties": {
+                    "instrument_id": { "type": "string", "description": "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)" },
+                    "as_of": { "type": "string", "description": "ISO8601 timestamp — defaults to now" }
+                },
+                "required": ["instrument_id"]
+            }), ann_read_only()),
+            // fx.exposure: read-only
+            tool_desc("apex.fx.exposure", "Net currency exposure across open FX positions.", json!({
+                "type": "object",
+                "properties": {
+                    "account_id": { "type": "string", "description": "Trading account ID" },
+                    "base_currency": { "type": "string", "description": "Denominate all exposures in this currency" }
+                },
+                "required": ["account_id", "base_currency"]
+            }), ann_read_only()),
+            // fx.conversion: read-only
+            tool_desc("apex.fx.conversion", "Real-time cross-currency conversion rate.", json!({
+                "type": "object",
+                "properties": {
+                    "from_currency": { "type": "string", "description": "Source currency code (e.g. EUR)" },
+                    "to_currency": { "type": "string", "description": "Target currency code (e.g. USD)" },
+                    "amount": { "type": "number", "description": "Amount to convert" }
+                },
+                "required": ["from_currency", "to_currency", "amount"]
+            }), ann_read_only()),
+            // cfd.corporate_actions: read-only
+            tool_desc("apex.cfd.corporate_actions", "Query upcoming corporate actions for CFD instruments.", json!({
+                "type": "object",
+                "properties": {
+                    "account_id": { "type": "string", "description": "Trading account ID" },
+                    "instrument_id": { "type": "string", "description": "Filter by APEX canonical instrument ID" },
+                    "from": { "type": "string", "description": "ISO8601 start date" },
+                    "to": { "type": "string", "description": "ISO8601 end date" }
+                },
+                "required": ["account_id"]
+            }), ann_read_only()),
+            // cfd.dividend_adjustment: read-only
+            tool_desc("apex.cfd.dividend_adjustment", "Query dividend adjustments for CFD positions.", json!({
+                "type": "object",
+                "properties": {
+                    "account_id": { "type": "string", "description": "Trading account ID" },
+                    "status": { "type": "string", "description": "Filter by status (default: all)" },
+                    "from": { "type": "string", "description": "ISO8601 start date" },
+                    "to": { "type": "string", "description": "ISO8601 end date" }
+                },
+                "required": ["account_id"]
+            }), ann_read_only()),
+            // crypto.funding_rate: read-only
+            tool_desc("apex.crypto.funding_rate", "Query funding rate for a perpetual instrument.", json!({
+                "type": "object",
+                "properties": {
+                    "instrument_id": { "type": "string", "description": "APEX canonical instrument ID (e.g. APEX:CRYPTO:PERP:BTCUSDT)" }
+                },
+                "required": ["instrument_id"]
+            }), ann_read_only()),
+            // crypto.liquidation_estimate: read-only
+            tool_desc("apex.crypto.liquidation_estimate", "Estimate liquidation price for a perpetual position.", json!({
+                "type": "object",
+                "properties": {
+                    "account_id": { "type": "string", "description": "Trading account ID" },
+                    "instrument_id": { "type": "string", "description": "APEX canonical instrument ID" },
+                    "side": { "type": "string", "description": "Position side: buy or sell" },
+                    "quantity": { "type": "number", "description": "Position quantity" },
+                    "leverage": { "type": "number", "description": "Leverage multiplier" },
+                    "margin_mode": { "type": "string", "description": "Margin mode: cross or isolated" },
+                    "entry_price": { "type": "number", "description": "Entry price" }
+                },
+                "required": ["account_id", "instrument_id", "side", "quantity", "leverage", "margin_mode", "entry_price"]
+            }), ann_read_only()),
+            // crypto.transfer: mutating, non-destructive, non-idempotent
+            tool_desc("apex.crypto.transfer", "Transfer funds between wallets (spot, futures, funding).", json!({
+                "type": "object",
+                "properties": {
+                    "account_id": { "type": "string", "description": "Trading account ID" },
+                    "from_wallet": { "type": "string", "enum": ["spot", "futures", "funding"], "description": "Source wallet" },
+                    "to_wallet": { "type": "string", "enum": ["spot", "futures", "funding"], "description": "Destination wallet" },
+                    "currency": { "type": "string", "description": "Currency to transfer (e.g. USDT)" },
+                    "amount": { "type": "number", "description": "Amount to transfer" }
+                },
+                "required": ["account_id", "from_wallet", "to_wallet", "currency", "amount"]
+            }), ann_mutating()),
         ]
     })
 }
 
-fn tool_desc(name: &str, description: &str, input_schema: Value) -> Value {
+/// Tool annotations: read-only, non-destructive, idempotent.
+fn ann_read_only() -> Value {
+    json!({ "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true })
+}
+
+/// Tool annotations: mutating, non-destructive, idempotent (e.g. authenticate).
+fn ann_mutating_idempotent() -> Value {
+    json!({ "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true })
+}
+
+/// Tool annotations: destructive, non-idempotent (e.g. order.place, order.modify, position.close).
+fn ann_destructive() -> Value {
+    json!({ "readOnlyHint": false, "destructiveHint": true, "idempotentHint": false })
+}
+
+/// Tool annotations: destructive, idempotent (e.g. order.cancel).
+fn ann_destructive_idempotent() -> Value {
+    json!({ "readOnlyHint": false, "destructiveHint": true, "idempotentHint": true })
+}
+
+/// Tool annotations: mutating, non-destructive, non-idempotent (e.g. crypto.transfer).
+fn ann_mutating() -> Value {
+    json!({ "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false })
+}
+
+fn tool_desc(name: &str, description: &str, input_schema: Value, annotations: Value) -> Value {
     json!({
         "name": name,
         "description": description,
-        "inputSchema": input_schema
+        "inputSchema": input_schema,
+        "annotations": annotations
     })
 }
 
@@ -832,6 +962,10 @@ async fn handle_tool_call(
                     "FOK".to_owned(),
                     "DAY".to_owned(),
                 ],
+                production_profiles: json!({
+                    "realtime": true,
+                    "autonomous": false
+                }),
                 realtime_contract: json!({
                     "transport_mode": "streamable_http",
                     "reconnect_mode": "session_replay",
@@ -1242,6 +1376,220 @@ async fn handle_tool_call(
                     .and_then(|p| p["kill_switch_active"].as_bool())
                     .unwrap_or(false),
             })
+        }
+        "apex.fx.rollover" => {
+            let instrument_id = args["instrument_id"].as_str().unwrap_or("");
+            if instrument_id != INSTRUMENT_ID {
+                json_result_value(&apex_error("APEX_4010", "validation", "Unknown instrument", None))
+            } else {
+                json_result_value(&FxRolloverResponse {
+                    instrument_id: INSTRUMENT_ID.to_owned(),
+                    broker_symbol: BROKER_SYMBOL.to_owned(),
+                    rollover_long: -0.5,
+                    rollover_short: 0.3,
+                    rollover_currency: "USD".to_owned(),
+                    rollover_per: "lot".to_owned(),
+                    lot_size: 100000,
+                    triple_rollover_day: "Wednesday".to_owned(),
+                    next_rollover_time: next_rollover_time(),
+                    as_of: now_iso(),
+                })
+            }
+        }
+        "apex.fx.exposure" => {
+            let account_id = args["account_id"].as_str().unwrap_or("");
+            if account_id.is_empty() {
+                json_result_value(&apex_error("APEX_4011", "validation", "account_id is required", None))
+            } else {
+                let base_currency = args["base_currency"].as_str().unwrap_or("USD").to_owned();
+                let positions_payload = state.trading_state.positions_payload();
+                let positions = positions_payload["positions"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+
+                let mut eur_net_units: i64 = 0;
+                let mut contributing_positions = vec![];
+
+                for pos in &positions {
+                    if pos["instrument_id"].as_str() == Some(INSTRUMENT_ID) {
+                        let qty = pos["quantity"].as_i64().unwrap_or(0);
+                        let side = pos["side"].as_str().unwrap_or("");
+                        if side == "buy" {
+                            eur_net_units += qty;
+                        } else {
+                            eur_net_units -= qty;
+                        }
+                        if let Some(pid) = pos["position_id"].as_str() {
+                            contributing_positions.push(pid.to_owned());
+                        }
+                    }
+                }
+
+                let rate = 1.0875_f64;
+                let value_in_base = if base_currency == "EUR" {
+                    eur_net_units as f64
+                } else {
+                    eur_net_units as f64 * rate
+                };
+
+                let net_direction = if eur_net_units > 0 {
+                    "long"
+                } else if eur_net_units < 0 {
+                    "short"
+                } else {
+                    "flat"
+                };
+
+                json_result_value(&FxExposureResponse {
+                    account_id: account_id.to_owned(),
+                    base_currency,
+                    exposures: vec![ExposureEntry {
+                        currency: "EUR".to_owned(),
+                        net_units: eur_net_units,
+                        net_direction: net_direction.to_owned(),
+                        value_in_base,
+                        contributing_positions,
+                    }],
+                    total_gross_exposure: value_in_base.abs(),
+                    as_of: now_iso(),
+                })
+            }
+        }
+        "apex.fx.conversion" => {
+            let from_currency = args["from_currency"].as_str().unwrap_or("");
+            let to_currency = args["to_currency"].as_str().unwrap_or("");
+            let amount = args["amount"].as_f64().unwrap_or(0.0);
+
+            if from_currency.is_empty() || to_currency.is_empty() {
+                json_result_value(&apex_error("APEX_4011", "validation", "from_currency, to_currency, and amount are all required", None))
+            } else {
+                let mid_rate = 1.0875_f64;
+                let rate_result = if from_currency == to_currency {
+                    Some(1.0)
+                } else if from_currency == "EUR" && to_currency == "USD" {
+                    Some(mid_rate)
+                } else if from_currency == "USD" && to_currency == "EUR" {
+                    Some(1.0 / mid_rate)
+                } else {
+                    None
+                };
+
+                match rate_result {
+                    Some(rate) => json_result_value(&FxConversionResponse {
+                        from_currency: from_currency.to_owned(),
+                        to_currency: to_currency.to_owned(),
+                        rate: (rate * 10_000_000.0).round() / 10_000_000.0,
+                        converted_amount: (amount * rate * 100.0).round() / 100.0,
+                        timestamp: now_iso(),
+                    }),
+                    None => json_result_value(&apex_error("APEX_4010", "validation", "Unsupported currency pair", None)),
+                }
+            }
+        }
+        "apex.cfd.corporate_actions" => {
+            let account_id = args["account_id"].as_str().unwrap_or("");
+            if account_id.is_empty() {
+                json_result_value(&apex_error("APEX_4011", "validation", "account_id is required", None))
+            } else {
+                json_result_value(&CfdCorporateActionsResponse {
+                    corporate_actions: vec![],
+                })
+            }
+        }
+        "apex.cfd.dividend_adjustment" => {
+            let account_id = args["account_id"].as_str().unwrap_or("");
+            if account_id.is_empty() {
+                json_result_value(&apex_error("APEX_4011", "validation", "account_id is required", None))
+            } else {
+                json_result_value(&CfdDividendAdjustmentResponse {
+                    adjustments: vec![],
+                })
+            }
+        }
+        "apex.crypto.funding_rate" => {
+            const PERP_INSTRUMENT_ID: &str = "APEX:CRYPTO:PERP:BTCUSDT";
+            const PERP_BROKER_SYMBOL: &str = "BTCUSDT";
+
+            let instrument_id = args["instrument_id"].as_str().unwrap_or("");
+            if instrument_id != PERP_INSTRUMENT_ID {
+                json_result_value(&apex_error("APEX_4010", "validation", "Unknown instrument", None))
+            } else {
+                let (funding_time, countdown) = next_funding_time();
+                json_result_value(&CryptoFundingRateResponse {
+                    instrument_id: PERP_INSTRUMENT_ID.to_owned(),
+                    broker_symbol: PERP_BROKER_SYMBOL.to_owned(),
+                    current_rate: 0.0001,
+                    current_rate_annualised: 0.1095,
+                    predicted_rate: 0.00012,
+                    funding_interval_hours: 8,
+                    next_funding_time: funding_time,
+                    countdown_seconds: countdown,
+                    index_price: 50000.00,
+                    mark_price: 50050.00,
+                    timestamp: now_iso(),
+                })
+            }
+        }
+        "apex.crypto.liquidation_estimate" => {
+            const PERP_INSTRUMENT_ID: &str = "APEX:CRYPTO:PERP:BTCUSDT";
+
+            let instrument_id = args["instrument_id"].as_str().unwrap_or("");
+            if instrument_id != PERP_INSTRUMENT_ID {
+                json_result_value(&apex_error("APEX_4010", "validation", "Unknown instrument", None))
+            } else {
+                let side = args["side"].as_str().unwrap_or("buy");
+                let quantity = args["quantity"].as_f64().unwrap_or(0.0);
+                let leverage = args["leverage"].as_f64().unwrap_or(1.0);
+                let entry_price = args["entry_price"].as_f64().unwrap_or(0.0);
+
+                let margin_required = (entry_price * quantity) / leverage;
+                let maintenance_margin = margin_required / 2.0;
+
+                let liquidation_price = if side == "buy" {
+                    entry_price * (1.0 - (1.0 / leverage) * 0.95)
+                } else {
+                    entry_price * (1.0 + (1.0 / leverage) * 0.95)
+                };
+                let liquidation_price = (liquidation_price * 100.0).round() / 100.0;
+                let distance_pct = ((entry_price - liquidation_price).abs() / entry_price * 100.0 * 100.0).round() / 100.0;
+
+                json_result_value(&CryptoLiquidationEstimateResponse {
+                    instrument_id: PERP_INSTRUMENT_ID.to_owned(),
+                    side: side.to_owned(),
+                    entry_price,
+                    liquidation_price,
+                    margin_required: (margin_required * 100.0).round() / 100.0,
+                    maintenance_margin: (maintenance_margin * 100.0).round() / 100.0,
+                    margin_currency: "USDT".to_owned(),
+                    distance_pct,
+                    warnings: vec![],
+                })
+            }
+        }
+        "apex.crypto.transfer" => {
+            let account_id = args["account_id"].as_str().unwrap_or("");
+            let from_wallet = args["from_wallet"].as_str().unwrap_or("");
+            let to_wallet = args["to_wallet"].as_str().unwrap_or("");
+            let currency = args["currency"].as_str().unwrap_or("");
+            let amount = args["amount"].as_f64().unwrap_or(0.0);
+
+            if account_id.is_empty() || from_wallet.is_empty() || to_wallet.is_empty() || currency.is_empty() {
+                json_result_value(&apex_error("APEX_4011", "validation", "All fields are required: account_id, from_wallet, to_wallet, currency, amount", None))
+            } else if from_wallet == to_wallet {
+                json_result_value(&apex_error("APEX_4011", "validation", "from_wallet and to_wallet must be different", None))
+            } else {
+                json_result_value(&CryptoTransferResponse {
+                    transfer_id: uuid::Uuid::new_v4().to_string(),
+                    from_wallet: from_wallet.to_owned(),
+                    to_wallet: to_wallet.to_owned(),
+                    currency: currency.to_owned(),
+                    amount,
+                    status: "completed".to_owned(),
+                    rejection_reason: None,
+                    completed_at: now_iso(),
+                })
+            }
         }
         _ => {
             return Err(json!({

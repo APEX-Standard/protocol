@@ -35,17 +35,18 @@ All four reference implementations are currently:
 | `apex.session.authenticate` | Yes | Yes | Yes | Yes | Yes |
 | `apex.session.capabilities` | Yes | Yes | Yes | Yes | Yes |
 | `apex.session.heartbeat` | Yes | Yes | Yes | Yes | Yes |
+| `apex.session.acknowledge` | Yes | Yes | Yes | Yes | Yes |
 | `apex.account.summary` | Yes | Yes | Yes | Yes | Yes |
 | `apex.account.positions` | Yes | Yes | Yes | Yes | Yes |
 | `apex.account.orders` | Yes | Yes | Yes | Yes | Yes |
-| `apex.account.history` | Yes | Yes | Yes | Yes | Tool listed |
+| `apex.account.history` | Yes | Yes | Yes | Yes | Yes |
 | `apex.order.place` | Yes | Yes | Yes | Yes | Yes |
 | `apex.order.modify` | Yes | Yes | Yes | Yes | Yes |
 | `apex.order.cancel` | Yes | Yes | Yes | Yes | Yes |
-| `apex.order.status` | Yes | Yes | Yes | Yes | Tool listed |
+| `apex.order.status` | Yes | Yes | Yes | Yes | Yes |
 | `apex.market.quote` | Yes | Yes | Yes | Yes | Yes |
-| `apex.market.snapshot` | Yes | Yes | Yes | Yes | Tool listed |
-| `apex.market.search` | Yes | Yes | Yes | Yes | Tool listed |
+| `apex.market.snapshot` | Yes | Yes | Yes | Yes | Yes |
+| `apex.market.search` | Yes | Yes | Yes | Yes | Yes |
 | `apex.market.details` | Yes | Yes | Yes | Yes | Yes |
 | `apex.risk.check` | Yes | Yes | Yes | Yes | Yes |
 | `apex.risk.limits` | Yes | Yes | Yes | Yes | Yes |
@@ -53,6 +54,11 @@ All four reference implementations are currently:
 | `apex.fx.rollover` | Yes | Yes | Yes | Yes | Yes |
 | `apex.fx.exposure` | Yes | Yes | Yes | Yes | Yes |
 | `apex.fx.conversion` | Yes | Yes | Yes | Yes | Yes |
+| `apex.cfd.corporate_actions` | Yes | Yes | Yes | Yes | smoke |
+| `apex.cfd.dividend_adjustment` | Yes | Yes | Yes | Yes | smoke |
+| `apex.crypto.funding_rate` | Yes | Yes | Yes | Yes | smoke |
+| `apex.crypto.liquidation_estimate` | Yes | Yes | Yes | Yes | smoke |
+| `apex.crypto.transfer` | Yes | Yes | Yes | Yes | smoke |
 | `resources/list` | Yes | Yes | Yes | Yes | Yes |
 | `resources/read` | Yes | Yes | Yes | Yes | Yes |
 | `resources/subscribe` | Yes | Yes | Yes | Yes | Yes |

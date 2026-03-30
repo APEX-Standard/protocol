@@ -14,6 +14,9 @@ func registerMarketTools(s *server.MCPServer) {
 			mcp.WithDescription("Current bid/ask/mid for an instrument."),
 			mcp.WithString("instrument_id", mcp.Description("APEX canonical instrument ID (e.g. APEX:FX:EURUSD)")),
 			mcp.WithString("broker_symbol", mcp.Description("Alternative to instrument_id")),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 		),
 		handleMarketQuote,
 	)
@@ -26,6 +29,9 @@ func registerMarketTools(s *server.MCPServer) {
 			mcp.WithString("from", mcp.Required(), mcp.Description("ISO8601 start time")),
 			mcp.WithString("to", mcp.Description("ISO8601 end time (defaults to now)")),
 			mcp.WithNumber("limit", mcp.Description("Maximum number of candles (1-1000, default 200)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 		),
 		handleMarketSnapshot,
 	)
@@ -36,6 +42,9 @@ func registerMarketTools(s *server.MCPServer) {
 			mcp.WithString("query", mcp.Required(), mcp.Description("Search query")),
 			mcp.WithString("profile", mcp.Description("Asset class profile filter"), mcp.Enum("fx", "cfd", "crypto", "derivatives", "fixed_income")),
 			mcp.WithNumber("limit", mcp.Description("Maximum results (1-50, default 20)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 		),
 		handleMarketSearch,
 	)
@@ -44,6 +53,9 @@ func registerMarketTools(s *server.MCPServer) {
 		mcp.NewTool("apex.market.details",
 			mcp.WithDescription("Full contract specification for an instrument."),
 			mcp.WithString("instrument_id", mcp.Required(), mcp.Description("APEX canonical instrument ID (e.g. APEX:FX:EURUSD)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
 		),
 		handleMarketDetails,
 	)

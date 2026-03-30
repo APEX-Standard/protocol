@@ -185,6 +185,93 @@ try {
   );
   printCheck("received kill_switch_engaged notification via SSE");
 
+  /* -- Order rejected while kill switch active (SSE) ----------------- */
+
+  const rejectedOrder = await httpCallTool(server.baseUrl, sessionId, "apex.order.place", {
+    account_id: "ACC_12345",
+    order: {
+      instrument_id: "APEX:FX:EURUSD",
+      side: "buy",
+      order_type: "market",
+      quantity: 1000,
+      quantity_unit: "base_units",
+      time_in_force: "GTC",
+    },
+  });
+  // The order should be rejected (kill switch active)
+  assert(
+    rejectedOrder.error?.code === "APEX_4023" || rejectedOrder.status === "rejected",
+    "Expected order rejected with kill switch active",
+  );
+
+  // Check SSE stream for the rejected notification
+  await delay(500);
+  const rejectedEvents = sse.events.filter(
+    (e) => e.data?.method === "notifications/apex.order.rejected",
+  );
+  // Note: rejected notification may or may not be emitted depending on implementation
+  // (some impls reject at the tool level without emitting a notification)
+  if (rejectedEvents.length > 0) {
+    const rejParams = rejectedEvents[0].data?.params;
+    assert(rejParams?.event_id, "rejected notification should have event_id");
+    assert(
+      rejParams?.event_type === "apex.order.rejected" || rejParams?.event_type === "notifications/apex.order.rejected",
+      `rejected notification event_type should be apex.order.rejected, got ${rejParams?.event_type}`,
+    );
+    printCheck("received apex.order.rejected notification via SSE");
+  } else {
+    printCheck("order rejected at tool level (no SSE notification — implementation choice)");
+  }
+
+  /* -- Partial fill over SSE ----------------------------------------- */
+
+  // Reset kill switch so orders can proceed
+  await httpCallTool(server.baseUrl, sessionId, "reference.test.set_realtime_state", {
+    kill_switch_active: false,
+  });
+
+  // Set the partial-fill flag so the next market order is partially filled
+  await httpCallTool(server.baseUrl, sessionId, "reference.test.set_realtime_state", {
+    partial_fill_next_order: true,
+  });
+
+  const partialOrder = await httpCallTool(server.baseUrl, sessionId, "apex.order.place", {
+    account_id: "ACC_12345",
+    order: {
+      instrument_id: "APEX:FX:EURUSD",
+      side: "buy",
+      order_type: "market",
+      quantity: 10000,
+      quantity_unit: "base_units",
+      time_in_force: "GTC",
+    },
+  });
+  assert.equal(partialOrder.status, "partially_filled", "Expected market order to be partially_filled");
+  assert(partialOrder.order_id, "Expected order_id in partial fill result");
+  printCheck("market order partially filled over HTTP");
+
+  await delay(500);
+
+  const partialFillEvents = sse.events.filter(
+    (e) => e.data?.method === "notifications/apex.order.partially_filled",
+  );
+  assert(
+    partialFillEvents.length > 0,
+    "Expected at least one notifications/apex.order.partially_filled SSE event",
+  );
+
+  const pfParams = partialFillEvents[0].data?.params;
+  assert(pfParams?.event_id, "partially_filled notification should have event_id");
+  assert(
+    pfParams?.event_type === "apex.order.partially_filled" || pfParams?.event_type === "notifications/apex.order.partially_filled",
+    `partially_filled notification event_type should be apex.order.partially_filled, got ${pfParams?.event_type}`,
+  );
+  assert(pfParams?.timestamp, "partially_filled notification should have timestamp");
+  assert(typeof pfParams?.sequence === "number", "partially_filled notification should have numeric sequence");
+  assert(pfParams?.resource_uri, "partially_filled notification should have resource_uri");
+  assert(pfParams?.payload?.order_id, "partially_filled notification should have payload.order_id");
+  printCheck("received apex.order.partially_filled notification via SSE with correct envelope");
+
   /* -- Bogus session ID ---------------------------------------------- */
 
   const bogusResult = await httpPost(server.baseUrl, "bogus-session-id-does-not-exist", {

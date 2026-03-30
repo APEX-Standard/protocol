@@ -7,7 +7,7 @@ use rmcp::{
     tool, Error as McpError, ServerHandler,
 };
 
-use crate::helpers::{apex_error, hours_from_now, json_result, now_iso};
+use crate::helpers::{apex_error, hours_from_now, json_result, next_funding_time, next_rollover_time, now_iso};
 use crate::models::*;
 use crate::state::{ReferenceTradingState, ACCOUNT_ID, BROKER_SYMBOL, INSTRUMENT_ID};
 
@@ -52,6 +52,33 @@ impl ApexServer {
         }
     }
 }
+
+// NOTE: Tool annotations (readOnlyHint, destructiveHint, idempotentHint) per the MCP spec
+// are not yet supported by the rmcp 0.1.x `#[tool]` macro.  The `Tool` struct in rmcp 0.1.5
+// lacks an `annotations` field, so there is no way to attach them via the proc-macro today.
+//
+// Annotations ARE emitted in the HTTP/Streamable-HTTP transport (see transport/http.rs) where
+// tool descriptors are built manually as JSON.  When a future rmcp release adds annotation
+// support to the macro, each `#[tool(...)]` below should be extended, e.g.:
+//
+//   #[tool(name = "...", description = "...", annotations(read_only = true, destructive = false, idempotent = true))]
+//
+// Desired annotation mapping for reference:
+//   readOnly=true, destructive=false, idempotent=true:
+//     session.capabilities, session.heartbeat, session.acknowledge,
+//     account.summary, account.positions, account.orders, account.history,
+//     order.status, market.quote, market.snapshot, market.search, market.details,
+//     risk.check, risk.limits, fx.rollover, fx.exposure, fx.conversion,
+//     cfd.corporate_actions, cfd.dividend_adjustment,
+//     crypto.funding_rate, crypto.liquidation_estimate
+//   readOnly=false, destructive=false, idempotent=true:
+//     session.authenticate
+//   readOnly=false, destructive=true, idempotent=false:
+//     order.place, order.modify, position.close
+//   readOnly=false, destructive=true, idempotent=true:
+//     order.cancel
+//   readOnly=false, destructive=false, idempotent=false:
+//     crypto.transfer
 
 #[tool(tool_box)]
 impl ApexServer {
@@ -116,6 +143,10 @@ impl ApexServer {
                 "FOK".to_owned(),
                 "DAY".to_owned(),
             ],
+            production_profiles: serde_json::json!({
+                "realtime": true,
+                "autonomous": false
+            }),
             realtime_contract: serde_json::json!({
                 "transport_mode": "stdio",
                 "reconnect_mode": "no_replay",
@@ -530,6 +561,321 @@ impl ApexServer {
                 .read_resource_payload(&crate::state::risk_uri())
                 .and_then(|payload| payload["kill_switch_active"].as_bool())
                 .unwrap_or(false),
+        }))
+    }
+
+    #[tool(
+        name = "apex.fx.rollover",
+        description = "Query swap/rollover rates for an FX instrument. Rates are expressed in account currency per lot per night."
+    )]
+    async fn fx_rollover(
+        &self,
+        #[tool(aggr)] input: FxRolloverInput,
+    ) -> Result<CallToolResult, McpError> {
+        if input.instrument_id != INSTRUMENT_ID {
+            return Ok(json_result(&apex_error(
+                "APEX_4010",
+                "validation",
+                "Unknown instrument",
+                None,
+            )));
+        }
+
+        Ok(json_result(&FxRolloverResponse {
+            instrument_id: INSTRUMENT_ID.to_owned(),
+            broker_symbol: BROKER_SYMBOL.to_owned(),
+            rollover_long: -0.5,
+            rollover_short: 0.3,
+            rollover_currency: "USD".to_owned(),
+            rollover_per: "lot".to_owned(),
+            lot_size: 100000,
+            triple_rollover_day: "Wednesday".to_owned(),
+            next_rollover_time: next_rollover_time(),
+            as_of: now_iso(),
+        }))
+    }
+
+    #[tool(
+        name = "apex.fx.exposure",
+        description = "Net currency exposure across open FX positions. Critical for agents managing portfolio-level currency risk."
+    )]
+    async fn fx_exposure(
+        &self,
+        #[tool(aggr)] input: FxExposureInput,
+    ) -> Result<CallToolResult, McpError> {
+        if input.account_id.is_empty() {
+            return Ok(json_result(&apex_error(
+                "APEX_4011",
+                "validation",
+                "account_id is required",
+                None,
+            )));
+        }
+
+        let positions_payload = self.state.positions_payload();
+        let positions = positions_payload["positions"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+
+        let mut eur_net_units: i64 = 0;
+        let mut contributing_positions = vec![];
+
+        for pos in &positions {
+            if pos["instrument_id"].as_str() == Some(INSTRUMENT_ID) {
+                let qty = pos["quantity"].as_i64().unwrap_or(0);
+                let side = pos["side"].as_str().unwrap_or("");
+                if side == "buy" {
+                    eur_net_units += qty;
+                } else {
+                    eur_net_units -= qty;
+                }
+                if let Some(pid) = pos["position_id"].as_str() {
+                    contributing_positions.push(pid.to_owned());
+                }
+            }
+        }
+
+        let rate = 1.0875_f64;
+        let value_in_base = if input.base_currency == "EUR" {
+            eur_net_units as f64
+        } else {
+            eur_net_units as f64 * rate
+        };
+
+        let net_direction = if eur_net_units > 0 {
+            "long"
+        } else if eur_net_units < 0 {
+            "short"
+        } else {
+            "flat"
+        };
+
+        Ok(json_result(&FxExposureResponse {
+            account_id: input.account_id,
+            base_currency: input.base_currency,
+            exposures: vec![ExposureEntry {
+                currency: "EUR".to_owned(),
+                net_units: eur_net_units,
+                net_direction: net_direction.to_owned(),
+                value_in_base,
+                contributing_positions,
+            }],
+            total_gross_exposure: value_in_base.abs(),
+            as_of: now_iso(),
+        }))
+    }
+
+    #[tool(
+        name = "apex.fx.conversion",
+        description = "Real-time cross-currency conversion rate. Used by agents to calculate P&L in a target currency."
+    )]
+    async fn fx_conversion(
+        &self,
+        #[tool(aggr)] input: FxConversionInput,
+    ) -> Result<CallToolResult, McpError> {
+        if input.from_currency.is_empty() || input.to_currency.is_empty() {
+            return Ok(json_result(&apex_error(
+                "APEX_4011",
+                "validation",
+                "from_currency, to_currency, and amount are all required",
+                None,
+            )));
+        }
+
+        let mid_rate = 1.0875_f64;
+        let rate = if input.from_currency == input.to_currency {
+            1.0
+        } else if input.from_currency == "EUR" && input.to_currency == "USD" {
+            mid_rate
+        } else if input.from_currency == "USD" && input.to_currency == "EUR" {
+            1.0 / mid_rate
+        } else {
+            return Ok(json_result(&apex_error(
+                "APEX_4010",
+                "validation",
+                "Unsupported currency pair",
+                None,
+            )));
+        };
+
+        Ok(json_result(&FxConversionResponse {
+            from_currency: input.from_currency,
+            to_currency: input.to_currency,
+            rate: (rate * 10_000_000.0).round() / 10_000_000.0,
+            converted_amount: (input.amount * rate * 100.0).round() / 100.0,
+            timestamp: now_iso(),
+        }))
+    }
+
+    // CFD profile tools
+
+    #[tool(
+        name = "apex.cfd.corporate_actions",
+        description = "Query upcoming corporate actions for CFD instruments. Reference implementation returns an empty array."
+    )]
+    async fn cfd_corporate_actions(
+        &self,
+        #[tool(aggr)] input: CfdCorporateActionsInput,
+    ) -> Result<CallToolResult, McpError> {
+        if input.account_id.is_empty() {
+            return Ok(json_result(&apex_error(
+                "APEX_4011",
+                "validation",
+                "account_id is required",
+                None,
+            )));
+        }
+
+        Ok(json_result(&CfdCorporateActionsResponse {
+            corporate_actions: vec![],
+        }))
+    }
+
+    #[tool(
+        name = "apex.cfd.dividend_adjustment",
+        description = "Query dividend adjustments for CFD positions. Reference implementation returns an empty array."
+    )]
+    async fn cfd_dividend_adjustment(
+        &self,
+        #[tool(aggr)] input: CfdDividendAdjustmentInput,
+    ) -> Result<CallToolResult, McpError> {
+        if input.account_id.is_empty() {
+            return Ok(json_result(&apex_error(
+                "APEX_4011",
+                "validation",
+                "account_id is required",
+                None,
+            )));
+        }
+
+        Ok(json_result(&CfdDividendAdjustmentResponse {
+            adjustments: vec![],
+        }))
+    }
+
+    // Crypto profile tools
+
+    #[tool(
+        name = "apex.crypto.funding_rate",
+        description = "Query funding rate for a perpetual instrument. Returns simulated data for BTCUSDT."
+    )]
+    async fn crypto_funding_rate(
+        &self,
+        #[tool(aggr)] input: CryptoFundingRateInput,
+    ) -> Result<CallToolResult, McpError> {
+        const PERP_INSTRUMENT_ID: &str = "APEX:CRYPTO:PERP:BTCUSDT";
+        const PERP_BROKER_SYMBOL: &str = "BTCUSDT";
+
+        if input.instrument_id != PERP_INSTRUMENT_ID {
+            return Ok(json_result(&apex_error(
+                "APEX_4010",
+                "validation",
+                "Unknown instrument",
+                None,
+            )));
+        }
+
+        let (funding_time, countdown) = next_funding_time();
+
+        Ok(json_result(&CryptoFundingRateResponse {
+            instrument_id: PERP_INSTRUMENT_ID.to_owned(),
+            broker_symbol: PERP_BROKER_SYMBOL.to_owned(),
+            current_rate: 0.0001,
+            current_rate_annualised: 0.1095,
+            predicted_rate: 0.00012,
+            funding_interval_hours: 8,
+            next_funding_time: funding_time,
+            countdown_seconds: countdown,
+            index_price: 50000.00,
+            mark_price: 50050.00,
+            timestamp: now_iso(),
+        }))
+    }
+
+    #[tool(
+        name = "apex.crypto.liquidation_estimate",
+        description = "Estimate liquidation price for a perpetual position based on leverage and margin mode."
+    )]
+    async fn crypto_liquidation_estimate(
+        &self,
+        #[tool(aggr)] input: CryptoLiquidationEstimateInput,
+    ) -> Result<CallToolResult, McpError> {
+        const PERP_INSTRUMENT_ID: &str = "APEX:CRYPTO:PERP:BTCUSDT";
+
+        if input.instrument_id != PERP_INSTRUMENT_ID {
+            return Ok(json_result(&apex_error(
+                "APEX_4010",
+                "validation",
+                "Unknown instrument",
+                None,
+            )));
+        }
+
+        let margin_required = (input.entry_price * input.quantity) / input.leverage;
+        let maintenance_margin = margin_required / 2.0;
+
+        let liquidation_price = if input.side == "buy" {
+            input.entry_price * (1.0 - (1.0 / input.leverage) * 0.95)
+        } else {
+            input.entry_price * (1.0 + (1.0 / input.leverage) * 0.95)
+        };
+        let liquidation_price = (liquidation_price * 100.0).round() / 100.0;
+
+        let distance_pct = ((input.entry_price - liquidation_price).abs() / input.entry_price * 100.0 * 100.0).round() / 100.0;
+
+        Ok(json_result(&CryptoLiquidationEstimateResponse {
+            instrument_id: PERP_INSTRUMENT_ID.to_owned(),
+            side: input.side,
+            entry_price: input.entry_price,
+            liquidation_price,
+            margin_required: (margin_required * 100.0).round() / 100.0,
+            maintenance_margin: (maintenance_margin * 100.0).round() / 100.0,
+            margin_currency: "USDT".to_owned(),
+            distance_pct,
+            warnings: vec![],
+        }))
+    }
+
+    #[tool(
+        name = "apex.crypto.transfer",
+        description = "Transfer funds between wallets (spot, futures, funding). Reference implementation simulates instant completion."
+    )]
+    async fn crypto_transfer(
+        &self,
+        #[tool(aggr)] input: CryptoTransferInput,
+    ) -> Result<CallToolResult, McpError> {
+        if input.account_id.is_empty()
+            || input.from_wallet.is_empty()
+            || input.to_wallet.is_empty()
+            || input.currency.is_empty()
+        {
+            return Ok(json_result(&apex_error(
+                "APEX_4011",
+                "validation",
+                "All fields are required: account_id, from_wallet, to_wallet, currency, amount",
+                None,
+            )));
+        }
+
+        if input.from_wallet == input.to_wallet {
+            return Ok(json_result(&apex_error(
+                "APEX_4011",
+                "validation",
+                "from_wallet and to_wallet must be different",
+                None,
+            )));
+        }
+
+        Ok(json_result(&CryptoTransferResponse {
+            transfer_id: uuid::Uuid::new_v4().to_string(),
+            from_wallet: input.from_wallet,
+            to_wallet: input.to_wallet,
+            currency: input.currency,
+            amount: input.amount,
+            status: "completed".to_owned(),
+            rejection_reason: None,
+            completed_at: now_iso(),
         }))
     }
 }

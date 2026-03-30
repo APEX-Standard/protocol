@@ -776,6 +776,11 @@ All APEX Protocol tools carry MCP annotations for agent guidance:
 | `apex.order.status` | true | false | true |
 | `apex.market.*` | true | false | true |
 | `apex.risk.*` | true | false | true |
+| `apex.fx.*` (all) | true | false | true |
+| `apex.cfd.*` (all) | true | false | true |
+| `apex.crypto.funding_rate` | true | false | true |
+| `apex.crypto.liquidation_estimate` | true | false | true |
+| `apex.crypto.transfer` | false | false | false |
 
 ---
 
@@ -814,12 +819,12 @@ Agent-native APEX servers must expose the following resource categories.
 Market state:
 
 - `apex://market/quote/{instrument_id}`
-- `apex://market/book/{instrument_id}`
-- `apex://market/trades/{instrument_id}`
 - `apex://market/candles/{instrument_id}?timeframe=M1&limit=200`
 - `apex://market/candles/{instrument_id}?timeframe=M5&limit=200`
 - `apex://market/candles/{instrument_id}?timeframe=H1&limit=200`
 - `apex://market/features/{instrument_id}`
+
+The `apex://market/book/` and `apex://market/trades/` URI families are reserved for future specification. Order book depth and trade flow resources are not required for alpha.
 
 Account state:
 
