@@ -218,45 +218,86 @@ APEX is not a single document. It is a coordinated set of specifications, schema
 
 | Path | Contents |
 |------|----------|
-| `spec/core/README.md` | Layer 1 tool definitions, resource schemas, notification taxonomy, error codes, annotations |
-| `spec/core/production.md` | Production Realtime and Production Autonomous capability profiles |
-| `spec/core/execution-semantics.md` | Order lifecycle, fill behavior, cancel semantics, idempotency |
-| `spec/core/operations.md` | Freshness, sequencing, replay modes, session health |
-| `spec/core/stability.md` | Surface classes, compatibility rules, deprecation policy, alpha-to-1.0 exit criteria |
-| `spec/core/schemas/` | Normative JSON schemas for all realtime resources and event payloads |
-| `spec/profiles/fx.md` | FX profile: spot, CFD FX, rollovers, swap rates, currency exposure |
-| `spec/profiles/cfd.md` | CFD profile: equities, indices, commodities, corporate actions |
-| `spec/profiles/crypto.md` | Crypto profile: spot, perpetuals, funding rates, margin modes |
-| `spec/registry/` | Instrument identity format, canonical symbol taxonomy |
+| [`spec/core/README.md`](../spec/core/README.md) | Layer 1 tool definitions, resource schemas, notification taxonomy, error codes, annotations |
+| [`spec/core/production.md`](../spec/core/production.md) | Production Realtime and Production Autonomous capability profiles |
+| [`spec/core/execution-semantics.md`](../spec/core/execution-semantics.md) | Order lifecycle, fill behavior, cancel semantics, idempotency |
+| [`spec/core/operations.md`](../spec/core/operations.md) | Freshness, sequencing, replay modes, session health |
+| [`spec/core/stability.md`](../spec/core/stability.md) | Surface classes, compatibility rules, deprecation policy, alpha-to-1.0 exit criteria |
+| [`spec/core/schemas/`](../spec/core/schemas/) | Normative JSON schemas for all realtime resources and event payloads |
+| [`spec/profiles/fx.md`](../spec/profiles/fx.md) | FX profile: spot, CFD FX, rollovers, swap rates, currency exposure |
+| [`spec/profiles/cfd.md`](../spec/profiles/cfd.md) | CFD profile: equities, indices, commodities, corporate actions |
+| [`spec/profiles/crypto.md`](../spec/profiles/crypto.md) | Crypto profile: spot, perpetuals, funding rates, margin modes |
+| [`spec/registry/`](../spec/registry/) | Instrument identity format, canonical symbol taxonomy |
 
 ### Design Library (`docs/`)
 
-| Path | Contents |
-|------|----------|
-| `docs/protocol-overview-design.md` | This document — the start-here entry point |
-| `docs/transport-design.md` | HTTP/SSE transport architecture, Streamable HTTP, session lifecycle |
-| `docs/replay-design.md` | Acknowledgment-driven replay, gap fill, FIX parallels |
-| `docs/freshness-design.md` | Staleness detection, freshness gating, stale_after_ms semantics |
-| `docs/sequence-design.md` | Monotonic sequences, gap detection, continuity restoration |
-| `docs/feature-resource-design.md` | Feature resource computation, regime detection, derived state |
-| `docs/instrument-identity-design.md` | Canonical instrument ID format, broker symbol mapping |
-| `docs/quantity-design.md` | Canonical quantity model, base_units vs lots, unit normalization |
-| `docs/order-lifecycle-design.md` | Order states, transitions, idempotency, partial fill handling |
-| `docs/autonomous-safety-design.md` | Safety model deep dive, halt conditions, runtime modes |
-| `docs/agent-runtime-safety-guide.md` | Practical guide for agent/runtime implementers |
-| `docs/broker-implementation-guide.md` | Practical guide for broker teams and gateway implementers |
-| `docs/agent-quickstart.md` | Getting started guide for agent developers |
-| `docs/reference-flows.md` | End-to-end worked examples |
+**Core Design:**
+
+| Document | Contents |
+|----------|----------|
+| [Protocol Overview](protocol-overview-design.md) | This document — the start-here entry point |
+| [Session Lifecycle](session-design.md) | Session lifecycle, auth, capabilities, heartbeat, health states |
+| [Market Data Architecture](market-data-design.md) | Quotes, candles, subscriptions, market status, instrument discovery |
+| [Account & Position Model](account-model-design.md) | Balance/equity/margin, netting vs hedging, position lifecycle, fills |
+
+**Protocol Mechanisms:**
+
+| Document | Contents |
+|----------|----------|
+| [Replay Design](replay-design.md) | Acknowledgment-driven replay, gap fill, FIX parallels |
+| [Freshness & Staleness](freshness-design.md) | Staleness detection, freshness gating, stale_after_ms semantics |
+| [Sequence & Gap Detection](sequence-design.md) | Monotonic sequences, gap detection, continuity restoration |
+| [Order Lifecycle & Idempotency](order-lifecycle-design.md) | Order states, transitions, idempotency, partial fill handling |
+| [Quantity Normalization](quantity-design.md) | Canonical quantity model, base_units vs lots, unit normalization |
+| [Feature Resource](feature-resource-design.md) | Feature resource computation, regime detection, derived state |
+| [Autonomous Safety](autonomous-safety-design.md) | Safety model deep dive, halt conditions, runtime modes |
+| [Instrument Identity & Registry](instrument-identity-design.md) | Canonical instrument ID format, broker symbol mapping |
+| [Transport Architecture](transport-design.md) | HTTP/SSE transport, Streamable HTTP, rate limiting |
+| [Resource vs Tool Split](resource-tool-design.md) | CQRS split — tools for actions, resources for state |
+| [Profile & Layering](profile-layering-design.md) | Layer 1 Core + Layer 2 profiles, vendor extensions |
+| [Error Taxonomy](error-taxonomy-design.md) | APEX_XXXX codes, seven categories, recovery logic |
+| [Version & Stability](version-stability-design.md) | Stability classes, schema evolution, deprecation |
+
+**Notification & Subscription Model:**
+
+| Document | Contents |
+|----------|----------|
+| [Notification Architecture](notification-architecture-design.md) | 7 mandatory types, envelope, replay classification, delivery guarantees |
+| [Subscription Model](subscription-model-design.md) | Subscribe/notify/re-read, coalescing, level-triggered invalidation |
+| [Decision Context](decision-context-design.md) | Composition-by-reference, freshness inheritance, agent namespace |
+
+**Schema & Conformance:**
+
+| Document | Contents |
+|----------|----------|
+| [Schema Design](schema-design.md) | 12 normative schemas, additionalProperties policy, evolution |
+| [Conformance Testing](conformance-design.md) | Testing philosophy, tiers, fault injection, parity matrix |
+
+**Multi-Broker & Operations:**
+
+| Document | Contents |
+|----------|----------|
+| [Multi-Broker Patterns](multi-broker-design.md) | Independent sessions, cross-broker risk aggregation |
+| [Audit Trail](audit-trail-design.md) | Per-decision records, correlation, retention |
+
+**Implementation Guides:**
+
+| Document | Contents |
+|----------|----------|
+| [Agent Quickstart](agent-quickstart.md) | Getting started guide for agent developers |
+| [Agent Runtime Safety Guide](agent-runtime-safety-guide.md) | Practical guide for agent/runtime implementers |
+| [Broker Implementation Guide](broker-implementation-guide.md) | Practical guide for broker teams and gateway implementers |
+| [Reference Flows](reference-flows.md) | End-to-end worked examples |
 
 ### Implementation
 
 | Path | Contents |
 |------|----------|
-| `reference-implementation/typescript/` | Node.js reference server |
-| `reference-implementation/rust/` | Rust reference server |
-| `reference-implementation/go/` | Go reference server |
-| `reference-implementation/java/` | Java reference server |
-| `conformance/` | Executable conformance test harness |
+| [`reference-implementation/typescript/`](../reference-implementation/typescript/) | Node.js reference server |
+| [`reference-implementation/rust/`](../reference-implementation/rust/) | Rust reference server |
+| [`reference-implementation/go/`](../reference-implementation/go/) | Go reference server |
+| [`reference-implementation/java/`](../reference-implementation/java/) | Java reference server |
+| [`conformance/`](../conformance/) | Executable conformance test harness |
 
 ---
 
@@ -289,4 +330,4 @@ APEX is currently at version `0.1.0-alpha`. The protocol surface is organized in
 
 Before APEX claims `1.0.0`, the following must be true: core surfaces are frozen, normative schemas are complete for execution-critical payloads, conformance validates the frozen core set, migration guidance exists for deprecated alpha surfaces, and production profiles are executable rather than documentary.
 
-For the full compatibility rules, deprecation policy, and exit criteria, see [`spec/core/stability.md`](../spec/core/stability.md).
+For the full compatibility rules, deprecation policy, and exit criteria, see [`stability.md`](../spec/core/stability.md). For the design rationale, see [Version & Stability Design](version-stability-design.md).
