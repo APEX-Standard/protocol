@@ -26,7 +26,7 @@ protocol/
 │   └── java/                    #   Direct JSON-RPC 2.0, Jackson
 ├── conformance/                 # Test suite for spec compliance
 ├── governance/                  # TAC charter, RFC process, contributing
-└── docs/                        # Agent quickstart, integration guides
+└── docs/                        # Design library and implementation guides
 ```
 
 ---
@@ -58,6 +58,12 @@ protocol/
 2. Choose your [`spec/profiles/`](spec/profiles/) for your asset classes
 3. Start from a [`reference-implementation/`](reference-implementation/)
 4. Run the [`conformance/`](conformance/) test suite against your implementation
+
+### Design Library
+
+The [`docs/`](docs/) directory contains a **24-document design library** covering every aspect of the protocol — the *why* behind each mechanism, concrete scenarios, and parallels to established systems like FIX, Kafka, and HTTP.
+
+Start with the [Protocol Overview](docs/protocol-overview-design.md), then see the [full index](docs/README.md) to find the topic you need.
 
 ---
 
