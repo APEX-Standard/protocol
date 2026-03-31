@@ -46,7 +46,11 @@ try {
   printCheck("SSE stream opened");
 
   await httpSubscribe(server.baseUrl, sessionId, "apex://account/orders/ACC_12345");
-  printCheck("subscribed to orders resource");
+  await httpSubscribe(server.baseUrl, sessionId, "apex://account/positions/ACC_12345");
+  await httpSubscribe(server.baseUrl, sessionId, "apex://account/fills/ACC_12345");
+  await httpSubscribe(server.baseUrl, sessionId, "apex://account/risk/ACC_12345");
+  await httpSubscribe(server.baseUrl, sessionId, "apex://agent/decision-context/APEX:FX:EURUSD");
+  printCheck("subscribed to all order-affected resources");
 
   /* ================================================================== */
   /*  Step 2 — Generate events (first order)                            */
@@ -791,10 +795,11 @@ try {
   // Disconnect
   await ssePartial.close();
 
-  // Reconnect with last event of order 1 — events after it should be available for replay
-  // This ID is AFTER the acknowledge point, so it's still in the buffer
+  // Reconnect with last event of order 1 — events after it should be available for replay.
+  // This ID is AFTER the acknowledge point, so it's still in the buffer.
+  // Expect at least 2 replayed items: gap_fill marker(s) + order.filled from order 2.
   const ssePartialReplay = openSseStream(server.baseUrl, sessionId, partialReplayFromId);
-  await ssePartialReplay.waitForEvents(1, 10000);
+  await ssePartialReplay.waitForEvents(2, 10000);
 
   const partialReplayEvents = ssePartialReplay.events.slice();
 

@@ -141,10 +141,8 @@ public final class JdkHttpMcpTransportProvider implements McpStreamableServerTra
     /* ------------------------------------------------------------------ */
 
     /**
-     * Sends a {@code notifications/resources/updated} notification to all SSE streams.
-     * The reference implementation broadcasts all resource updates to all sessions
-     * regardless of subscription state, matching the behavior of the other reference
-     * implementations. Production brokers should filter by per-session subscriptions.
+     * Sends a {@code notifications/resources/updated} notification to sessions
+     * that have subscribed to the given URI via {@code resources/subscribe}.
      */
     public void emitResourceUpdatedToAll(String uri) {
         Map<String, Object> notification = new LinkedHashMap<>();
@@ -154,9 +152,13 @@ public final class JdkHttpMcpTransportProvider implements McpStreamableServerTra
 
         String eventId = replayBuffer.store("default", notification);
         int id = Integer.parseInt(eventId);
-        for (var list : sessionStreams.values()) {
-            for (SseTransport transport : list) {
-                writeSseToStream(transport, id, notification);
+        for (var entry : sessionStreams.entrySet()) {
+            String sid = entry.getKey();
+            Set<String> subs = sessionSubscriptions.get(sid);
+            if (subs != null && subs.contains(uri)) {
+                for (SseTransport transport : entry.getValue()) {
+                    writeSseToStream(transport, id, notification);
+                }
             }
         }
     }

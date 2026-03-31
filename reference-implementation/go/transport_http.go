@@ -116,11 +116,17 @@ func (ht *HttpTransport) emitNotification(notif map[string]any) {
 	}
 }
 
-// emitResourceUpdated sends a resource/updated notification.
-// In HTTP mode, all resource updates are stored in the replay buffer and
-// sent via SSE regardless of client subscriptions, matching the behavior
-// of the MCP SDK's StreamableHTTPServerTransport.
+// emitResourceUpdated sends a resource/updated notification only if the
+// client has subscribed to the given URI via resources/subscribe.
 func (ht *HttpTransport) emitResourceUpdated(uri string) {
+	ht.mu.Lock()
+	_, subscribed := ht.subscriptions[uri]
+	ht.mu.Unlock()
+
+	if !subscribed {
+		return
+	}
+
 	notif := map[string]any{
 		"jsonrpc": "2.0",
 		"method":  "notifications/resources/updated",

@@ -72,10 +72,23 @@ impl HttpState {
     }
 
     /// Emit resource updated notifications for given URIs.
-    /// In Streamable HTTP mode, all notifications go through the SSE stream
-    /// regardless of subscription state — the client handles filtering.
+    /// Only sends to sessions that have subscribed to the specific URI
+    /// via `resources/subscribe`. APEX domain notifications bypass this
+    /// and always broadcast.
     async fn notify_resource_updates(&self, session_id: &str, uris: &[String]) {
-        for uri in uris {
+        // Collect subscribed URIs under the lock, then emit without holding it.
+        let subscribed: Vec<String> = {
+            let sessions = self.sessions.lock().await;
+            if let Some(session) = sessions.get(session_id) {
+                uris.iter()
+                    .filter(|uri| session.subscriptions.contains(uri.as_str()))
+                    .cloned()
+                    .collect()
+            } else {
+                return;
+            }
+        };
+        for uri in &subscribed {
             let notif = json!({
                 "jsonrpc": "2.0",
                 "method": "notifications/resources/updated",

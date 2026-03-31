@@ -53,7 +53,7 @@ function parseArgs(): { mode: "stdio" } | { mode: "http"; port: number } {
 /*  Common setup                                                       */
 /* ------------------------------------------------------------------ */
 
-function setupCommon(server: McpServer) {
+function setupCommon(server: McpServer): { emitResourceUpdated: (uri: string) => void } {
   server.server.registerCapabilities({
     resources: {
       subscribe: true,
@@ -61,14 +61,46 @@ function setupCommon(server: McpServer) {
     },
   });
 
-  server.server.setRequestHandler(SubscribeRequestSchema, async () => ({}));
-  server.server.setRequestHandler(UnsubscribeRequestSchema, async () => ({}));
+  /** Tracked resource subscriptions (URIs the client subscribed to). */
+  const subscribedUris = new Set<string>();
+
+  server.server.setRequestHandler(SubscribeRequestSchema, async (req) => {
+    const uri = (req.params as { uri: string }).uri;
+    if (uri) subscribedUris.add(uri);
+    return {};
+  });
+  server.server.setRequestHandler(UnsubscribeRequestSchema, async (req) => {
+    const uri = (req.params as { uri: string }).uri;
+    if (uri) subscribedUris.delete(uri);
+    return {};
+  });
   server.server.fallbackRequestHandler = async (request) => {
-    if (request.method === "resources/subscribe" || request.method === "resources/unsubscribe") {
+    if (request.method === "resources/subscribe") {
+      const uri = (request.params as { uri: string })?.uri;
+      if (uri) subscribedUris.add(uri);
+      return {};
+    }
+    if (request.method === "resources/unsubscribe") {
+      const uri = (request.params as { uri: string })?.uri;
+      if (uri) subscribedUris.delete(uri);
       return {};
     }
     throw new Error(`Method not found: ${request.method}`);
   };
+
+  /**
+   * Send a resource-updated notification only if the URI is subscribed.
+   * APEX domain notifications bypass this and always broadcast.
+   */
+  const emitResourceUpdated = (uri: string) => {
+    if (!subscribedUris.has(uri)) return;
+    server.server.notification({
+      method: "notifications/resources/updated",
+      params: { uri },
+    }).catch(() => {});
+  };
+
+  return { emitResourceUpdated };
 }
 
 /* ------------------------------------------------------------------ */
@@ -160,7 +192,7 @@ async function startHttp(port: number) {
   } as any);
   const state = new ReferenceTradingState();
 
-  setupCommon(server);
+  const { emitResourceUpdated } = setupCommon(server);
 
   /* -- Notification helper ----------------------------------------- */
 
@@ -174,6 +206,7 @@ async function startHttp(port: number) {
   };
 
   state.emitNotification = emitNotification;
+  state.emitResourceUpdated = emitResourceUpdated;
 
   /* -- Tick engine ------------------------------------------------- */
 
@@ -181,14 +214,8 @@ async function startHttp(port: number) {
     onQuoteUpdate(mid, bid, ask) {
       state.updateQuote(mid, bid, ask);
       state.bumpResources(state.uris.quote, state.uris.features);
-      server.server.notification({
-        method: "notifications/resources/updated",
-        params: { uri: state.uris.quote },
-      }).catch(() => {});
-      server.server.notification({
-        method: "notifications/resources/updated",
-        params: { uri: state.uris.features },
-      }).catch(() => {});
+      emitResourceUpdated(state.uris.quote);
+      emitResourceUpdated(state.uris.features);
     },
 
     onCandleClose(timeframe, candle) {
@@ -213,15 +240,13 @@ async function startHttp(port: number) {
         },
         seq,
       );
+      // APEX domain notification — always broadcast
       server.server.notification({
         method: notif.method,
         params: notif.params,
       }).catch(() => {});
 
-      server.server.notification({
-        method: "notifications/resources/updated",
-        params: { uri: candleUri },
-      }).catch(() => {});
+      emitResourceUpdated(candleUri);
     },
 
     onCandleUpdate(timeframe) {
@@ -230,17 +255,11 @@ async function startHttp(port: number) {
         : timeframe === "M5" ? state.uris.candlesM5
         : state.uris.candlesH1;
 
-      server.server.notification({
-        method: "notifications/resources/updated",
-        params: { uri: candleUri },
-      }).catch(() => {});
+      emitResourceUpdated(candleUri);
     },
 
     onFeatureUpdate() {
-      server.server.notification({
-        method: "notifications/resources/updated",
-        params: { uri: state.uris.features },
-      }).catch(() => {});
+      emitResourceUpdated(state.uris.features);
     },
   });
 

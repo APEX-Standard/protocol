@@ -548,3 +548,13 @@ export async function httpSubscribe(baseUrl, sessionId, uri) {
   });
   return json;
 }
+
+export async function httpUnsubscribe(baseUrl, sessionId, uri) {
+  const { json } = await httpPost(baseUrl, sessionId, {
+    jsonrpc: "2.0",
+    id: nextId(),
+    method: "resources/unsubscribe",
+    params: { uri },
+  });
+  return json;
+}

@@ -107,6 +107,11 @@ export class ReferenceTradingState {
   /** Optional callback for emitting APEX notifications (set in HTTP mode). */
   emitNotification?: (notif: ApexNotification) => void;
 
+  /** Optional subscription-aware callback for resource-updated notifications.
+   *  When set (HTTP mode), notifyResources uses this instead of the SDK's
+   *  sendResourceUpdated, ensuring only subscribed URIs are emitted. */
+  emitResourceUpdated?: (uri: string) => void;
+
   readonly accountId = ACCOUNT_ID;
   readonly instrumentId = INSTRUMENT_ID;
   readonly brokerSymbol = BROKER_SYMBOL;
@@ -380,7 +385,11 @@ export class ReferenceTradingState {
   async notifyResources(server: McpServer, ...uris: string[]) {
     this.bumpResources(...uris);
     for (const uri of uris) {
-      await server.server.sendResourceUpdated({ uri });
+      if (this.emitResourceUpdated) {
+        this.emitResourceUpdated(uri);
+      } else {
+        await server.server.sendResourceUpdated({ uri });
+      }
     }
   }
 

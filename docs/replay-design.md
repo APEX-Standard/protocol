@@ -18,7 +18,7 @@ The agent is connected to a broker over HTTP/SSE. Two things are happening:
 
 **Outbound (acknowledgment):** The agent periodically calls `apex.session.acknowledge({ last_event_id: "472" })` to tell the broker "I've fully processed everything through event 472." The broker discards events 1-472 from the log. This is like committing a Kafka consumer offset, or like FIX sequence reset — the agent controls what the broker needs to keep.
 
-If the agent never acknowledges, the broker retains everything up to its max retention cap (documented in capabilities via `max_retention_events` and `max_retention_seconds`). Reference implementations default to 10000 events in-memory.
+If the agent never acknowledges, the broker retains everything up to its max retention cap (documented in capabilities via `max_retention_events` and `max_retention_seconds`).
 
 ---
 
