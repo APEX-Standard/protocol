@@ -4,7 +4,6 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -28,7 +27,6 @@ final class ReferenceTradingState {
     private final Map<String, Integer> sequences = new LinkedHashMap<>();
     private final List<Map<String, Object>> orders = new ArrayList<>();
     private final List<Map<String, Object>> fills = new ArrayList<>();
-    private final List<String> pendingUpdates = new ArrayList<>();
     private boolean quoteStale;
     private boolean riskStale;
     private boolean forceSequenceGap;
@@ -42,6 +40,17 @@ final class ReferenceTradingState {
 
     /** Callback for starting tick engine after authentication. */
     private volatile Runnable onAuthenticated;
+
+    /** Callback for emitting resource update notifications after state mutations. */
+    @FunctionalInterface
+    interface ResourceUpdateCallback {
+        void onResourceUpdated(String uri);
+    }
+    private volatile ResourceUpdateCallback resourceUpdateCallback;
+
+    void setResourceUpdateCallback(ResourceUpdateCallback callback) {
+        this.resourceUpdateCallback = callback;
+    }
 
     private final List<ProtocolModels.Position> positions = List.of(
         new ProtocolModels.Position(
@@ -463,18 +472,24 @@ final class ReferenceTradingState {
         };
     }
 
-    synchronized List<String> drainPendingUpdates() {
-        List<String> updates = new ArrayList<>(new LinkedHashSet<>(pendingUpdates));
-        pendingUpdates.clear();
-        return updates;
-    }
-
     private void bump(String... uris) {
         for (String uri : uris) {
             sequences.merge(uri, forceSequenceGap ? 5 : 1, Integer::sum);
-            pendingUpdates.add(uri);
         }
         forceSequenceGap = false;
+    }
+
+    /**
+     * Fire resource update notifications OUTSIDE the synchronized monitor.
+     * Callers must invoke this after calling synchronized methods that mutate state.
+     */
+    void fireResourceUpdates(String... uris) {
+        ResourceUpdateCallback cb = resourceUpdateCallback;
+        if (cb != null) {
+            for (String uri : uris) {
+                try { cb.onResourceUpdated(uri); } catch (Exception ignored) {}
+            }
+        }
     }
 
     private Map<String, Object> candlesEnvelope(String uri, String timeframe, double close) {

@@ -23,8 +23,8 @@ export const servers = {
   },
   rust: {
     cwd: path.join(repoRoot, "reference-implementation", "rust"),
-    command: "cargo",
-    args: ["run", "--quiet"],
+    command: "./target/debug/apex-reference",
+    args: [],
   },
   java: {
     cwd: path.join(repoRoot, "reference-implementation", "java"),
@@ -246,8 +246,8 @@ export const httpServers = {
   },
   rust: {
     cwd: path.join(repoRoot, "reference-implementation", "rust"),
-    command: "cargo",
-    args: ["run", "--quiet", "--", "--http"],
+    command: "./target/debug/apex-reference",
+    args: ["--http"],
   },
   java: {
     cwd: path.join(repoRoot, "reference-implementation", "java"),

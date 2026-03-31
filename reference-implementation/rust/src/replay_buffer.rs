@@ -97,7 +97,10 @@ impl ReplayBuffer {
                 break;
             }
         }
-        (inner.acknowledged_through_id.to_string(), inner.events.len())
+        (
+            inner.acknowledged_through_id.to_string(),
+            inner.events.len(),
+        )
     }
 
     /// Replay events after the given last_event_id with gap-fill classification.
@@ -108,10 +111,14 @@ impl ReplayBuffer {
     pub fn replay_after(&self, last_event_id: &str) -> ReplayResult {
         let cursor_id: u64 = match last_event_id.parse() {
             Ok(id) => id,
-            Err(_) => return ReplayResult::Failed { oldest_available_id: None },
+            Err(_) => {
+                return ReplayResult::Failed {
+                    oldest_available_id: None,
+                }
+            }
         };
 
-        let mut inner = self.inner.lock().expect("replay buffer mutex poisoned");
+        let inner = self.inner.lock().expect("replay buffer mutex poisoned");
 
         let oldest_id = inner.events.front().map(|e| e.id);
 

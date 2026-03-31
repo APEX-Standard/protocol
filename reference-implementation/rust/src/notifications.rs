@@ -58,35 +58,36 @@ pub fn order_filled(
     )
 }
 
-pub fn order_partially_filled(
-    order_id: &str,
-    side: &str,
-    fill_price: f64,
-    fill_quantity: f64,
-    remaining_quantity: f64,
-    account_id: &str,
-    instrument_id: &str,
-    fill_sequence: u64,
-) -> Value {
+pub struct PartialFillParams<'a> {
+    pub order_id: &'a str,
+    pub side: &'a str,
+    pub fill_price: f64,
+    pub fill_quantity: f64,
+    pub remaining_quantity: f64,
+    pub account_id: &'a str,
+    pub instrument_id: &'a str,
+    pub fill_sequence: u64,
+}
+
+pub fn order_partially_filled(p: PartialFillParams<'_>) -> Value {
     build_apex_notification(
         "notifications/apex.order.partially_filled",
         NotificationOpts {
-            account_id: Some(account_id.to_owned()),
-            instrument_id: Some(instrument_id.to_owned()),
-            resource_uri: format!("apex://account/fills/{account_id}"),
-            sequence: fill_sequence,
+            account_id: Some(p.account_id.to_owned()),
+            instrument_id: Some(p.instrument_id.to_owned()),
+            resource_uri: format!("apex://account/fills/{}", p.account_id),
+            sequence: p.fill_sequence,
             payload: json!({
-                "order_id": order_id,
-                "side": side,
-                "fill_price": fill_price,
-                "fill_quantity": fill_quantity,
-                "remaining_quantity": remaining_quantity,
+                "order_id": p.order_id,
+                "side": p.side,
+                "fill_price": p.fill_price,
+                "fill_quantity": p.fill_quantity,
+                "remaining_quantity": p.remaining_quantity,
             }),
         },
     )
 }
 
-#[allow(dead_code)]
 pub fn order_rejected(code: &str, reason: &str, risk_sequence: u64) -> Value {
     build_apex_notification(
         "notifications/apex.order.rejected",
@@ -103,33 +104,36 @@ pub fn order_rejected(code: &str, reason: &str, risk_sequence: u64) -> Value {
     )
 }
 
-pub fn candle_closed(
-    instrument_id: &str,
-    timeframe: &str,
-    open: f64,
-    high: f64,
-    low: f64,
-    close: f64,
-    volume: u64,
-    candle_sequence: u64,
-) -> Value {
+pub struct CandleClosedParams<'a> {
+    pub instrument_id: &'a str,
+    pub timeframe: &'a str,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: u64,
+    pub candle_sequence: u64,
+}
+
+pub fn candle_closed(p: CandleClosedParams<'_>) -> Value {
     build_apex_notification(
         "notifications/apex.market.candle_closed",
         NotificationOpts {
             account_id: None,
-            instrument_id: Some(instrument_id.to_owned()),
+            instrument_id: Some(p.instrument_id.to_owned()),
             resource_uri: format!(
-                "apex://market/candles/{instrument_id}?timeframe={timeframe}&limit=200"
+                "apex://market/candles/{}?timeframe={}&limit=200",
+                p.instrument_id, p.timeframe
             ),
-            sequence: candle_sequence,
+            sequence: p.candle_sequence,
             payload: json!({
-                "instrument_id": instrument_id,
-                "timeframe": timeframe,
-                "open": open,
-                "high": high,
-                "low": low,
-                "close": close,
-                "volume": volume,
+                "instrument_id": p.instrument_id,
+                "timeframe": p.timeframe,
+                "open": p.open,
+                "high": p.high,
+                "low": p.low,
+                "close": p.close,
+                "volume": p.volume,
                 "complete": true,
             }),
         },

@@ -1,10 +1,12 @@
 package org.apexstandard.reference;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.modelcontextprotocol.server.McpServerFeatures;
+import io.modelcontextprotocol.spec.McpSchema;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,7 +19,6 @@ final class ToolRegistry {
     static final String SERVER_VERSION = "0.1.0";
 
     private final ObjectMapper mapper;
-    private final SchemaBuilder schema;
     private final ReferenceTradingState state;
     private final String transportMode;
     private final NotificationDispatcher dispatcher;
@@ -30,49 +31,155 @@ final class ToolRegistry {
     ToolRegistry(ObjectMapper mapper, ReferenceTradingState state, String transportMode,
                  NotificationDispatcher dispatcher, ReplayBuffer replayBuffer) {
         this.mapper = mapper;
-        this.schema = new SchemaBuilder(mapper);
         this.state = state;
         this.transportMode = transportMode != null ? transportMode : "stdio";
         this.dispatcher = dispatcher;
         this.replayBuffer = replayBuffer;
     }
 
-    Map<String, ToolDefinition> createTools() {
-        Map<String, ToolDefinition> tools = new LinkedHashMap<>();
+    // ── MCP SDK tool specifications ────────────────────────────────────
 
-        registerSessionTools(tools);
-        registerAccountTools(tools);
-        registerOrderTools(tools);
-        registerPositionTools(tools);
-        registerMarketTools(tools);
-        registerRiskTools(tools);
-        registerFxTools(tools);
-        registerCfdTools(tools);
-        registerCryptoTools(tools);
+    List<McpServerFeatures.SyncToolSpecification> createToolSpecifications() {
+        List<McpServerFeatures.SyncToolSpecification> specs = new ArrayList<>();
 
-        return tools;
+        registerSessionSpecs(specs);
+        registerAccountSpecs(specs);
+        registerOrderSpecs(specs);
+        registerPositionSpecs(specs);
+        registerMarketSpecs(specs);
+        registerRiskSpecs(specs);
+        registerFxSpecs(specs);
+        registerCfdSpecs(specs);
+        registerCryptoSpecs(specs);
+
+        return specs;
     }
 
-    private void registerSessionTools(Map<String, ToolDefinition> tools) {
-        registerTool(
-            tools,
+    // ── Schema property helpers ─────────────────────────────────────────
+
+    private static Map<String, Object> strProp(String description) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("type", "string");
+        if (description != null) m.put("description", description);
+        return m;
+    }
+
+    private static Map<String, Object> numProp(String description) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("type", "number");
+        if (description != null) m.put("description", description);
+        return m;
+    }
+
+    private static Map<String, Object> boolProp(boolean defaultValue, String description) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("type", "boolean");
+        if (description != null) m.put("description", description);
+        m.put("default", defaultValue);
+        return m;
+    }
+
+    private static Map<String, Object> intProp(String description, int min, int max, int defaultValue) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("type", "integer");
+        if (description != null) m.put("description", description);
+        m.put("minimum", min);
+        m.put("maximum", max);
+        m.put("default", defaultValue);
+        return m;
+    }
+
+    static Map<String, Object> enumProp(String description, String defaultValue, String... values) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("type", "string");
+        if (description != null) m.put("description", description);
+        m.put("enum", List.of(values));
+        if (defaultValue != null) m.put("default", defaultValue);
+        return m;
+    }
+
+    private static Map<String, Object> objProp(String description, Map<String, Object> properties, List<String> required) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("type", "object");
+        if (description != null) m.put("description", description);
+        m.put("properties", properties);
+        if (required != null && !required.isEmpty()) m.put("required", required);
+        return m;
+    }
+
+    // ── Registration helpers ────────────────────────────────────────────
+
+    private void registerSpec(List<McpServerFeatures.SyncToolSpecification> specs,
+            String name, String description, McpSchema.JsonSchema inputSchema,
+            java.util.function.Function<Map<String, Object>, Object> handler) {
+        McpSchema.Tool tool = McpSchema.Tool.builder()
+            .name(name)
+            .description(description)
+            .inputSchema(inputSchema)
+            .annotations(annotationsFor(name))
+            .build();
+        specs.add(new McpServerFeatures.SyncToolSpecification(tool,
+            (exchange, request) -> {
+                Map<String, Object> args = request.arguments() != null ? request.arguments() : Map.of();
+                Object payload;
+                try { payload = handler.apply(args); }
+                catch (Exception e) { payload = apexError("APEX_5000", "internal", e.getMessage() != null ? e.getMessage() : "Internal error"); }
+                boolean isError = payload instanceof ProtocolModels.ApexErrorEnvelope;
+                try {
+                    String json = mapper.writeValueAsString(payload);
+                    return McpSchema.CallToolResult.builder()
+                        .content(List.of(new McpSchema.TextContent(json)))
+                        .isError(isError)
+                        .build();
+                } catch (Exception e) {
+                    return McpSchema.CallToolResult.builder()
+                        .content(List.of(new McpSchema.TextContent("{\"error\":\"serialization_failed\"}")))
+                        .isError(true)
+                        .build();
+                }
+            }));
+    }
+
+    private McpSchema.ToolAnnotations annotationsFor(String name) {
+        boolean readOnly = name.startsWith("apex.account.")
+            || name.startsWith("apex.market.")
+            || name.startsWith("apex.risk.")
+            || name.startsWith("apex.fx.")
+            || name.startsWith("apex.cfd.")
+            || "apex.crypto.funding_rate".equals(name)
+            || "apex.crypto.liquidation_estimate".equals(name)
+            || "apex.order.status".equals(name)
+            || "apex.session.capabilities".equals(name)
+            || "apex.session.heartbeat".equals(name)
+            || "apex.session.acknowledge".equals(name);
+        boolean destructive = "apex.order.place".equals(name)
+            || "apex.order.modify".equals(name)
+            || "apex.order.cancel".equals(name)
+            || "apex.position.close".equals(name);
+        boolean idempotent = readOnly
+            || "apex.session.authenticate".equals(name)
+            || "apex.order.cancel".equals(name);
+        return new McpSchema.ToolAnnotations(null, readOnly, destructive, idempotent, null, null);
+    }
+
+    // ── Spec registration by domain ─────────────────────────────────────
+
+    private void registerSessionSpecs(List<McpServerFeatures.SyncToolSpecification> specs) {
+        registerSpec(specs,
             "apex.session.authenticate",
             "Establish an authenticated trading session. The broker validates credentials directly and binds the result to the MCP session.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "token", "Broker-issued JWT or OAuth token", true);
-                schema.enumProp(props, req, "token_type", null, false, "jwt", "jwt", "oauth2");
-                schema.stringProp(props, req, "account_id", "Optional — broker may derive from token", false);
-                schema.stringProp(props, req, "hub_session_id", "Optional session reference from caller", false);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "token", strProp("Broker-issued JWT or OAuth token"),
+                "token_type", enumProp(null, "jwt", "jwt", "oauth2"),
+                "account_id", strProp("Optional — broker may derive from token"),
+                "hub_session_id", strProp("Optional session reference from caller")
+            ), List.of("token"), false, null, null),
             args -> {
                 String token = argStr(args, "token", "");
                 if (token.length() < 10) {
                     return apexError("APEX_4001", "auth", "Invalid or expired token");
                 }
-
-                // Fire authenticated callback (starts tick engine in HTTP mode)
                 state.fireOnAuthenticated();
-
                 return new SessionResponse(
                     UUID.randomUUID().toString(),
                     argStr(args, "account_id", "ACC_12345"),
@@ -85,12 +192,10 @@ final class ToolRegistry {
             }
         );
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "apex.session.capabilities",
             "Query the full capability manifest of this broker implementation.",
-            schema.objectSchema((props, req) -> {
-            }),
+            new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null),
             args -> {
                 Object realtimeContract;
                 if ("streamable_http".equals(transportMode)) {
@@ -120,7 +225,6 @@ final class ToolRegistry {
                         "account_freshness_ms", 2000
                     );
                 }
-
                 return new CapabilitiesResponse(
                     SERVER_VERSION,
                     "reference-broker",
@@ -136,19 +240,21 @@ final class ToolRegistry {
             }
         );
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "apex.session.heartbeat",
             "Keep-alive ping. Hub marks session degraded if response exceeds 500ms.",
-            schema.objectSchema((props, req) -> schema.stringProp(props, req, "timestamp", "ISO8601 timestamp", true)),
+            new McpSchema.JsonSchema("object", Map.of(
+                "timestamp", strProp("ISO8601 timestamp")
+            ), List.of("timestamp"), false, null, null),
             args -> new HeartbeatResponse(now(), "ok")
         );
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "apex.session.acknowledge",
             "Acknowledge receipt of SSE events through a given event ID. Acknowledged events may be pruned from the replay buffer.",
-            schema.objectSchema((props, req) -> schema.stringProp(props, req, "last_event_id", "The SSE event ID through which all events have been processed", true)),
+            new McpSchema.JsonSchema("object", Map.of(
+                "last_event_id", strProp("The SSE event ID through which all events have been processed")
+            ), List.of("last_event_id"), false, null, null),
             args -> {
                 if (replayBuffer == null) {
                     return Map.of("acknowledged_through", "0", "buffer_depth", 0);
@@ -157,20 +263,18 @@ final class ToolRegistry {
             }
         );
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "reference.test.set_realtime_state",
             "Reference-only fault injection for conformance and resilience testing.",
-            schema.objectSchema((props, req) -> {
-                schema.booleanProp(props, req, "quote_stale", false, false);
-                schema.booleanProp(props, req, "risk_stale", false, false);
-                schema.booleanProp(props, req, "force_sequence_gap", false, false);
-                schema.booleanProp(props, req, "kill_switch_active", false, false);
-                schema.booleanProp(props, req, "partial_fill_next_order", false, false);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "quote_stale", boolProp(false, null),
+                "risk_stale", boolProp(false, null),
+                "force_sequence_gap", boolProp(false, null),
+                "kill_switch_active", boolProp(false, null),
+                "partial_fill_next_order", boolProp(false, null)
+            ), List.of(), false, null, null),
             args -> {
                 boolean wasKillSwitchActive = state.isKillSwitchActive();
-
                 Map<String, Object> faults = state.setFaults(
                     argBool(args, "quote_stale"),
                     argBool(args, "risk_stale"),
@@ -178,27 +282,23 @@ final class ToolRegistry {
                     argBool(args, "kill_switch_active"),
                     argBool(args, "partial_fill_next_order")
                 );
-
-                // Emit kill_switch_engaged notification when transitioning to active
                 if (!wasKillSwitchActive && Boolean.TRUE.equals(argBool(args, "kill_switch_active")) && dispatcher != null) {
                     int riskSeq = state.getSequence(ReferenceTradingState.RISK_URI);
                     dispatcher.emit(NotificationDispatcher.killSwitchEngagedNotification(riskSeq));
                 }
-
                 return Map.of("ok", true, "faults", faults);
             }
         );
     }
 
-    private void registerAccountTools(Map<String, ToolDefinition> tools) {
-        registerTool(
-            tools,
+    private void registerAccountSpecs(List<McpServerFeatures.SyncToolSpecification> specs) {
+        registerSpec(specs,
             "apex.account.summary",
             "Current account state — balances, margin utilisation, equity.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", null, true);
-                schema.stringProp(props, req, "currency", "Response currency. Defaults to account base currency.", false);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "account_id", strProp(null),
+                "currency", strProp("Response currency. Defaults to account base currency.")
+            ), List.of("account_id"), false, null, null),
             args -> {
                 String accountId = argStr(args, "account_id", "");
                 if (accountId.isEmpty()) {
@@ -208,97 +308,95 @@ final class ToolRegistry {
             }
         );
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "apex.account.positions",
             "All open positions with live P&L.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", null, true);
-                schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)", false);
-                schema.stringProp(props, req, "profile", null, false);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "account_id", strProp(null),
+                "instrument_id", strProp("APEX canonical instrument ID (e.g. APEX:FX:EURUSD)"),
+                "profile", strProp(null)
+            ), List.of("account_id"), false, null, null),
             args -> state.positionsResponse()
         );
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "apex.account.orders",
             "Known orders and their current lifecycle state.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", null, true);
-                schema.enumProp(props, req, "status", null, false, "all", "working", "partially_filled", "filled", "cancelled", "rejected", "expired", "all");
-                schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)", false);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "account_id", strProp(null),
+                "status", enumProp(null, "all", "working", "partially_filled", "filled", "cancelled", "rejected", "expired", "all"),
+                "instrument_id", strProp("APEX canonical instrument ID (e.g. APEX:FX:EURUSD)")
+            ), List.of("account_id"), false, null, null),
             args -> state.ordersResponse()
         );
 
-        registerTool(
-            tools,
+        var historyProps = new LinkedHashMap<String, Object>();
+        historyProps.put("account_id", strProp(null));
+        historyProps.put("from", strProp("ISO8601 start date"));
+        historyProps.put("to", strProp("ISO8601 end date"));
+        historyProps.put("event_type", enumProp(null, "all", "trade", "funding", "cash", "corporate_action", "all"));
+        historyProps.put("limit", intProp(null, 1, 500, 100));
+        historyProps.put("cursor", strProp("Pagination cursor"));
+        registerSpec(specs,
             "apex.account.history",
             "Closed trades and funding events.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", null, true);
-                schema.stringProp(props, req, "from", "ISO8601 start date", true);
-                schema.stringProp(props, req, "to", "ISO8601 end date", true);
-                schema.enumProp(props, req, "event_type", null, false, "all", "trade", "funding", "cash", "corporate_action", "all");
-                schema.integerProp(props, req, "limit", null, false, 1, 500, 100);
-                schema.stringProp(props, req, "cursor", "Pagination cursor", false);
-            }),
+            new McpSchema.JsonSchema("object", historyProps, List.of("account_id", "from", "to"), false, null, null),
             args -> new AccountHistoryResponse(List.of(), null, false)
         );
     }
 
-    private void registerOrderTools(Map<String, ToolDefinition> tools) {
-        registerTool(
-            tools,
+    private void registerOrderSpecs(List<McpServerFeatures.SyncToolSpecification> specs) {
+        // apex.order.place — nested object schema with many fields, use LinkedHashMap
+        var slProps = new LinkedHashMap<String, Object>();
+        slProps.put("type", enumProp(null, null, "price", "pips", "percent"));
+        slProps.put("value", numProp(null));
+
+        var tpProps = new LinkedHashMap<String, Object>();
+        tpProps.put("type", enumProp(null, null, "price", "pips", "percent"));
+        tpProps.put("value", numProp(null));
+
+        var tsProps = new LinkedHashMap<String, Object>();
+        tsProps.put("type", enumProp(null, null, "pips", "percent"));
+        tsProps.put("value", numProp(null));
+
+        var orderProps = new LinkedHashMap<String, Object>();
+        orderProps.put("instrument_id", strProp("APEX canonical instrument ID (e.g. APEX:FX:EURUSD)"));
+        orderProps.put("broker_symbol", strProp(null));
+        orderProps.put("side", enumProp(null, null, "buy", "sell"));
+        orderProps.put("order_type", enumProp(null, null, "market", "limit", "stop", "stop_limit"));
+        orderProps.put("quantity", numProp(null));
+        orderProps.put("quantity_unit", enumProp(null, "base_units", "base_units", "shares", "contracts"));
+        orderProps.put("time_in_force", enumProp(null, "GTC", "GTC", "IOC", "FOK", "DAY"));
+        orderProps.put("limit_price", numProp(null));
+        orderProps.put("stop_price", numProp(null));
+        orderProps.put("profile", strProp(null));
+        orderProps.put("client_order_id", strProp(null));
+        orderProps.put("strategy_id", strProp(null));
+        orderProps.put("comment", strProp(null));
+        orderProps.put("stop_loss", objProp("Stop loss protection", slProps, List.of("type", "value")));
+        orderProps.put("take_profit", objProp("Take profit protection", tpProps, List.of("type", "value")));
+        orderProps.put("trailing_stop", objProp("Trailing stop protection", tsProps, List.of("type", "value")));
+        orderProps.put("profile_data", objProp("Profile-specific fields", Map.of(), null));
+
+        registerSpec(specs,
             "apex.order.place",
             "Unified order entry across all asset classes. Profile-composable.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", null, true);
-                schema.objectProp(props, req, "order", null, true, (orderProps, orderReq) -> {
-                    schema.stringProp(orderProps, orderReq, "instrument_id", "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)", true);
-                    schema.stringProp(orderProps, orderReq, "broker_symbol", null, false);
-                    schema.enumProp(orderProps, orderReq, "side", null, true, null, "buy", "sell");
-                    schema.enumProp(orderProps, orderReq, "order_type", null, true, null, "market", "limit", "stop", "stop_limit");
-                    schema.numberProp(orderProps, orderReq, "quantity", null, true);
-                    schema.enumProp(orderProps, orderReq, "quantity_unit", null, false, "base_units", "base_units", "shares", "contracts");
-                    schema.enumProp(orderProps, orderReq, "time_in_force", null, false, "GTC", "GTC", "IOC", "FOK", "DAY");
-                    schema.numberProp(orderProps, orderReq, "limit_price", null, false);
-                    schema.numberProp(orderProps, orderReq, "stop_price", null, false);
-                    schema.stringProp(orderProps, orderReq, "profile", null, false);
-                    schema.stringProp(orderProps, orderReq, "client_order_id", null, false);
-                    schema.stringProp(orderProps, orderReq, "strategy_id", null, false);
-                    schema.stringProp(orderProps, orderReq, "comment", null, false);
-                    schema.objectProp(orderProps, orderReq, "stop_loss", "Stop loss protection", false, (slProps, slReq) -> {
-                        schema.enumProp(slProps, slReq, "type", null, true, null, "price", "pips", "percent");
-                        schema.numberProp(slProps, slReq, "value", null, true);
-                    });
-                    schema.objectProp(orderProps, orderReq, "take_profit", "Take profit protection", false, (tpProps, tpReq) -> {
-                        schema.enumProp(tpProps, tpReq, "type", null, true, null, "price", "pips", "percent");
-                        schema.numberProp(tpProps, tpReq, "value", null, true);
-                    });
-                    schema.objectProp(orderProps, orderReq, "trailing_stop", "Trailing stop protection", false, (tsProps, tsReq) -> {
-                        schema.enumProp(tsProps, tsReq, "type", null, true, null, "pips", "percent");
-                        schema.numberProp(tsProps, tsReq, "value", null, true);
-                    });
-                    schema.objectProp(orderProps, orderReq, "profile_data", "Profile-specific fields", false, (pdProps, pdReq) -> {});
-                });
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "account_id", strProp(null),
+                "order", objProp(null, orderProps, List.of("instrument_id", "side", "order_type", "quantity"))
+            ), List.of("account_id", "order"), false, null, null),
             args -> {
                 Map<String, Object> order = argMap(args, "order");
                 if (order.isEmpty()) {
                     return apexError("APEX_4011", "validation", "order is required");
                 }
-
                 String orderType = argStr(order, "order_type", "market");
                 double quantity = argDouble(order, "quantity", 0);
                 if ("limit".equals(orderType) && !order.containsKey("limit_price")) {
                     return apexError("APEX_4011", "validation", "limit_price required for limit orders");
                 }
-
                 Map<String, Object> acceptance = state.orderAcceptance();
                 if (!Boolean.TRUE.equals(acceptance.get("ok"))) {
-                    // Emit order rejected notification in HTTP mode
                     if (dispatcher != null) {
                         int riskSeq = state.getSequence(ReferenceTradingState.RISK_URI);
                         dispatcher.emit(NotificationDispatcher.orderRejectedNotification(
@@ -313,13 +411,14 @@ final class ToolRegistry {
                         String.valueOf(acceptance.get("message"))
                     );
                 }
-
                 Object result = state.createOrder(args);
+                state.fireResourceUpdates(
+                    ReferenceTradingState.ORDERS_URI, ReferenceTradingState.POSITIONS_URI,
+                    ReferenceTradingState.FILLS_URI, ReferenceTradingState.RISK_URI,
+                    ReferenceTradingState.DECISION_CONTEXT_URI);
                 if (result instanceof ProtocolModels.ApexErrorEnvelope) {
                     return result;
                 }
-
-                // Emit order filled/partially filled notification in HTTP mode
                 if (dispatcher != null && "market".equals(orderType)) {
                     Map<String, Object> lastOrder = state.getLastOrder();
                     if (lastOrder != null) {
@@ -332,37 +431,40 @@ final class ToolRegistry {
                         }
                     }
                 }
-
                 return result;
             }
         );
 
-        registerTool(
-            tools,
+        // apex.order.modify
+        var modSlProps = new LinkedHashMap<String, Object>();
+        modSlProps.put("type", enumProp(null, null, "price", "pips", "percent"));
+        modSlProps.put("value", numProp(null));
+
+        var modTpProps = new LinkedHashMap<String, Object>();
+        modTpProps.put("type", enumProp(null, null, "price", "pips", "percent"));
+        modTpProps.put("value", numProp(null));
+
+        var modTsProps = new LinkedHashMap<String, Object>();
+        modTsProps.put("type", enumProp(null, null, "pips", "percent"));
+        modTsProps.put("value", numProp(null));
+
+        var modProps = new LinkedHashMap<String, Object>();
+        modProps.put("limit_price", numProp(null));
+        modProps.put("stop_price", numProp(null));
+        modProps.put("quantity", numProp(null));
+        modProps.put("stop_loss", objProp("Stop loss protection", modSlProps, List.of("type", "value")));
+        modProps.put("take_profit", objProp("Take profit protection", modTpProps, List.of("type", "value")));
+        modProps.put("trailing_stop", objProp("Trailing stop protection", modTsProps, List.of("type", "value")));
+
+        registerSpec(specs,
             "apex.order.modify",
             "Amend a working order or an open position's protection settings.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", null, true);
-                schema.enumProp(props, req, "target_type", null, true, null, "order", "position");
-                schema.stringProp(props, req, "target_id", null, true);
-                schema.objectProp(props, req, "modifications", null, true, (modProps, modReq) -> {
-                    schema.numberProp(modProps, modReq, "limit_price", null, false);
-                    schema.numberProp(modProps, modReq, "stop_price", null, false);
-                    schema.numberProp(modProps, modReq, "quantity", null, false);
-                    schema.objectProp(modProps, modReq, "stop_loss", "Stop loss protection", false, (slProps, slReq) -> {
-                        schema.enumProp(slProps, slReq, "type", null, true, null, "price", "pips", "percent");
-                        schema.numberProp(slProps, slReq, "value", null, true);
-                    });
-                    schema.objectProp(modProps, modReq, "take_profit", "Take profit protection", false, (tpProps, tpReq) -> {
-                        schema.enumProp(tpProps, tpReq, "type", null, true, null, "price", "pips", "percent");
-                        schema.numberProp(tpProps, tpReq, "value", null, true);
-                    });
-                    schema.objectProp(modProps, modReq, "trailing_stop", "Trailing stop protection", false, (tsProps, tsReq) -> {
-                        schema.enumProp(tsProps, tsReq, "type", null, true, null, "pips", "percent");
-                        schema.numberProp(tsProps, tsReq, "value", null, true);
-                    });
-                });
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "account_id", strProp(null),
+                "target_type", enumProp(null, null, "order", "position"),
+                "target_id", strProp(null),
+                "modifications", objProp(null, modProps, null)
+            ), List.of("account_id", "target_type", "target_id", "modifications"), false, null, null),
             args -> {
                 String targetType = argStr(args, "target_type", "");
                 Map<String, Object> modifications = argMap(args, "modifications");
@@ -372,8 +474,8 @@ final class ToolRegistry {
                     || modifications.containsKey("quantity"))) {
                     return apexError("APEX_4011", "validation", "positions may only amend stop_loss, take_profit, or trailing_stop");
                 }
-
                 state.modifyOrder(argStr(args, "target_id", ""));
+                state.fireResourceUpdates(ReferenceTradingState.ORDERS_URI, ReferenceTradingState.DECISION_CONTEXT_URI);
                 return new OrderModifyResponse(
                     targetType,
                     argStr(args, "target_id", ""),
@@ -384,30 +486,29 @@ final class ToolRegistry {
             }
         );
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "apex.order.cancel",
             "Cancel a working or partially filled order.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", null, true);
-                schema.stringProp(props, req, "order_id", null, true);
-                schema.stringProp(props, req, "reason", "Agent-provided reason for audit trail", false);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "account_id", strProp(null),
+                "order_id", strProp(null),
+                "reason", strProp("Agent-provided reason for audit trail")
+            ), List.of("account_id", "order_id"), false, null, null),
             args -> {
                 String orderId = argStr(args, "order_id", "");
                 state.cancelOrder(orderId);
+                state.fireResourceUpdates(ReferenceTradingState.ORDERS_URI, ReferenceTradingState.DECISION_CONTEXT_URI);
                 return new OrderCancelResponse(orderId, "cancelled", null, now());
             }
         );
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "apex.order.status",
             "Query the current state of a single order.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", null, true);
-                schema.stringProp(props, req, "order_id", null, true);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "account_id", strProp(null),
+                "order_id", strProp(null)
+            ), List.of("account_id", "order_id"), false, null, null),
             args -> {
                 Object result = state.orderStatus(argStr(args, "order_id", ""));
                 if (result == null) {
@@ -418,22 +519,20 @@ final class ToolRegistry {
         );
     }
 
-    private void registerPositionTools(Map<String, ToolDefinition> tools) {
-        registerTool(
-            tools,
+    private void registerPositionSpecs(List<McpServerFeatures.SyncToolSpecification> specs) {
+        registerSpec(specs,
             "apex.position.close",
             "Close an open position fully or partially. Executes as an opposite-direction market order.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", null, true);
-                schema.stringProp(props, req, "position_id", null, true);
-                schema.numberProp(props, req, "quantity", "Quantity to close. Omit for full close.", false);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "account_id", strProp(null),
+                "position_id", strProp(null),
+                "quantity", numProp("Quantity to close. Omit for full close.")
+            ), List.of("account_id", "position_id"), false, null, null),
             args -> {
                 String positionId = argStr(args, "position_id", "");
                 if (positionId.isBlank()) {
                     return apexError("APEX_4011", "validation", "position_id is required");
                 }
-
                 Map<String, Object> acceptance = state.orderAcceptance();
                 if (!Boolean.TRUE.equals(acceptance.get("ok"))) {
                     if (dispatcher != null) {
@@ -450,15 +549,15 @@ final class ToolRegistry {
                         String.valueOf(acceptance.get("message"))
                     );
                 }
-
                 Double quantity = args.containsKey("quantity") ? argDouble(args, "quantity", 0) : null;
-
                 ProtocolModels.PositionCloseResponse result = state.closePosition(positionId, quantity);
+                state.fireResourceUpdates(
+                    ReferenceTradingState.ORDERS_URI, ReferenceTradingState.POSITIONS_URI,
+                    ReferenceTradingState.FILLS_URI, ReferenceTradingState.RISK_URI,
+                    ReferenceTradingState.DECISION_CONTEXT_URI);
                 if (result == null) {
                     return apexError("APEX_4011", "validation", "Position not found: " + positionId);
                 }
-
-                // Emit order filled notification in HTTP mode
                 if (dispatcher != null) {
                     Map<String, Object> lastOrder = state.getLastOrder();
                     if (lastOrder != null) {
@@ -466,21 +565,19 @@ final class ToolRegistry {
                         dispatcher.emit(NotificationDispatcher.orderFilledNotification(lastOrder, fillSeq));
                     }
                 }
-
                 return result;
             }
         );
     }
 
-    private void registerMarketTools(Map<String, ToolDefinition> tools) {
-        registerTool(
-            tools,
+    private void registerMarketSpecs(List<McpServerFeatures.SyncToolSpecification> specs) {
+        registerSpec(specs,
             "apex.market.quote",
             "Current bid/ask/mid for an instrument.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)", false);
-                schema.stringProp(props, req, "broker_symbol", "Alternative to instrument_id", false);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "instrument_id", strProp("APEX canonical instrument ID (e.g. APEX:FX:EURUSD)"),
+                "broker_symbol", strProp("Alternative to instrument_id")
+            ), List.of(), false, null, null),
             args -> {
                 String instrumentId = argStr(args, "instrument_id", "");
                 String brokerSymbol = argStr(args, "broker_symbol", "");
@@ -499,29 +596,27 @@ final class ToolRegistry {
             }
         );
 
-        registerTool(
-            tools,
+        var snapshotProps = new LinkedHashMap<String, Object>();
+        snapshotProps.put("instrument_id", strProp("APEX canonical instrument ID (e.g. APEX:FX:EURUSD)"));
+        snapshotProps.put("timeframe", enumProp(null, null, "M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1", "MN"));
+        snapshotProps.put("from", strProp("ISO8601 start time"));
+        snapshotProps.put("to", strProp("ISO8601 end time (defaults to now)"));
+        snapshotProps.put("limit", intProp(null, 1, 1000, 200));
+        registerSpec(specs,
             "apex.market.snapshot",
             "OHLCV candle data for an instrument.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)", true);
-                schema.enumProp(props, req, "timeframe", null, true, null, "M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1", "MN");
-                schema.stringProp(props, req, "from", "ISO8601 start time", true);
-                schema.stringProp(props, req, "to", "ISO8601 end time (defaults to now)", false);
-                schema.integerProp(props, req, "limit", null, false, 1, 1000, 200);
-            }),
+            new McpSchema.JsonSchema("object", snapshotProps, List.of("instrument_id", "timeframe", "from"), false, null, null),
             args -> new MarketSnapshotResponse(argStr(args, "instrument_id", ""), argStr(args, "timeframe", ""), List.of())
         );
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "apex.market.search",
             "Discover instruments by keyword, asset class, or profile.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "query", null, true);
-                schema.enumProp(props, req, "profile", null, false, null, "fx", "cfd", "crypto", "derivatives", "fixed_income");
-                schema.integerProp(props, req, "limit", null, false, 1, 50, 20);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "query", strProp(null),
+                "profile", enumProp(null, null, "fx", "cfd", "crypto", "derivatives", "fixed_income"),
+                "limit", intProp(null, 1, 50, 20)
+            ), List.of("query"), false, null, null),
             args -> {
                 String query = argStr(args, "query", "").toUpperCase();
                 List<SearchInstrument> instruments = !query.isEmpty() && "EURUSD".contains(query)
@@ -531,11 +626,12 @@ final class ToolRegistry {
             }
         );
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "apex.market.details",
             "Full contract specification for an instrument.",
-            schema.objectSchema((props, req) -> schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)", true)),
+            new McpSchema.JsonSchema("object", Map.of(
+                "instrument_id", strProp("APEX canonical instrument ID (e.g. APEX:FX:EURUSD)")
+            ), List.of("instrument_id"), false, null, null),
             args -> {
                 String instrumentId = argStr(args, "instrument_id", "");
                 if (!ReferenceTradingState.INSTRUMENT_ID.equals(instrumentId)) {
@@ -566,25 +662,24 @@ final class ToolRegistry {
         );
     }
 
-    private void registerRiskTools(Map<String, ToolDefinition> tools) {
-        registerTool(
-            tools,
+    private void registerRiskSpecs(List<McpServerFeatures.SyncToolSpecification> specs) {
+        var riskOrderProps = new LinkedHashMap<String, Object>();
+        riskOrderProps.put("instrument_id", strProp("APEX canonical instrument ID (e.g. APEX:FX:EURUSD)"));
+        riskOrderProps.put("side", enumProp(null, null, "buy", "sell"));
+        riskOrderProps.put("order_type", enumProp(null, null, "market", "limit", "stop", "stop_limit"));
+        riskOrderProps.put("quantity", numProp(null));
+
+        registerSpec(specs,
             "apex.risk.check",
             "Pre-trade margin and exposure check. Call before placing large orders.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", null, true);
-                schema.objectProp(props, req, "order", null, true, (orderProps, orderReq) -> {
-                    schema.stringProp(orderProps, orderReq, "instrument_id", "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)", true);
-                    schema.enumProp(orderProps, orderReq, "side", null, true, null, "buy", "sell");
-                    schema.enumProp(orderProps, orderReq, "order_type", null, true, null, "market", "limit", "stop", "stop_limit");
-                    schema.numberProp(orderProps, orderReq, "quantity", null, true);
-                });
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "account_id", strProp(null),
+                "order", objProp(null, riskOrderProps, List.of("instrument_id", "side", "order_type", "quantity"))
+            ), List.of("account_id", "order"), false, null, null),
             args -> {
                 Map<String, Object> order = argMap(args, "order");
                 double quantity = argDouble(order, "quantity", 0);
                 double requiredMargin = (quantity / 100000.0) * 500.0;
-
                 return new RiskCheckResponse(
                     true,
                     requiredMargin,
@@ -597,11 +692,12 @@ final class ToolRegistry {
             }
         );
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "apex.risk.limits",
             "Current account-level risk limits and utilisation.",
-            schema.objectSchema((props, req) -> schema.stringProp(props, req, "account_id", null, true)),
+            new McpSchema.JsonSchema("object", Map.of(
+                "account_id", strProp(null)
+            ), List.of("account_id"), false, null, null),
             args -> new RiskLimitsResponse(
                 argStr(args, "account_id", ""),
                 5000000,
@@ -616,21 +712,19 @@ final class ToolRegistry {
         );
     }
 
-    private void registerFxTools(Map<String, ToolDefinition> tools) {
-        registerTool(
-            tools,
+    private void registerFxSpecs(List<McpServerFeatures.SyncToolSpecification> specs) {
+        registerSpec(specs,
             "apex.fx.rollover",
             "Query swap/rollover rates for an FX instrument. Rates are expressed in account currency per lot per night.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:FX:EURUSD)", true);
-                schema.stringProp(props, req, "as_of", "ISO8601 timestamp — defaults to now", false);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "instrument_id", strProp("APEX canonical instrument ID (e.g. APEX:FX:EURUSD)"),
+                "as_of", strProp("ISO8601 timestamp — defaults to now")
+            ), List.of("instrument_id"), false, null, null),
             args -> {
                 String instrumentId = argStr(args, "instrument_id", "");
                 if (!ReferenceTradingState.INSTRUMENT_ID.equals(instrumentId)) {
                     return apexError("APEX_4010", "validation", "Unknown instrument");
                 }
-
                 return new FxRolloverResponse(
                     ReferenceTradingState.INSTRUMENT_ID,
                     ReferenceTradingState.BROKER_SYMBOL,
@@ -646,28 +740,23 @@ final class ToolRegistry {
             }
         );
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "apex.fx.exposure",
             "Net currency exposure across open FX positions. Critical for agents managing portfolio-level currency risk.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", "Trading account ID", true);
-                schema.stringProp(props, req, "base_currency", "Denominate all exposures in this currency", true);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "account_id", strProp("Trading account ID"),
+                "base_currency", strProp("Denominate all exposures in this currency")
+            ), List.of("account_id", "base_currency"), false, null, null),
             args -> {
                 String accountId = argStr(args, "account_id", "");
                 if (accountId.isEmpty()) {
                     return apexError("APEX_4011", "validation", "account_id is required");
                 }
                 String baseCurrency = argStr(args, "base_currency", "USD");
-
-                // Compute EUR exposure from current positions
                 var positionsResponse = state.positionsResponse();
                 var positions = positionsResponse.positions();
-
                 long eurNetUnits = 0;
                 List<String> contributingPositions = new java.util.ArrayList<>();
-
                 for (var pos : positions) {
                     if (ReferenceTradingState.INSTRUMENT_ID.equals(pos.instrument_id())) {
                         int qty = pos.quantity();
@@ -679,11 +768,9 @@ final class ToolRegistry {
                         contributingPositions.add(pos.position_id());
                     }
                 }
-
                 double rate = 1.0875;
                 double valueInBase = "EUR".equals(baseCurrency) ? eurNetUnits : eurNetUnits * rate;
                 String netDirection = eurNetUnits > 0 ? "long" : eurNetUnits < 0 ? "short" : "flat";
-
                 return new FxExposureResponse(
                     accountId,
                     baseCurrency,
@@ -700,27 +787,23 @@ final class ToolRegistry {
             }
         );
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "apex.fx.conversion",
             "Real-time cross-currency conversion rate. Used by agents to calculate P&L in a target currency.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "from_currency", "Source currency code (e.g. EUR)", true);
-                schema.stringProp(props, req, "to_currency", "Target currency code (e.g. USD)", true);
-                schema.numberProp(props, req, "amount", "Amount to convert", true);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "from_currency", strProp("Source currency code (e.g. EUR)"),
+                "to_currency", strProp("Target currency code (e.g. USD)"),
+                "amount", numProp("Amount to convert")
+            ), List.of("from_currency", "to_currency", "amount"), false, null, null),
             args -> {
                 String fromCurrency = argStr(args, "from_currency", "");
                 String toCurrency = argStr(args, "to_currency", "");
                 double amount = argDouble(args, "amount", 0);
-
                 if (fromCurrency.isEmpty() || toCurrency.isEmpty()) {
                     return apexError("APEX_4011", "validation", "from_currency, to_currency, and amount are all required");
                 }
-
                 double midRate = 1.0875;
                 double rate;
-
                 if (fromCurrency.equals(toCurrency)) {
                     rate = 1.0;
                 } else if ("EUR".equals(fromCurrency) && "USD".equals(toCurrency)) {
@@ -730,7 +813,6 @@ final class ToolRegistry {
                 } else {
                     return apexError("APEX_4010", "validation", "Unsupported currency pair");
                 }
-
                 return new FxConversionResponse(
                     fromCurrency,
                     toCurrency,
@@ -742,17 +824,16 @@ final class ToolRegistry {
         );
     }
 
-    private void registerCfdTools(Map<String, ToolDefinition> tools) {
-        registerTool(
-            tools,
+    private void registerCfdSpecs(List<McpServerFeatures.SyncToolSpecification> specs) {
+        registerSpec(specs,
             "apex.cfd.corporate_actions",
             "Query upcoming corporate actions for CFD instruments. Reference implementation returns an empty array.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", "Trading account ID", true);
-                schema.stringProp(props, req, "instrument_id", "Filter by APEX canonical instrument ID", false);
-                schema.stringProp(props, req, "from", "ISO8601 start date", false);
-                schema.stringProp(props, req, "to", "ISO8601 end date", false);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "account_id", strProp("Trading account ID"),
+                "instrument_id", strProp("Filter by APEX canonical instrument ID"),
+                "from", strProp("ISO8601 start date"),
+                "to", strProp("ISO8601 end date")
+            ), List.of("account_id"), false, null, null),
             args -> {
                 String accountId = argStr(args, "account_id", "");
                 if (accountId.isEmpty()) {
@@ -762,16 +843,15 @@ final class ToolRegistry {
             }
         );
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "apex.cfd.dividend_adjustment",
             "Query dividend adjustments for CFD positions. Reference implementation returns an empty array.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", "Trading account ID", true);
-                schema.stringProp(props, req, "status", "Filter by status (default: all)", false);
-                schema.stringProp(props, req, "from", "ISO8601 start date", false);
-                schema.stringProp(props, req, "to", "ISO8601 end date", false);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "account_id", strProp("Trading account ID"),
+                "status", strProp("Filter by status (default: all)"),
+                "from", strProp("ISO8601 start date"),
+                "to", strProp("ISO8601 end date")
+            ), List.of("account_id"), false, null, null),
             args -> {
                 String accountId = argStr(args, "account_id", "");
                 if (accountId.isEmpty()) {
@@ -782,27 +862,24 @@ final class ToolRegistry {
         );
     }
 
-    private void registerCryptoTools(Map<String, ToolDefinition> tools) {
+    private void registerCryptoSpecs(List<McpServerFeatures.SyncToolSpecification> specs) {
         final String PERP_INSTRUMENT_ID = "APEX:CRYPTO:PERP:BTCUSDT";
         final String PERP_BROKER_SYMBOL = "BTCUSDT";
 
-        registerTool(
-            tools,
+        registerSpec(specs,
             "apex.crypto.funding_rate",
             "Query funding rate for a perpetual instrument. Returns simulated data for BTCUSDT.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:CRYPTO:PERP:BTCUSDT)", true);
-            }),
+            new McpSchema.JsonSchema("object", Map.of(
+                "instrument_id", strProp("APEX canonical instrument ID (e.g. APEX:CRYPTO:PERP:BTCUSDT)")
+            ), List.of("instrument_id"), false, null, null),
             args -> {
                 String instrumentId = argStr(args, "instrument_id", "");
                 if (!PERP_INSTRUMENT_ID.equals(instrumentId)) {
                     return apexError("APEX_4010", "validation", "Unknown instrument");
                 }
-
                 long[] funding = nextFundingTime();
                 String fundingTimeStr = Instant.ofEpochMilli(funding[0]).toString();
                 long countdown = funding[1];
-
                 return new CryptoFundingRateResponse(
                     PERP_INSTRUMENT_ID,
                     PERP_BROKER_SYMBOL,
@@ -819,33 +896,31 @@ final class ToolRegistry {
             }
         );
 
-        registerTool(
-            tools,
+        var liqProps = new LinkedHashMap<String, Object>();
+        liqProps.put("account_id", strProp("Trading account ID"));
+        liqProps.put("instrument_id", strProp("APEX canonical instrument ID (e.g. APEX:CRYPTO:PERP:BTCUSDT)"));
+        liqProps.put("side", strProp("Position side: buy or sell"));
+        liqProps.put("quantity", numProp("Position quantity"));
+        liqProps.put("leverage", numProp("Leverage multiplier"));
+        liqProps.put("margin_mode", strProp("Margin mode: cross or isolated"));
+        liqProps.put("entry_price", numProp("Entry price"));
+        registerSpec(specs,
             "apex.crypto.liquidation_estimate",
             "Estimate liquidation price for a perpetual position based on leverage and margin mode.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", "Trading account ID", true);
-                schema.stringProp(props, req, "instrument_id", "APEX canonical instrument ID (e.g. APEX:CRYPTO:PERP:BTCUSDT)", true);
-                schema.stringProp(props, req, "side", "Position side: buy or sell", true);
-                schema.numberProp(props, req, "quantity", "Position quantity", true);
-                schema.numberProp(props, req, "leverage", "Leverage multiplier", true);
-                schema.stringProp(props, req, "margin_mode", "Margin mode: cross or isolated", true);
-                schema.numberProp(props, req, "entry_price", "Entry price", true);
-            }),
+            new McpSchema.JsonSchema("object", liqProps,
+                List.of("account_id", "instrument_id", "side", "quantity", "leverage", "margin_mode", "entry_price"),
+                false, null, null),
             args -> {
                 String instrumentId = argStr(args, "instrument_id", "");
                 if (!PERP_INSTRUMENT_ID.equals(instrumentId)) {
                     return apexError("APEX_4010", "validation", "Unknown instrument");
                 }
-
                 String side = argStr(args, "side", "buy");
                 double quantity = argDouble(args, "quantity", 0);
                 double leverage = argDouble(args, "leverage", 1);
                 double entryPrice = argDouble(args, "entry_price", 0);
-
                 double marginRequired = (entryPrice * quantity) / leverage;
                 double maintenanceMargin = marginRequired / 2;
-
                 double liquidationPrice;
                 if ("buy".equals(side)) {
                     liquidationPrice = entryPrice * (1 - (1.0 / leverage) * 0.95);
@@ -853,9 +928,7 @@ final class ToolRegistry {
                     liquidationPrice = entryPrice * (1 + (1.0 / leverage) * 0.95);
                 }
                 liquidationPrice = Math.round(liquidationPrice * 100.0) / 100.0;
-
                 double distancePct = Math.round(Math.abs(entryPrice - liquidationPrice) / entryPrice * 100.0 * 100.0) / 100.0;
-
                 return new CryptoLiquidationEstimateResponse(
                     PERP_INSTRUMENT_ID,
                     side,
@@ -870,32 +943,30 @@ final class ToolRegistry {
             }
         );
 
-        registerTool(
-            tools,
+        var transferProps = new LinkedHashMap<String, Object>();
+        transferProps.put("account_id", strProp("Trading account ID"));
+        transferProps.put("from_wallet", enumProp("Source wallet", null, "spot", "futures", "funding"));
+        transferProps.put("to_wallet", enumProp("Destination wallet", null, "spot", "futures", "funding"));
+        transferProps.put("currency", strProp("Currency to transfer (e.g. USDT)"));
+        transferProps.put("amount", numProp("Amount to transfer"));
+        registerSpec(specs,
             "apex.crypto.transfer",
             "Transfer funds between wallets (spot, futures, funding). Reference implementation simulates instant completion.",
-            schema.objectSchema((props, req) -> {
-                schema.stringProp(props, req, "account_id", "Trading account ID", true);
-                schema.enumProp(props, req, "from_wallet", "Source wallet", true, null, "spot", "futures", "funding");
-                schema.enumProp(props, req, "to_wallet", "Destination wallet", true, null, "spot", "futures", "funding");
-                schema.stringProp(props, req, "currency", "Currency to transfer (e.g. USDT)", true);
-                schema.numberProp(props, req, "amount", "Amount to transfer", true);
-            }),
+            new McpSchema.JsonSchema("object", transferProps,
+                List.of("account_id", "from_wallet", "to_wallet", "currency", "amount"),
+                false, null, null),
             args -> {
                 String accountId = argStr(args, "account_id", "");
                 String fromWallet = argStr(args, "from_wallet", "");
                 String toWallet = argStr(args, "to_wallet", "");
                 String currency = argStr(args, "currency", "");
                 double amount = argDouble(args, "amount", 0);
-
                 if (accountId.isEmpty() || fromWallet.isEmpty() || toWallet.isEmpty() || currency.isEmpty()) {
                     return apexError("APEX_4011", "validation", "All fields are required: account_id, from_wallet, to_wallet, currency, amount");
                 }
-
                 if (fromWallet.equals(toWallet)) {
                     return apexError("APEX_4011", "validation", "from_wallet and to_wallet must be different");
                 }
-
                 return new CryptoTransferResponse(
                     UUID.randomUUID().toString(),
                     fromWallet,
@@ -910,10 +981,12 @@ final class ToolRegistry {
         );
     }
 
-    /**
-     * Compute the next 8-hour funding boundary (00:00, 08:00, 16:00 UTC).
-     * Returns [epochMillis, countdownSeconds].
-     */
+    // ── Utility methods ──────────────────────────────────────────────────
+
+    private static List<String> coreTools() {
+        return List.of("apex.session.*", "apex.account.*", "apex.order.*", "apex.position.*", "apex.market.*", "apex.risk.*");
+    }
+
     private static long[] nextFundingTime() {
         Instant now = Instant.now();
         java.time.ZonedDateTime utcNow = now.atZone(java.time.ZoneOffset.UTC);
@@ -937,47 +1010,6 @@ final class ToolRegistry {
             today21 = today21.plusDays(1);
         }
         return today21.toInstant().toString();
-    }
-
-    private void registerTool(
-        Map<String, ToolDefinition> tools,
-        String name,
-        String description,
-        ObjectNode inputSchema,
-        java.util.function.Function<Map<String, Object>, Object> handler
-    ) {
-        tools.put(name, new ToolDefinition(name, description, inputSchema, annotationsForTool(name), handler));
-    }
-
-    private ObjectNode annotationsForTool(String name) {
-        ObjectNode annotations = mapper.createObjectNode();
-        boolean readOnly = name.startsWith("apex.account.")
-            || name.startsWith("apex.market.")
-            || name.startsWith("apex.risk.")
-            || name.startsWith("apex.fx.")
-            || name.startsWith("apex.cfd.")
-            || "apex.crypto.funding_rate".equals(name)
-            || "apex.crypto.liquidation_estimate".equals(name)
-            || "apex.order.status".equals(name)
-            || "apex.session.capabilities".equals(name)
-            || "apex.session.heartbeat".equals(name)
-            || "apex.session.acknowledge".equals(name);
-        boolean destructive = "apex.order.place".equals(name)
-            || "apex.order.modify".equals(name)
-            || "apex.order.cancel".equals(name)
-            || "apex.position.close".equals(name);
-        boolean idempotent = readOnly
-            || "apex.session.authenticate".equals(name)
-            || "apex.order.cancel".equals(name);
-
-        annotations.put("readOnlyHint", readOnly);
-        annotations.put("destructiveHint", destructive);
-        annotations.put("idempotentHint", idempotent);
-        return annotations;
-    }
-
-    private static List<String> coreTools() {
-        return List.of("apex.session.*", "apex.account.*", "apex.order.*", "apex.position.*", "apex.market.*", "apex.risk.*");
     }
 
     static ApexErrorEnvelope apexError(String code, String category, String message) {

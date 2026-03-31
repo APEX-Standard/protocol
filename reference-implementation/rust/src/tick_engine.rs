@@ -122,7 +122,11 @@ impl TickEngineInner {
             }
         }
 
-        events.push(TickEvent::QuoteUpdate { mid: self.mid, bid, ask });
+        events.push(TickEvent::QuoteUpdate {
+            mid: self.mid,
+            bid,
+            ask,
+        });
         events.push(TickEvent::CandleUpdate {
             timeframe: "M1".to_owned(),
         });
@@ -182,9 +186,8 @@ impl TickEngine {
         let tx = self.event_tx.clone();
 
         let handle = tokio::spawn(async move {
-            let mut interval = tokio::time::interval(
-                tokio::time::Duration::from_millis(TICK_INTERVAL_MS),
-            );
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_millis(TICK_INTERVAL_MS));
             loop {
                 interval.tick().await;
                 let events = {

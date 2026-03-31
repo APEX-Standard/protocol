@@ -1,7 +1,7 @@
 # APEX Protocol Reference Implementation — Rust
 
 # Build the server
-build:
+build: fmt lint
     cargo build
 
 # Build in release mode

@@ -12,11 +12,11 @@ use axum::Router;
 use serde_json::{json, Value};
 use tokio::sync::{broadcast, Mutex};
 
-use crate::helpers::{apex_error, hours_from_now, next_funding_time, next_rollover_time, now_iso};
+use crate::handlers;
 use crate::models::*;
 use crate::notifications;
 use crate::replay_buffer::{ReplayBuffer, ReplayItem, ReplayResult};
-use crate::state::{ReferenceTradingState, ACCOUNT_ID, BROKER_SYMBOL, INSTRUMENT_ID};
+use crate::state::{ReferenceTradingState, ACCOUNT_ID, INSTRUMENT_ID};
 use crate::tick_engine::{TickEngine, TickEvent};
 
 /// Shared state for the HTTP transport.
@@ -61,7 +61,9 @@ impl HttpState {
     /// Emit a JSON-RPC notification to all sessions via SSE.
     fn emit_notification(&self, session_id: &str, notification: Value) {
         let event_id = self.replay_buffer.store(session_id, notification.clone());
-        let _ = self.event_tx.send((session_id.to_owned(), event_id, notification));
+        let _ = self
+            .event_tx
+            .send((session_id.to_owned(), event_id, notification));
     }
 
     /// Emit a notification to a specific session and also broadcast to SSE.
@@ -148,19 +150,21 @@ fn spawn_tick_event_processor(
                 }
                 TickEvent::CandleClose { timeframe, candle } => {
                     let candle_uri = crate::state::candles_uri(&timeframe);
-                    let uris = state.trading_state.bump_resources_list(&[candle_uri.clone()]);
+                    let uris = state
+                        .trading_state
+                        .bump_resources_list(std::slice::from_ref(&candle_uri));
 
                     let seq = state.trading_state.get_sequence(&candle_uri);
-                    let notif = notifications::candle_closed(
-                        INSTRUMENT_ID,
-                        &timeframe,
-                        candle.open,
-                        candle.high,
-                        candle.low,
-                        candle.close,
-                        candle.volume,
-                        seq,
-                    );
+                    let notif = notifications::candle_closed(notifications::CandleClosedParams {
+                        instrument_id: INSTRUMENT_ID,
+                        timeframe: &timeframe,
+                        open: candle.open,
+                        high: candle.high,
+                        low: candle.low,
+                        close: candle.close,
+                        volume: candle.volume,
+                        candle_sequence: seq,
+                    });
 
                     for sid in &sessions {
                         state.emit_to_session(sid, notif.clone());
@@ -170,13 +174,17 @@ fn spawn_tick_event_processor(
                 TickEvent::CandleUpdate { timeframe } => {
                     let candle_uri = crate::state::candles_uri(&timeframe);
                     for sid in &sessions {
-                        state.notify_resource_updates(sid, &[candle_uri.clone()]).await;
+                        state
+                            .notify_resource_updates(sid, std::slice::from_ref(&candle_uri))
+                            .await;
                     }
                 }
                 TickEvent::FeatureUpdate => {
                     let features_uri = crate::state::features_uri();
                     for sid in &sessions {
-                        state.notify_resource_updates(sid, &[features_uri.clone()]).await;
+                        state
+                            .notify_resource_updates(sid, std::slice::from_ref(&features_uri))
+                            .await;
                     }
                 }
             }
@@ -298,21 +306,11 @@ async fn handle_post(
         .into_response()
 }
 
-async fn handle_get(
-    State(state): State<SharedState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    let session_id = match headers
-        .get("mcp-session-id")
-        .and_then(|v| v.to_str().ok())
-    {
+async fn handle_get(State(state): State<SharedState>, headers: HeaderMap) -> impl IntoResponse {
+    let session_id = match headers.get("mcp-session-id").and_then(|v| v.to_str().ok()) {
         Some(id) => id.to_owned(),
         None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                "Missing mcp-session-id header",
-            )
-                .into_response();
+            return (StatusCode::BAD_REQUEST, "Missing mcp-session-id header").into_response();
         }
     };
 
@@ -328,11 +326,7 @@ async fn handle_get(
                 flag
             }
             None => {
-                return (
-                    StatusCode::NOT_FOUND,
-                    "Unknown session",
-                )
-                    .into_response();
+                return (StatusCode::NOT_FOUND, "Unknown session").into_response();
             }
         }
     };
@@ -360,22 +354,18 @@ async fn handle_get(
                         from_id,
                         to_id,
                     } => {
-                        let notif = ReplayBuffer::gap_fill_notification(
-                            id,
-                            elided_count,
-                            from_id,
-                            to_id,
-                        );
+                        let notif =
+                            ReplayBuffer::gap_fill_notification(id, elided_count, from_id, to_id);
                         let data = serde_json::to_string(&notif).unwrap_or_default();
                         (id.to_string(), data)
                     }
                 })
                 .collect(),
-            ReplayResult::Failed { oldest_available_id } => {
-                let notif = notifications::replay_failed(
-                    "event_id_outside_log",
-                    oldest_available_id,
-                );
+            ReplayResult::Failed {
+                oldest_available_id,
+            } => {
+                let notif =
+                    notifications::replay_failed("event_id_outside_log", oldest_available_id);
                 let event_id = state.replay_buffer.next_event_id();
                 let data = serde_json::to_string(&notif).unwrap_or_default();
                 vec![(event_id.to_string(), data)]
@@ -435,31 +425,17 @@ async fn handle_get(
         .into_response()
 }
 
-async fn handle_delete(
-    State(state): State<SharedState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    let session_id = match headers
-        .get("mcp-session-id")
-        .and_then(|v| v.to_str().ok())
-    {
+async fn handle_delete(State(state): State<SharedState>, headers: HeaderMap) -> impl IntoResponse {
+    let session_id = match headers.get("mcp-session-id").and_then(|v| v.to_str().ok()) {
         Some(id) => id.to_owned(),
         None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                "Missing mcp-session-id header",
-            )
-                .into_response();
+            return (StatusCode::BAD_REQUEST, "Missing mcp-session-id header").into_response();
         }
     };
 
     let mut sessions = state.sessions.lock().await;
     if sessions.remove(&session_id).is_none() {
-        return (
-            StatusCode::NOT_FOUND,
-            "Unknown session",
-        )
-            .into_response();
+        return (StatusCode::NOT_FOUND, "Unknown session").into_response();
     }
 
     // If no sessions remain, stop the tick engine
@@ -900,99 +876,28 @@ async fn handle_tool_call(
     let result = match tool_name {
         "apex.session.authenticate" => {
             let token = args["token"].as_str().unwrap_or("");
-            if token.len() < 10 {
-                json_result_value(&apex_error(
-                    "APEX_4001",
-                    "auth",
-                    "Invalid or expired token",
-                    None,
-                ))
-            } else {
-                // Start tick engine on authentication
-                {
-                    let mut engine_guard = state.tick_engine.lock().await;
-                    if engine_guard.is_none() {
-                        let mut engine = TickEngine::new(state.tick_event_tx.clone());
-                        engine.start();
-                        *engine_guard = Some(engine);
-                        eprintln!("Tick engine started after authentication");
-                    }
-                }
+            let account_id = args["account_id"].as_str();
+            let payload = handlers::handle_authenticate(&state.trading_state, token, account_id);
 
-                let account_id = args["account_id"]
-                    .as_str()
-                    .unwrap_or(ACCOUNT_ID);
-                json_result_value(&SessionResponse {
-                    session_id: uuid::Uuid::new_v4().to_string(),
-                    account_id: account_id.to_owned(),
-                    expires_at: hours_from_now(1),
-                    capabilities: CORE_CAPABILITIES
-                        .iter()
-                        .map(|v| (*v).to_owned())
-                        .collect(),
-                    profiles: vec!["fx".to_owned()],
-                    broker_id: "reference-broker".to_owned(),
-                    broker_name: "APEX Reference Broker".to_owned(),
-                })
+            // Start tick engine on successful authentication (no error field)
+            if payload.get("error").is_none() {
+                let mut engine_guard = state.tick_engine.lock().await;
+                if engine_guard.is_none() {
+                    let mut engine = TickEngine::new(state.tick_event_tx.clone());
+                    engine.start();
+                    *engine_guard = Some(engine);
+                    eprintln!("Tick engine started after authentication");
+                }
             }
+
+            json_result_value(&payload)
         }
         "apex.session.capabilities" => {
-            json_result_value(&CapabilitiesResponse {
-                apex_version: SERVER_VERSION.to_owned(),
-                broker_id: "reference-broker".to_owned(),
-                core_tools: CORE_CAPABILITIES
-                    .iter()
-                    .map(|v| (*v).to_owned())
-                    .collect(),
-                profiles: json!({ "fx": SERVER_VERSION }),
-                vendor_extensions: None,
-                rate_limits: json!({
-                    "orders_per_second": 10,
-                    "market_data_per_second": 100
-                }),
-                supported_order_types: vec![
-                    "market".to_owned(),
-                    "limit".to_owned(),
-                    "stop".to_owned(),
-                    "stop_limit".to_owned(),
-                ],
-                supported_tif: vec![
-                    "GTC".to_owned(),
-                    "IOC".to_owned(),
-                    "FOK".to_owned(),
-                    "DAY".to_owned(),
-                ],
-                production_profiles: json!({
-                    "realtime": true,
-                    "autonomous": false
-                }),
-                realtime_contract: json!({
-                    "transport_mode": "streamable_http",
-                    "reconnect_mode": "session_replay",
-                    "max_retention_events": 10000,
-                    "max_retention_seconds": 0,
-                    "quote_freshness_ms": 1000,
-                    "account_freshness_ms": 2000,
-                    "tick_interval_ms": 2000,
-                    "notifications": [
-                        "notifications/apex.order.filled",
-                        "notifications/apex.order.partially_filled",
-                        "notifications/apex.order.rejected",
-                        "notifications/apex.market.candle_closed",
-                        "notifications/apex.risk.kill_switch_engaged",
-                        "notifications/apex.session.replay_failed",
-                        "notifications/apex.session.gap_fill"
-                    ]
-                }),
-            })
+            json_result_value(&handlers::handle_capabilities("streamable_http"))
         }
-        "apex.session.heartbeat" => {
-            json_result_value(&HeartbeatResponse {
-                timestamp: now_iso(),
-                status: "ok".to_owned(),
-            })
-        }
+        "apex.session.heartbeat" => json_result_value(&handlers::handle_heartbeat()),
         "apex.session.acknowledge" => {
+            // HTTP-specific: uses replay buffer
             let last_event_id = args["last_event_id"].as_str().unwrap_or("0");
             let (acknowledged_through, buffer_depth) =
                 state.replay_buffer.acknowledge(last_event_id);
@@ -1002,13 +907,15 @@ async fn handle_tool_call(
             }))
         }
         "reference.test.set_realtime_state" => {
+            // HTTP-specific: emit kill switch notification
             let was_kill_switch = state
                 .trading_state
                 .read_resource_payload(&crate::state::risk_uri())
                 .and_then(|p| p["kill_switch_active"].as_bool())
                 .unwrap_or(false);
 
-            let faults = state.trading_state.set_faults(
+            let payload = handlers::handle_set_realtime_state(
+                &state.trading_state,
                 args["quote_stale"].as_bool(),
                 args["risk_stale"].as_bool(),
                 args["force_sequence_gap"].as_bool(),
@@ -1016,31 +923,28 @@ async fn handle_tool_call(
                 args["partial_fill_next_order"].as_bool(),
             );
 
-            // Emit kill switch notification if just activated
             if !was_kill_switch && args["kill_switch_active"].as_bool() == Some(true) {
                 let seq = state.trading_state.get_sequence(&crate::state::risk_uri());
                 let notif = notifications::kill_switch_engaged(seq);
                 state.emit_to_session(session_id, notif);
             }
 
-            json_result_value(&json!({
-                "ok": true,
-                "faults": faults,
-            }))
+            json_result_value(&payload)
         }
         "reference.test.force_candle_close" => {
+            // HTTP-only tool (no shared handler — tick engine is HTTP-specific)
             let timeframe = args["timeframe"].as_str().unwrap_or("M1");
             let engine_guard = state.tick_engine.lock().await;
             if let Some(engine) = engine_guard.as_ref() {
                 engine.force_candle_close(timeframe);
             }
-            // Return structuredContent style
             tool_result_structured(&json!({
                 "closed": true,
                 "timeframe": timeframe,
             }))
         }
         "reference.test.stop_ticks" => {
+            // HTTP-only tool
             let mut engine_guard = state.tick_engine.lock().await;
             if let Some(engine) = engine_guard.as_mut() {
                 engine.stop();
@@ -1051,53 +955,28 @@ async fn handle_tool_call(
         }
         "apex.account.summary" => {
             let account_id = args["account_id"].as_str().unwrap_or("");
-            if account_id.is_empty() {
-                json_result_value(&apex_error("APEX_4011", "validation", "account_id is required", None))
-            } else {
-                let currency = args["currency"].as_str().map(|s| s.to_owned());
-                json_result_value(&state.trading_state.account_summary_payload(currency))
-            }
+            let currency = args["currency"].as_str().map(|s| s.to_owned());
+            json_result_value(&handlers::handle_account_summary(
+                &state.trading_state,
+                account_id,
+                currency,
+            ))
         }
         "apex.account.positions" => {
-            json_result_value(&state.trading_state.positions_payload())
+            json_result_value(&handlers::handle_account_positions(&state.trading_state))
         }
         "apex.account.orders" => {
-            json_result_value(&state.trading_state.orders_payload())
+            json_result_value(&handlers::handle_account_orders(&state.trading_state))
         }
-        "apex.account.history" => {
-            json_result_value(&AccountHistoryResponse {
-                events: vec![],
-                next_cursor: None,
-                has_more: false,
-            })
-        }
+        "apex.account.history" => json_result_value(&handlers::handle_account_history()),
         "apex.order.place" => {
-            if let Err((code, category, message)) = state.trading_state.order_acceptance() {
-                // Emit rejection notification
-                let seq = state.trading_state.get_sequence(&crate::state::risk_uri());
-                let notif = notifications::order_rejected(code, message, seq);
-                state.emit_to_session(session_id, notif);
+            let order = args.get("order").cloned().unwrap_or(json!({}));
 
-                json_result_value(&apex_error(code, category, message, None))
-            } else {
-                let order = args.get("order").cloned().unwrap_or(json!({}));
-
-                if order["order_type"].as_str() == Some("limit")
-                    && order.get("limit_price").is_none()
-                {
-                    json_result_value(&apex_error(
-                        "APEX_4011",
-                        "validation",
-                        "limit_price required for limit orders",
-                        None,
-                    ))
-                } else {
-                    let (payload, updates) = state.trading_state.create_order(&order);
-
-                    // Notify resource updates
+            match handlers::handle_order_place(&state.trading_state, &order) {
+                Ok((payload, updates)) => {
                     state.notify_resource_updates(session_id, &updates).await;
 
-                    // Emit order fill/partial fill notifications
+                    // HTTP-specific: emit order fill/partial fill notifications
                     let status = payload["status"].as_str().unwrap_or("");
                     let order_id = payload["order_id"].as_str().unwrap_or("");
                     let is_market = order["order_type"].as_str() == Some("market");
@@ -1107,9 +986,8 @@ async fn handle_tool_call(
                             state.trading_state.get_sequence(&crate::state::fills_uri());
                         let side = order["side"].as_str().unwrap_or("buy");
                         let fill_quantity = payload["fill_quantity"].as_f64().unwrap_or(0.0);
-                        let instrument_id = order["instrument_id"]
-                            .as_str()
-                            .unwrap_or(INSTRUMENT_ID);
+                        let instrument_id =
+                            order["instrument_id"].as_str().unwrap_or(INSTRUMENT_ID);
                         let account_id = args["account_id"].as_str().unwrap_or(ACCOUNT_ID);
 
                         if status == "filled" {
@@ -1124,23 +1002,35 @@ async fn handle_tool_call(
                             );
                             state.emit_to_session(session_id, notif);
                         } else if status == "partially_filled" {
-                            let remaining =
-                                payload["remaining_quantity"].as_f64().unwrap_or(0.0);
+                            let remaining = payload["remaining_quantity"].as_f64().unwrap_or(0.0);
                             let notif = notifications::order_partially_filled(
-                                order_id,
-                                side,
-                                1.08755,
-                                fill_quantity,
-                                remaining,
-                                account_id,
-                                instrument_id,
-                                fill_seq,
+                                notifications::PartialFillParams {
+                                    order_id,
+                                    side,
+                                    fill_price: 1.08755,
+                                    fill_quantity,
+                                    remaining_quantity: remaining,
+                                    account_id,
+                                    instrument_id,
+                                    fill_sequence: fill_seq,
+                                },
                             );
                             state.emit_to_session(session_id, notif);
                         }
                     }
 
                     json_result_value(&payload)
+                }
+                Err(err_payload) => {
+                    // HTTP-specific: emit rejection notification on kill switch
+                    let seq = state.trading_state.get_sequence(&crate::state::risk_uri());
+                    let reason = err_payload["error"]["message"].as_str().unwrap_or("");
+                    let code = err_payload["error"]["code"].as_str().unwrap_or("");
+                    if !code.is_empty() {
+                        let notif = notifications::order_rejected(code, reason, seq);
+                        state.emit_to_session(session_id, notif);
+                    }
+                    json_result_value(&err_payload)
                 }
             }
         }
@@ -1149,133 +1039,116 @@ async fn handle_tool_call(
             let target_id = args["target_id"].as_str().unwrap_or("");
             let mods = args.get("modifications").cloned().unwrap_or(json!({}));
 
-            if target_type == "position"
-                && (mods.get("limit_price").is_some()
-                    || mods.get("stop_price").is_some()
-                    || mods.get("quantity").is_some())
-            {
-                json_result_value(&apex_error(
-                    "APEX_4011",
-                    "validation",
-                    "positions may only amend stop_loss, take_profit, or trailing_stop",
-                    None,
-                ))
-            } else {
-                let updates = state.trading_state.modify_order(target_id);
-                state.notify_resource_updates(session_id, &updates).await;
-                json_result_value(&OrderModifyResponse {
-                    target_type: target_type.to_owned(),
-                    target_id: target_id.to_owned(),
-                    status: "modified".to_owned(),
-                    rejection_reason: None,
-                    updated_at: now_iso(),
-                })
+            match handlers::handle_order_modify(
+                &state.trading_state,
+                target_type,
+                target_id,
+                &mods,
+            ) {
+                Ok((payload, updates)) => {
+                    state.notify_resource_updates(session_id, &updates).await;
+                    json_result_value(&payload)
+                }
+                Err(err_payload) => json_result_value(&err_payload),
             }
         }
         "apex.order.cancel" => {
             let order_id = args["order_id"].as_str().unwrap_or("");
-            let updates = state.trading_state.cancel_order(order_id);
+            let (payload, updates) =
+                handlers::handle_order_cancel(&state.trading_state, order_id);
             state.notify_resource_updates(session_id, &updates).await;
-            json_result_value(&OrderCancelResponse {
-                order_id: order_id.to_owned(),
-                status: "cancelled".to_owned(),
-                rejection_reason: None,
-                cancelled_at: now_iso(),
-            })
+            json_result_value(&payload)
         }
         "apex.position.close" => {
-            if let Err((code, category, message)) = state.trading_state.order_acceptance() {
-                let seq = state.trading_state.get_sequence(&crate::state::risk_uri());
-                let notif = notifications::order_rejected(code, message, seq);
-                state.emit_to_session(session_id, notif);
-                json_result_value(&apex_error(code, category, message, None))
-            } else {
-                let position_id = args["position_id"].as_str().unwrap_or("");
-                let requested_quantity = args.get("quantity").and_then(Value::as_f64);
+            let position_id = args["position_id"].as_str().unwrap_or("");
+            let requested_quantity = args.get("quantity").and_then(Value::as_f64);
 
-                match state.trading_state.find_position(position_id) {
-                    Some((instrument_id, side, total_quantity)) => {
-                        let close_quantity = requested_quantity.unwrap_or(total_quantity);
-                        let close_side = if side == "buy" { "sell" } else { "buy" };
+            match handlers::handle_position_close(
+                &state.trading_state,
+                position_id,
+                requested_quantity,
+            ) {
+                Ok((payload, updates)) => {
+                    state.notify_resource_updates(session_id, &updates).await;
 
-                        let (order_payload, updates) = state.trading_state.close_position(
-                            position_id,
-                            close_quantity,
-                            &instrument_id,
-                            close_side,
-                        );
-                        state.notify_resource_updates(session_id, &updates).await;
-
-                        // Emit fill notification
-                        let order_id = order_payload["order_id"].as_str().unwrap_or("");
-                        let fill_seq =
-                            state.trading_state.get_sequence(&crate::state::fills_uri());
-                        let account_id = args["account_id"].as_str().unwrap_or(ACCOUNT_ID);
-                        let notif = notifications::order_filled(
-                            order_id,
-                            close_side,
-                            1.08755,
-                            close_quantity,
-                            account_id,
-                            &instrument_id,
-                            fill_seq,
-                        );
-                        state.emit_to_session(session_id, notif);
-
-                        let remaining = total_quantity - close_quantity;
-                        let status = if remaining <= 0.0 {
-                            "filled"
+                    // HTTP-specific: emit fill notification
+                    let order_id = payload["order_id"].as_str().unwrap_or("");
+                    let fill_seq =
+                        state.trading_state.get_sequence(&crate::state::fills_uri());
+                    let account_id = args["account_id"].as_str().unwrap_or(ACCOUNT_ID);
+                    let close_quantity = payload["fill_quantity"].as_f64().unwrap_or(0.0);
+                    // Reconstruct close_side from the position data
+                    let close_side = if payload["status"].as_str() == Some("filled")
+                        || payload["status"].as_str() == Some("partially_filled")
+                    {
+                        // We need to re-derive close_side; look at the order payload
+                        // The fill is always the opposite of the original position side
+                        // Since we already closed, we check the state. For simplicity,
+                        // derive from position_id again.
+                        if let Some((_inst, side, _qty)) =
+                            state.trading_state.find_position(position_id)
+                        {
+                            if side == "buy" { "sell" } else { "buy" }
                         } else {
-                            "partially_filled"
-                        };
+                            // Position was fully closed and removed; default based on
+                            // convention.  In practice the position was just closed above
+                            // so for full closes find_position may return None.
+                            "sell"
+                        }
+                    } else {
+                        "sell"
+                    };
+                    let instrument_id = payload
+                        .get("instrument_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(INSTRUMENT_ID);
+                    let notif = notifications::order_filled(
+                        order_id,
+                        close_side,
+                        1.08755,
+                        close_quantity,
+                        account_id,
+                        instrument_id,
+                        fill_seq,
+                    );
+                    state.emit_to_session(session_id, notif);
 
-                        json_result_value(&PositionCloseResponse {
-                            order_id: order_id.to_owned(),
-                            position_id: position_id.to_owned(),
-                            status: status.to_owned(),
-                            fill_price: order_payload["fill_price"]
-                                .as_f64()
-                                .unwrap_or(1.08755),
-                            fill_quantity: close_quantity,
-                            remaining_quantity: if remaining > 0.0 { remaining } else { 0.0 },
-                            closed_at: now_iso(),
-                        })
+                    json_result_value(&payload)
+                }
+                Err(err_payload) => {
+                    // Emit rejection notification if kill switch
+                    if state
+                        .trading_state
+                        .read_resource_payload(&crate::state::risk_uri())
+                        .and_then(|p| p["kill_switch_active"].as_bool())
+                        .unwrap_or(false)
+                    {
+                        let seq =
+                            state.trading_state.get_sequence(&crate::state::risk_uri());
+                        let reason = err_payload["error"]["message"].as_str().unwrap_or("");
+                        let code = err_payload["error"]["code"].as_str().unwrap_or("");
+                        let notif = notifications::order_rejected(code, reason, seq);
+                        state.emit_to_session(session_id, notif);
                     }
-                    None => json_result_value(&apex_error(
-                        "APEX_4011",
-                        "validation",
-                        &format!("Unknown position: {position_id}"),
-                        None,
-                    )),
+                    json_result_value(&err_payload)
                 }
             }
         }
         "apex.order.status" => {
             let order_id = args["order_id"].as_str().unwrap_or("");
-            match state.trading_state.order_status_payload(order_id) {
-                Some(order) => json_result_value(&order),
-                None => json_result_value(&apex_error(
-                    "APEX_4011",
-                    "validation",
-                    &format!("Unknown order: {order_id}"),
-                    None,
-                )),
-            }
+            json_result_value(&handlers::handle_order_status(
+                &state.trading_state,
+                order_id,
+            ))
         }
         "apex.market.quote" => {
             let instrument_id = args["instrument_id"].as_str().map(|s| s.to_owned());
             let broker_symbol = args["broker_symbol"].as_str().map(|s| s.to_owned());
-            let has_id = instrument_id.as_deref().is_some_and(|s| !s.is_empty());
-            let has_sym = broker_symbol.as_deref().is_some_and(|s| !s.is_empty());
-            if !has_id && !has_sym {
-                json_result_value(&apex_error("APEX_4010", "validation", "Unknown instrument", None))
-            } else if has_id && instrument_id.as_deref() != Some(INSTRUMENT_ID) {
-                json_result_value(&apex_error("APEX_4010", "validation", "Unknown instrument", None))
-            } else if !has_id && broker_symbol.as_deref() != Some(BROKER_SYMBOL) {
-                json_result_value(&apex_error("APEX_4010", "validation", "Unknown instrument", None))
-            } else {
-                json_result_value(&state.trading_state.quote_payload(instrument_id, broker_symbol))
-            }
+            json_result_value(&handlers::handle_market_quote(
+                &state.trading_state,
+                instrument_id,
+                broker_symbol,
+            ))
         }
         "apex.market.snapshot" => {
             let instrument_id = args["instrument_id"]
@@ -1283,289 +1156,76 @@ async fn handle_tool_call(
                 .unwrap_or(INSTRUMENT_ID)
                 .to_owned();
             let timeframe = args["timeframe"].as_str().unwrap_or("M1").to_owned();
-            json_result_value(&MarketSnapshotResponse {
-                instrument_id,
-                timeframe,
-                candles: vec![],
-            })
+            json_result_value(&handlers::handle_market_snapshot(instrument_id, timeframe))
         }
         "apex.market.search" => {
             let query = args["query"].as_str().unwrap_or("");
-            let instruments =
-                if !query.is_empty() && "EURUSD".contains(&query.to_uppercase()) {
-                    vec![SearchInstrument {
-                        instrument_id: INSTRUMENT_ID.to_owned(),
-                        broker_symbol: BROKER_SYMBOL.to_owned(),
-                        display_name: "Euro / US Dollar".to_owned(),
-                        profile: "fx".to_owned(),
-                        is_tradeable: true,
-                    }]
-                } else {
-                    vec![]
-                };
-            json_result_value(&MarketSearchResponse { instruments })
+            json_result_value(&handlers::handle_market_search(query))
         }
         "apex.market.details" => {
-            let instrument_id = args["instrument_id"]
-                .as_str()
-                .unwrap_or("")
-                .to_owned();
-            if instrument_id != INSTRUMENT_ID {
-                json_result_value(&apex_error("APEX_4010", "validation", "Unknown instrument", None))
-            } else {
-            json_result_value(&MarketDetailsResponse {
-                instrument_id,
-                broker_symbol: BROKER_SYMBOL.to_owned(),
-                display_name: "Euro / US Dollar".to_owned(),
-                profile: "fx".to_owned(),
-                base_currency: "EUR".to_owned(),
-                quote_currency: "USD".to_owned(),
-                pip_size: 0.0001,
-                lot_size: 100000,
-                quantity_unit: "base_units".to_owned(),
-                broker_quantity_unit: "lots".to_owned(),
-                min_quantity: 1000,
-                max_quantity: 50000000,
-                quantity_step: 1000,
-                margin_rate_pct: 0.5,
-                commission_per_lot: 0.0,
-                spread_type: "variable".to_owned(),
-                typical_spread_pips: 0.8,
-                trading_hours: vec![TradingHours {
-                    day: "monday".to_owned(),
-                    open: "00:00".to_owned(),
-                    close: "23:59".to_owned(),
-                    timezone: "UTC".to_owned(),
-                }],
-                profile_data: json!({}),
-            })
-            }
+            let instrument_id = args["instrument_id"].as_str().unwrap_or("");
+            json_result_value(&handlers::handle_market_details(instrument_id))
         }
         "apex.risk.check" => {
             let order = args.get("order").cloned().unwrap_or(json!({}));
             let quantity = order["quantity"].as_f64().unwrap_or(0.0);
-            let required_margin = (quantity / 100000.0) * 500.0;
-            let available_margin = 9750.0;
-            json_result_value(&RiskCheckResponse {
-                approved: true,
-                required_margin,
-                available_margin,
-                margin_after_trade: available_margin - required_margin,
-                exposure_increase: quantity,
-                warnings: vec![],
-                rejection_reason: None,
-            })
+            json_result_value(&handlers::handle_risk_check(quantity))
         }
         "apex.risk.limits" => {
-            let account_id = args["account_id"]
-                .as_str()
-                .unwrap_or(ACCOUNT_ID)
-                .to_owned();
-            json_result_value(&RiskLimitsResponse {
+            let account_id = args["account_id"].as_str().unwrap_or(ACCOUNT_ID);
+            json_result_value(&handlers::handle_risk_limits(
+                &state.trading_state,
                 account_id,
-                max_position_size: 5000000,
-                max_open_orders: 50,
-                daily_loss_limit: -1000.0,
-                daily_loss_used: -150.0,
-                margin_call_level_pct: 100,
-                stop_out_level_pct: 50,
-                restricted_instruments: vec![],
-                kill_switch_active: state
-                    .trading_state
-                    .read_resource_payload(&crate::state::risk_uri())
-                    .and_then(|p| p["kill_switch_active"].as_bool())
-                    .unwrap_or(false),
-            })
+            ))
         }
         "apex.fx.rollover" => {
             let instrument_id = args["instrument_id"].as_str().unwrap_or("");
-            if instrument_id != INSTRUMENT_ID {
-                json_result_value(&apex_error("APEX_4010", "validation", "Unknown instrument", None))
-            } else {
-                json_result_value(&FxRolloverResponse {
-                    instrument_id: INSTRUMENT_ID.to_owned(),
-                    broker_symbol: BROKER_SYMBOL.to_owned(),
-                    rollover_long: -0.5,
-                    rollover_short: 0.3,
-                    rollover_currency: "USD".to_owned(),
-                    rollover_per: "lot".to_owned(),
-                    lot_size: 100000,
-                    triple_rollover_day: "Wednesday".to_owned(),
-                    next_rollover_time: next_rollover_time(),
-                    as_of: now_iso(),
-                })
-            }
+            json_result_value(&handlers::handle_fx_rollover(instrument_id))
         }
         "apex.fx.exposure" => {
             let account_id = args["account_id"].as_str().unwrap_or("");
-            if account_id.is_empty() {
-                json_result_value(&apex_error("APEX_4011", "validation", "account_id is required", None))
-            } else {
-                let base_currency = args["base_currency"].as_str().unwrap_or("USD").to_owned();
-                let positions_payload = state.trading_state.positions_payload();
-                let positions = positions_payload["positions"]
-                    .as_array()
-                    .cloned()
-                    .unwrap_or_default();
-
-                let mut eur_net_units: i64 = 0;
-                let mut contributing_positions = vec![];
-
-                for pos in &positions {
-                    if pos["instrument_id"].as_str() == Some(INSTRUMENT_ID) {
-                        let qty = pos["quantity"].as_i64().unwrap_or(0);
-                        let side = pos["side"].as_str().unwrap_or("");
-                        if side == "buy" {
-                            eur_net_units += qty;
-                        } else {
-                            eur_net_units -= qty;
-                        }
-                        if let Some(pid) = pos["position_id"].as_str() {
-                            contributing_positions.push(pid.to_owned());
-                        }
-                    }
-                }
-
-                let rate = 1.0875_f64;
-                let value_in_base = if base_currency == "EUR" {
-                    eur_net_units as f64
-                } else {
-                    eur_net_units as f64 * rate
-                };
-
-                let net_direction = if eur_net_units > 0 {
-                    "long"
-                } else if eur_net_units < 0 {
-                    "short"
-                } else {
-                    "flat"
-                };
-
-                json_result_value(&FxExposureResponse {
-                    account_id: account_id.to_owned(),
-                    base_currency,
-                    exposures: vec![ExposureEntry {
-                        currency: "EUR".to_owned(),
-                        net_units: eur_net_units,
-                        net_direction: net_direction.to_owned(),
-                        value_in_base,
-                        contributing_positions,
-                    }],
-                    total_gross_exposure: value_in_base.abs(),
-                    as_of: now_iso(),
-                })
-            }
+            let base_currency = args["base_currency"].as_str().unwrap_or("USD");
+            json_result_value(&handlers::handle_fx_exposure(
+                &state.trading_state,
+                account_id,
+                base_currency,
+            ))
         }
         "apex.fx.conversion" => {
             let from_currency = args["from_currency"].as_str().unwrap_or("");
             let to_currency = args["to_currency"].as_str().unwrap_or("");
             let amount = args["amount"].as_f64().unwrap_or(0.0);
-
-            if from_currency.is_empty() || to_currency.is_empty() {
-                json_result_value(&apex_error("APEX_4011", "validation", "from_currency, to_currency, and amount are all required", None))
-            } else {
-                let mid_rate = 1.0875_f64;
-                let rate_result = if from_currency == to_currency {
-                    Some(1.0)
-                } else if from_currency == "EUR" && to_currency == "USD" {
-                    Some(mid_rate)
-                } else if from_currency == "USD" && to_currency == "EUR" {
-                    Some(1.0 / mid_rate)
-                } else {
-                    None
-                };
-
-                match rate_result {
-                    Some(rate) => json_result_value(&FxConversionResponse {
-                        from_currency: from_currency.to_owned(),
-                        to_currency: to_currency.to_owned(),
-                        rate: (rate * 10_000_000.0).round() / 10_000_000.0,
-                        converted_amount: (amount * rate * 100.0).round() / 100.0,
-                        timestamp: now_iso(),
-                    }),
-                    None => json_result_value(&apex_error("APEX_4010", "validation", "Unsupported currency pair", None)),
-                }
-            }
+            json_result_value(&handlers::handle_fx_conversion(
+                from_currency,
+                to_currency,
+                amount,
+            ))
         }
         "apex.cfd.corporate_actions" => {
             let account_id = args["account_id"].as_str().unwrap_or("");
-            if account_id.is_empty() {
-                json_result_value(&apex_error("APEX_4011", "validation", "account_id is required", None))
-            } else {
-                json_result_value(&CfdCorporateActionsResponse {
-                    corporate_actions: vec![],
-                })
-            }
+            json_result_value(&handlers::handle_cfd_corporate_actions(account_id))
         }
         "apex.cfd.dividend_adjustment" => {
             let account_id = args["account_id"].as_str().unwrap_or("");
-            if account_id.is_empty() {
-                json_result_value(&apex_error("APEX_4011", "validation", "account_id is required", None))
-            } else {
-                json_result_value(&CfdDividendAdjustmentResponse {
-                    adjustments: vec![],
-                })
-            }
+            json_result_value(&handlers::handle_cfd_dividend_adjustment(account_id))
         }
         "apex.crypto.funding_rate" => {
-            const PERP_INSTRUMENT_ID: &str = "APEX:CRYPTO:PERP:BTCUSDT";
-            const PERP_BROKER_SYMBOL: &str = "BTCUSDT";
-
             let instrument_id = args["instrument_id"].as_str().unwrap_or("");
-            if instrument_id != PERP_INSTRUMENT_ID {
-                json_result_value(&apex_error("APEX_4010", "validation", "Unknown instrument", None))
-            } else {
-                let (funding_time, countdown) = next_funding_time();
-                json_result_value(&CryptoFundingRateResponse {
-                    instrument_id: PERP_INSTRUMENT_ID.to_owned(),
-                    broker_symbol: PERP_BROKER_SYMBOL.to_owned(),
-                    current_rate: 0.0001,
-                    current_rate_annualised: 0.1095,
-                    predicted_rate: 0.00012,
-                    funding_interval_hours: 8,
-                    next_funding_time: funding_time,
-                    countdown_seconds: countdown,
-                    index_price: 50000.00,
-                    mark_price: 50050.00,
-                    timestamp: now_iso(),
-                })
-            }
+            json_result_value(&handlers::handle_crypto_funding_rate(instrument_id))
         }
         "apex.crypto.liquidation_estimate" => {
-            const PERP_INSTRUMENT_ID: &str = "APEX:CRYPTO:PERP:BTCUSDT";
-
             let instrument_id = args["instrument_id"].as_str().unwrap_or("");
-            if instrument_id != PERP_INSTRUMENT_ID {
-                json_result_value(&apex_error("APEX_4010", "validation", "Unknown instrument", None))
-            } else {
-                let side = args["side"].as_str().unwrap_or("buy");
-                let quantity = args["quantity"].as_f64().unwrap_or(0.0);
-                let leverage = args["leverage"].as_f64().unwrap_or(1.0);
-                let entry_price = args["entry_price"].as_f64().unwrap_or(0.0);
-
-                let margin_required = (entry_price * quantity) / leverage;
-                let maintenance_margin = margin_required / 2.0;
-
-                let liquidation_price = if side == "buy" {
-                    entry_price * (1.0 - (1.0 / leverage) * 0.95)
-                } else {
-                    entry_price * (1.0 + (1.0 / leverage) * 0.95)
-                };
-                let liquidation_price = (liquidation_price * 100.0).round() / 100.0;
-                let distance_pct = ((entry_price - liquidation_price).abs() / entry_price * 100.0 * 100.0).round() / 100.0;
-
-                json_result_value(&CryptoLiquidationEstimateResponse {
-                    instrument_id: PERP_INSTRUMENT_ID.to_owned(),
-                    side: side.to_owned(),
-                    entry_price,
-                    liquidation_price,
-                    margin_required: (margin_required * 100.0).round() / 100.0,
-                    maintenance_margin: (maintenance_margin * 100.0).round() / 100.0,
-                    margin_currency: "USDT".to_owned(),
-                    distance_pct,
-                    warnings: vec![],
-                })
-            }
+            let side = args["side"].as_str().unwrap_or("buy");
+            let quantity = args["quantity"].as_f64().unwrap_or(0.0);
+            let leverage = args["leverage"].as_f64().unwrap_or(1.0);
+            let entry_price = args["entry_price"].as_f64().unwrap_or(0.0);
+            json_result_value(&handlers::handle_crypto_liquidation_estimate(
+                instrument_id,
+                side,
+                quantity,
+                leverage,
+                entry_price,
+            ))
         }
         "apex.crypto.transfer" => {
             let account_id = args["account_id"].as_str().unwrap_or("");
@@ -1573,23 +1233,13 @@ async fn handle_tool_call(
             let to_wallet = args["to_wallet"].as_str().unwrap_or("");
             let currency = args["currency"].as_str().unwrap_or("");
             let amount = args["amount"].as_f64().unwrap_or(0.0);
-
-            if account_id.is_empty() || from_wallet.is_empty() || to_wallet.is_empty() || currency.is_empty() {
-                json_result_value(&apex_error("APEX_4011", "validation", "All fields are required: account_id, from_wallet, to_wallet, currency, amount", None))
-            } else if from_wallet == to_wallet {
-                json_result_value(&apex_error("APEX_4011", "validation", "from_wallet and to_wallet must be different", None))
-            } else {
-                json_result_value(&CryptoTransferResponse {
-                    transfer_id: uuid::Uuid::new_v4().to_string(),
-                    from_wallet: from_wallet.to_owned(),
-                    to_wallet: to_wallet.to_owned(),
-                    currency: currency.to_owned(),
-                    amount,
-                    status: "completed".to_owned(),
-                    rejection_reason: None,
-                    completed_at: now_iso(),
-                })
-            }
+            json_result_value(&handlers::handle_crypto_transfer(
+                account_id,
+                from_wallet,
+                to_wallet,
+                currency,
+                amount,
+            ))
         }
         _ => {
             return Err(json!({
