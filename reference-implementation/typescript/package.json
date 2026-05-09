@@ -9,7 +9,7 @@
     "start": "node dist/server.js",
     "dev": "tsx src/server.ts",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
-    "inspector": "npx @modelcontextprotocol/inspector node dist/server.js"
+    "inspector": "npx @modelcontextprotocol/inspector http://localhost:8888/mcp"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

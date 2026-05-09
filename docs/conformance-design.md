@@ -56,7 +56,7 @@ The harness is organized into seven executable scripts, each covering a distinct
 
 ### smoke.mjs — Alpha Tool Baseline
 
-The entry point for any implementation. Connects over MCP stdio, enumerates 19 required tools, then runs a focused battery of assertions:
+The entry point for any implementation. Connects over remote MCP HTTP, enumerates 19 required tools, then runs a focused battery of assertions:
 
 - Authentication: valid token accepted, invalid token returns `APEX_4001`
 - Account summary: `account_base_currency` and `response_currency` are separate ISO currency codes
@@ -70,7 +70,7 @@ This suite runs in under 10 seconds per implementation. It is the fast gate.
 
 ### dry-run.mjs — End-to-End Order Lifecycle
 
-Simulates a complete trading workflow over MCP stdio: authenticate, check capabilities, look up market details, run pre-trade risk check, place a market order, attach SL/TP protection, place a resting limit order, cancel it, and verify concurrent order placement does not deadlock or corrupt state. This suite validates that the implementation handles the full lifecycle, not just individual tools in isolation.
+Simulates a complete trading workflow over remote MCP HTTP: authenticate, check capabilities, look up market details, run pre-trade risk check, place a market order, attach SL/TP protection, place a resting limit order, cancel it, and verify concurrent order placement does not deadlock or corrupt state. This suite validates that the implementation handles the full lifecycle, not just individual tools in isolation.
 
 ### production-smoke.mjs — Resource and Schema Validation
 
@@ -86,13 +86,13 @@ Tests the implementation's behavior under adversarial conditions using the `refe
 - **Partial fill lifecycle** — inject `partial_fill_next_order: true`, place order, verify `status: "partially_filled"` with correct `fill_quantity` and `remaining_quantity`, validate order-event and fill-event schemas
 - **Sequence gap detection** — inject `force_sequence_gap: true`, verify gap is detectable in resource sequence numbers
 - **Sequence gap rejection** — verify order placement is rejected (`APEX_4025`) when sequence continuity is broken
-- **Reconnect baseline** — disconnect, reconnect, verify `no_replay` contract and resource availability after reconnect
+- **Replay-capable session baseline** — verify `session_replay` contract and execution-critical resource availability
 
 This suite also validates heartbeat latency (average under 500ms, max under 1000ms) and concurrent order handling.
 
 ### transport-smoke.mjs — HTTP/SSE Connection Lifecycle
 
-Validates the Streamable HTTP transport. Starts the server with `--http <port>`, then exercises the wire protocol directly with raw `fetch` and SSE parsing (not the MCP SDK client):
+Validates the Streamable HTTP transport. Starts the server with an explicit port override, then exercises the wire protocol directly with raw `fetch` and SSE parsing (not the MCP SDK client):
 
 - Initialize handshake returns `Mcp-Session-Id` header
 - `apex_version` present in `serverInfo`
@@ -128,17 +128,15 @@ Validates live market data delivery over SSE:
 
 ---
 
-## Transport Modes
+## Transport
 
-The harness runs over two transports, and both exist for concrete reasons.
+The harness runs over remote MCP HTTP with SSE notification delivery.
 
-**MCP stdio** (smoke, dry-run, production-smoke, production-resilience): The harness spawns the server as a child process and communicates over stdin/stdout using the MCP SDK's `StdioClientTransport`. No network stack, no ports, no TLS. This is the fast path — a smoke run completes in seconds, and you can run all four reference implementations in parallel without port conflicts. Stdio mode uses the `no_replay` reconnect contract: on disconnect, the agent rebuilds state from scratch by re-reading all resources.
+For built-in targets, the harness spawns the server with `--http <port>` and communicates using raw `fetch` plus a custom SSE parser. The reference implementations default to port `8888` outside the harness. Third-party implementations can either expose an already-running `--url` or provide a command whose final argument is the harness-selected port.
 
-**HTTP/SSE** (transport-smoke, transport-resilience, transport-marketdata): The harness spawns the server with `--http <port>` (port 0 for random assignment, read from stderr), then communicates using raw `fetch` and a custom SSE parser. This exercises the real transport: HTTP POST for tool calls, SSE GET for notification streams, `Mcp-Session-Id` for session affinity, `Last-Event-ID` for replay. HTTP mode uses the `session_replay` reconnect contract with acknowledgment-driven retention and gap fill.
+This exercises the real transport: HTTP POST for tool calls, SSE GET for notification streams, `Mcp-Session-Id` for session affinity, and `Last-Event-ID` for replay. The required reconnect contract is `session_replay` with acknowledgment-driven retention and gap fill.
 
-Both transports test the same protocol semantics. The difference is what they prove: stdio proves the implementation logic is correct; HTTP/SSE proves it works over a real network transport with real reconnection, real session management, and real event delivery.
-
-This is similar to how the FIX Trading Community's certification program tests both the application-layer message semantics and the transport-layer session management (logon, heartbeat, sequence reset) independently.
+This is similar to how the FIX Trading Community's certification program tests both the application-layer message semantics and the transport-layer session management (logon, heartbeat, sequence reset).
 
 ---
 
@@ -241,13 +239,11 @@ This staged approach follows the Kubernetes conformance program model, where con
 
 ## How The Harness Works
 
-The harness is a single npm package (`conformance/package.json`) with three dependencies: the MCP SDK (for stdio transport), Ajv (for JSON Schema validation), and ajv-formats (for format validation like date-time and URI). It runs on Node.js 18+.
+The harness is a single npm package (`conformance/package.json`) with three dependencies: the MCP SDK (for shared protocol schemas), Ajv (for JSON Schema validation), and ajv-formats (for format validation like date-time and URI). It runs on Node.js 18+.
 
-**Target resolution:** The harness accepts a target in three forms: a built-in name (`typescript`, `go`, `rust`, `java`), a `--command`/`--args`/`--cwd` triplet, or a `--config` JSON file. All three resolve to the same internal config: a command, arguments, and working directory.
+**Target resolution:** The harness accepts a target in four forms: a built-in name (`typescript`, `go`, `rust`, `java`), a `--url` endpoint, a `--command`/`--args`/`--cwd` triplet, or a `--config` JSON file. Command targets resolve to a command, arguments, and working directory; URL targets are used directly.
 
-**For stdio suites:** The harness spawns the server as a child process using `StdioClientTransport`, connects with the MCP SDK client, runs assertions, and tears down the connection. Server stderr is captured and dumped on failure (or streamed live with `--verbose`).
-
-**For HTTP suites:** The harness spawns the server with `--http <port>`, waits for the "listening" line on stderr, then communicates using raw `fetch` for POST requests and a custom SSE parser for GET streams. The harness manages session IDs, event IDs, and reconnection manually — no SDK abstraction. This is intentional: the transport tests validate the wire protocol, not the SDK's interpretation of it.
+**HTTP execution:** For command targets, the harness starts the server with a selected port, waits for the "listening" line on stderr, then communicates using raw `fetch` for POST requests and a custom SSE parser for GET streams. The harness manages session IDs, event IDs, and reconnection manually so the tests validate the wire protocol directly.
 
 **Test options:** Implementations can override default test inputs (auth token, instrument ID, currency, expected base currency, expected broker quantity unit) via CLI flags or the `test_options` block in the config JSON. This allows third-party brokers to run the harness against their real instrument universe without modifying the test scripts.
 

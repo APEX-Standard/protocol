@@ -83,7 +83,7 @@ console.log("Available profiles:", session.profiles);
 
 ## Step 3A: Connecting Over HTTP/SSE
 
-If your broker exposes a remote HTTP endpoint (rather than a local stdio process), you can connect using Streamable HTTP and receive real-time notifications over SSE.
+If your broker exposes a remote HTTP endpoint, you can connect using Streamable HTTP and receive real-time notifications over SSE.
 
 ```typescript
 // Connect via Streamable HTTP (for remote brokers)

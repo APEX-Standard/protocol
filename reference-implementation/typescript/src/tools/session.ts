@@ -13,13 +13,13 @@ import type { ReplayBuffer } from "../lib/replay-buffer.js";
 import { z } from "zod";
 
 export interface SessionToolOptions {
-  transportMode?: "stdio" | "streamable_http";
+  transportMode?: "streamable_http";
   onAuthenticated?: () => void;
   replayBuffer?: ReplayBuffer;
 }
 
 export function registerSessionTools(server: McpServer, state: ReferenceTradingState, options?: SessionToolOptions): void {
-  const transportMode = options?.transportMode ?? "stdio";
+  const transportMode = options?.transportMode ?? "streamable_http";
   server.registerTool(
     "apex.session.authenticate",
     {
@@ -79,31 +79,24 @@ export function registerSessionTools(server: McpServer, state: ReferenceTradingS
           realtime: true,
           autonomous: false,
         },
-        realtime_contract: transportMode === "streamable_http"
-          ? {
-              transport_mode: "streamable_http",
-              reconnect_mode: "session_replay",
-              max_retention_events: 10000,
-              max_retention_seconds: 0,
-              quote_freshness_ms: 1000,
-              account_freshness_ms: 2000,
-              tick_interval_ms: 2000,
-              notifications: [
-                "notifications/apex.order.filled",
-                "notifications/apex.order.partially_filled",
-                "notifications/apex.order.rejected",
-                "notifications/apex.market.candle_closed",
-                "notifications/apex.risk.kill_switch_engaged",
-                "notifications/apex.session.replay_failed",
-                "notifications/apex.session.gap_fill",
-              ],
-            }
-          : {
-              transport_mode: "stdio",
-              reconnect_mode: "no_replay",
-              quote_freshness_ms: 1000,
-              account_freshness_ms: 2000,
-            },
+        realtime_contract: {
+          transport_mode: transportMode,
+          reconnect_mode: "session_replay",
+          max_retention_events: 10000,
+          max_retention_seconds: 0,
+          quote_freshness_ms: 1000,
+          account_freshness_ms: 2000,
+          tick_interval_ms: 2000,
+          notifications: [
+            "notifications/apex.order.filled",
+            "notifications/apex.order.partially_filled",
+            "notifications/apex.order.rejected",
+            "notifications/apex.market.candle_closed",
+            "notifications/apex.risk.kill_switch_engaged",
+            "notifications/apex.session.replay_failed",
+            "notifications/apex.session.gap_fill",
+          ],
+        },
       },
       content: [],
     }),
@@ -138,7 +131,6 @@ export function registerSessionTools(server: McpServer, state: ReferenceTradingS
           content: [],
         };
       }
-      // No-op in stdio mode (no replay buffer)
       const result = options?.replayBuffer
         ? options.replayBuffer.acknowledge(last_event_id)
         : { acknowledged_through: "0", buffer_depth: 0 };

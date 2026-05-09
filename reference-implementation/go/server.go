@@ -11,11 +11,7 @@ const (
 
 var state = newReferenceState()
 
-func newServer() *server.MCPServer {
-	return newServerWithState(state, false)
-}
-
-func newServerWithState(s *referenceState, httpMode bool) *server.MCPServer {
+func newServerWithState(s *referenceState) *server.MCPServer {
 	srv := server.NewMCPServer(
 		serverName,
 		serverVersion,
@@ -23,17 +19,15 @@ func newServerWithState(s *referenceState, httpMode bool) *server.MCPServer {
 		server.WithToolCapabilities(true),
 	)
 	registerResources(srv, s)
-	registerSessionToolsWithMode(srv, s, httpMode)
-	registerAccountTools(srv)
+	registerSessionToolsWithMode(srv, s)
+	registerAccountToolsWithState(srv, s)
 	registerOrderToolsWithState(srv, s)
 	registerMarketTools(srv)
 	registerRiskToolsWithState(srv, s)
 	registerFxToolsWithState(srv, s)
 	registerCfdToolsWithState(srv, s)
 	registerCryptoToolsWithState(srv, s)
-	if httpMode {
-		registerForceCandeCloseToolWithState(srv, s)
-		registerStopTicksToolWithState(srv, s)
-	}
+	registerForceCandeCloseToolWithState(srv, s)
+	registerStopTicksToolWithState(srv, s)
 	return srv
 }

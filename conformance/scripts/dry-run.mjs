@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { assertNonEmptyString, callTool, connectClient, disconnectClient, extractPayload, printCheck, printCapturedStderr, resolveTarget } from "./common.mjs";
 
 const target = resolveTarget(process.argv.slice(2));
-const session = await connectClient(target.config, { verbose: target.verbose });
+const session = await connectClient(target, { verbose: target.verbose });
 const testOptions = target.testOptions;
 
 try {

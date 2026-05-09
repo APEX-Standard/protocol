@@ -12,6 +12,24 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+type incomingMessage struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id"`
+	Method  string          `json:"method"`
+	Params  json.RawMessage `json:"params,omitempty"`
+}
+
+func rawID(value json.RawMessage) any {
+	if len(value) == 0 {
+		return nil
+	}
+	var decoded any
+	if err := json.Unmarshal(value, &decoded); err != nil {
+		return nil
+	}
+	return decoded
+}
+
 // sseWriter manages a single SSE connection.
 type sseWriter struct {
 	w       http.ResponseWriter
@@ -146,7 +164,7 @@ func StartHTTPServer(port int) {
 	httpState.replayBuffer = ht.replayBuffer
 
 	// Create the MCP server
-	srv := newServerWithState(httpState, true)
+	srv := newServerWithState(httpState)
 
 	mux := http.NewServeMux()
 

@@ -177,7 +177,7 @@ When the agent calls `apex.session.acknowledge`:
 3. Return `acknowledged_through` (the acknowledged ID) and `buffer_depth` (count of remaining unacknowledged events).
 4. If `last_event_id` is higher than any event the server has sent, return the highest sent event ID as `acknowledged_through`.
 
-In stdio mode, return `acknowledged_through: "0"` and `buffer_depth: 0`.
+If the event has already been pruned or was never known for the current session, return the closest acknowledged cursor and the current replay buffer depth.
 
 ### 7.8 Gap Fill During Replay
 

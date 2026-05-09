@@ -1,9 +1,8 @@
 //! Shared tool handler business logic.
 //!
 //! Each function takes the trading state (and any input args) and returns a
-//! `serde_json::Value` result.  Transport-specific code (stdio `server.rs`,
-//! HTTP `transport/http.rs`) is responsible for extracting parameters from its
-//! own format and for emitting any notifications after the handler returns.
+//! `serde_json::Value` result. HTTP transport code extracts parameters and
+//! emits notifications after the handler returns.
 
 use serde_json::{json, Value};
 
@@ -37,10 +36,7 @@ pub fn handle_authenticate(
             .map(|s| s.to_owned())
             .unwrap_or_else(|| ACCOUNT_ID.to_owned()),
         expires_at: hours_from_now(1),
-        capabilities: CORE_CAPABILITIES
-            .iter()
-            .map(|v| (*v).to_owned())
-            .collect(),
+        capabilities: CORE_CAPABILITIES.iter().map(|v| (*v).to_owned()).collect(),
         profiles: vec!["fx".to_owned()],
         broker_id: "reference-broker".to_owned(),
         broker_name: "APEX Reference Broker".to_owned(),
@@ -48,42 +44,30 @@ pub fn handle_authenticate(
     .expect("serialize")
 }
 
-pub fn handle_capabilities(transport_mode: &str) -> Value {
-    let realtime_contract = if transport_mode == "streamable_http" {
-        json!({
-            "transport_mode": "streamable_http",
-            "reconnect_mode": "session_replay",
-            "max_retention_events": 10000,
-            "max_retention_seconds": 0,
-            "quote_freshness_ms": 1000,
-            "account_freshness_ms": 2000,
-            "tick_interval_ms": 2000,
-            "notifications": [
-                "notifications/apex.order.filled",
-                "notifications/apex.order.partially_filled",
-                "notifications/apex.order.rejected",
-                "notifications/apex.market.candle_closed",
-                "notifications/apex.risk.kill_switch_engaged",
-                "notifications/apex.session.replay_failed",
-                "notifications/apex.session.gap_fill"
-            ]
-        })
-    } else {
-        json!({
-            "transport_mode": "stdio",
-            "reconnect_mode": "no_replay",
-            "quote_freshness_ms": 1000,
-            "account_freshness_ms": 2000
-        })
-    };
+pub fn handle_capabilities() -> Value {
+    let realtime_contract = json!({
+        "transport_mode": "streamable_http",
+        "reconnect_mode": "session_replay",
+        "max_retention_events": 10000,
+        "max_retention_seconds": 0,
+        "quote_freshness_ms": 1000,
+        "account_freshness_ms": 2000,
+        "tick_interval_ms": 2000,
+        "notifications": [
+            "notifications/apex.order.filled",
+            "notifications/apex.order.partially_filled",
+            "notifications/apex.order.rejected",
+            "notifications/apex.market.candle_closed",
+            "notifications/apex.risk.kill_switch_engaged",
+            "notifications/apex.session.replay_failed",
+            "notifications/apex.session.gap_fill"
+        ]
+    });
 
     serde_json::to_value(CapabilitiesResponse {
         apex_version: SERVER_VERSION.to_owned(),
         broker_id: "reference-broker".to_owned(),
-        core_tools: CORE_CAPABILITIES
-            .iter()
-            .map(|v| (*v).to_owned())
-            .collect(),
+        core_tools: CORE_CAPABILITIES.iter().map(|v| (*v).to_owned()).collect(),
         profiles: json!({ "fx": SERVER_VERSION }),
         vendor_extensions: None,
         rate_limits: json!({
@@ -117,14 +101,6 @@ pub fn handle_heartbeat() -> Value {
         status: "ok".to_owned(),
     })
     .expect("serialize")
-}
-
-pub fn handle_acknowledge_stdio() -> Value {
-    // No-op in stdio mode (no replay buffer)
-    json!({
-        "acknowledged_through": "0",
-        "buffer_depth": 0,
-    })
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +176,9 @@ pub fn handle_order_place(
     order: &Value,
 ) -> Result<(Value, Vec<String>), Value> {
     if let Err((code, category, message)) = state.order_acceptance() {
-        return Err(serde_json::to_value(apex_error(code, category, message, None)).expect("serialize"));
+        return Err(
+            serde_json::to_value(apex_error(code, category, message, None)).expect("serialize"),
+        );
     }
 
     if order["order_type"].as_str() == Some("limit")
@@ -253,10 +231,7 @@ pub fn handle_order_modify(
     Ok((response, updates))
 }
 
-pub fn handle_order_cancel(
-    state: &ReferenceTradingState,
-    order_id: &str,
-) -> (Value, Vec<String>) {
+pub fn handle_order_cancel(state: &ReferenceTradingState, order_id: &str) -> (Value, Vec<String>) {
     let updates = state.cancel_order(order_id);
     let response = serde_json::to_value(OrderCancelResponse {
         order_id: order_id.to_owned(),
@@ -277,7 +252,9 @@ pub fn handle_position_close(
     requested_quantity: Option<f64>,
 ) -> Result<(Value, Vec<String>), Value> {
     if let Err((code, category, message)) = state.order_acceptance() {
-        return Err(serde_json::to_value(apex_error(code, category, message, None)).expect("serialize"));
+        return Err(
+            serde_json::to_value(apex_error(code, category, message, None)).expect("serialize"),
+        );
     }
 
     let (instrument_id, side, total_quantity) = match state.find_position(position_id) {
@@ -307,10 +284,7 @@ pub fn handle_position_close(
     };
 
     let response = serde_json::to_value(PositionCloseResponse {
-        order_id: order_payload["order_id"]
-            .as_str()
-            .unwrap_or("")
-            .to_owned(),
+        order_id: order_payload["order_id"].as_str().unwrap_or("").to_owned(),
         position_id: position_id.to_owned(),
         status: status.to_owned(),
         fill_price: order_payload["fill_price"].as_f64().unwrap_or(1.08755),
@@ -345,12 +319,8 @@ pub fn handle_market_quote(
     instrument_id: Option<String>,
     broker_symbol: Option<String>,
 ) -> Value {
-    let has_id = instrument_id
-        .as_deref()
-        .is_some_and(|s| !s.is_empty());
-    let has_sym = broker_symbol
-        .as_deref()
-        .is_some_and(|s| !s.is_empty());
+    let has_id = instrument_id.as_deref().is_some_and(|s| !s.is_empty());
+    let has_sym = broker_symbol.as_deref().is_some_and(|s| !s.is_empty());
 
     if !has_id && !has_sym {
         return serde_json::to_value(apex_error(
@@ -586,11 +556,7 @@ pub fn handle_fx_exposure(
     .expect("serialize")
 }
 
-pub fn handle_fx_conversion(
-    from_currency: &str,
-    to_currency: &str,
-    amount: f64,
-) -> Value {
+pub fn handle_fx_conversion(from_currency: &str, to_currency: &str, amount: f64) -> Value {
     if from_currency.is_empty() || to_currency.is_empty() {
         return serde_json::to_value(apex_error(
             "APEX_4011",

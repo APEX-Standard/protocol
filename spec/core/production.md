@@ -151,8 +151,8 @@ Notification payloads should include:
 - Sequences must be monotonic within each realtime resource stream.
 - Notifications referring to a realtime resource must carry the current `sequence`.
 - Clients must be able to detect gaps deterministically.
-- The server must document its reconnect mode: `no_replay`, `session_replay`, `best_effort_replay`, or `guaranteed_replay`. See [`operations.md`](./operations.md) Section 4 for definitions.
-- If replay is supported (any mode other than `no_replay`), notification events must have stable replay ordering within a session.
+- The server must document its reconnect mode: `session_replay`, `best_effort_replay`, or `guaranteed_replay`. See [`operations.md`](./operations.md) Section 4 for definitions.
+- Notification events must have stable replay ordering within a session.
 
 ### 1.7 Mandatory Feature Minimums
 

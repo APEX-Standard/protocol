@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { fileURLToPath } from "node:url";
@@ -9,6 +10,7 @@ import {
   connectClient,
   disconnectClient,
   extractPayload,
+  openSseStream,
   printCheck,
   printCapturedStderr,
   resolveTarget,
@@ -86,8 +88,102 @@ async function setRealtimeFault(client, args) {
   );
 }
 
+async function authenticateSession(client) {
+  return extractPayload(
+    await client.callTool({
+      name: "apex.session.authenticate",
+      arguments: {
+        token: target.testOptions.validToken,
+        token_type: target.testOptions.tokenType,
+        account_id: "ACC_12345",
+      },
+    }),
+  );
+}
+
+async function placeReplayProbeOrder(client, side) {
+  return extractPayload(
+    await client.callTool({
+      name: "apex.order.place",
+      arguments: {
+        account_id: "ACC_12345",
+        order: {
+          instrument_id: "APEX:FX:EURUSD",
+          side,
+          order_type: "market",
+          quantity: 1000,
+          quantity_unit: "base_units",
+          time_in_force: "GTC",
+        },
+      },
+    }),
+  );
+}
+
+async function waitForSseEvent(stream, predicate, label, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const event = stream.events.find(predicate);
+    if (event) {
+      return event;
+    }
+    await delay(50);
+  }
+  throw new Error(`Timed out waiting for ${label}; saw ${stream.events.length} SSE event(s)`);
+}
+
+async function verifyReplayReconnect(session, client) {
+  await authenticateSession(client);
+  printCheck("authenticated session for replay reconnect baseline");
+
+  await client.subscribeResource({ uri: ordersUri });
+  await session.closeNotificationStream();
+
+  const sourceStream = openSseStream(session.server.baseUrl, session.sessionId);
+  let replayStream;
+  try {
+    await delay(300);
+    const baselineOrder = await placeReplayProbeOrder(client, "buy");
+    assert.equal(baselineOrder.status, "filled", "Expected baseline replay probe order to fill");
+
+    const baselineFill = await waitForSseEvent(
+      sourceStream,
+      (event) =>
+        event.data?.method === "notifications/apex.order.filled"
+        && event.data?.params?.payload?.order_id === baselineOrder.order_id,
+      `baseline order fill ${baselineOrder.order_id}`,
+    );
+    const cursor = baselineFill.id;
+    assert(cursor, "Expected an SSE event id before replay reconnect");
+    await sourceStream.close();
+
+    const disconnectedOrder = await placeReplayProbeOrder(client, "sell");
+    assert.equal(disconnectedOrder.status, "filled", "Expected disconnected replay probe order to fill");
+
+    replayStream = openSseStream(session.server.baseUrl, session.sessionId, cursor);
+    const replayedFill = await waitForSseEvent(
+      replayStream,
+      (event) =>
+        event.data?.method === "notifications/apex.order.filled"
+        && event.data?.params?.payload?.order_id === disconnectedOrder.order_id,
+      `replayed disconnected order fill ${disconnectedOrder.order_id}`,
+    );
+    const replayFailed = replayStream.events.find(
+      (event) => event.data?.method === "notifications/apex.session.replay_failed",
+    );
+    assert(!replayFailed, `Expected replay reconnect to succeed, got ${JSON.stringify(replayFailed?.data)}`);
+
+    assert(replayedFill.id, "Expected replayed fill to include an SSE event id");
+    printCheck(`verified SSE replay reconnect from Last-Event-ID ${cursor}`);
+  } finally {
+    await sourceStream.close().catch(() => {});
+    await replayStream?.close().catch(() => {});
+    await client.unsubscribeResource({ uri: ordersUri }).catch(() => {});
+  }
+}
+
 async function main() {
-  let session = await connectClient(target.config, { verbose: target.verbose });
+  let session = await connectClient(target, { verbose: target.verbose });
 
   try {
     let { client } = session;
@@ -100,19 +196,18 @@ async function main() {
         arguments: {},
       }),
     );
-    assert.equal(capabilities.realtime_contract?.reconnect_mode, "no_replay");
-    printCheck(`verified reconnect contract for ${target.label}`);
+    assert.equal(capabilities.realtime_contract?.reconnect_mode, "session_replay");
+    printCheck(`verified replay-capable reconnect contract for ${target.label}`);
 
     const quoteBeforeReconnect = JSON.parse((await client.readResource({ uri: quoteUri })).contents[0].text);
     assert.equal(typeof quoteBeforeReconnect.sequence, "number");
 
-    await disconnectClient(session);
-    session = await connectClient(target.config, { verbose: target.verbose });
-    client = session.client;
+    const quoteAfterContractCheck = JSON.parse((await client.readResource({ uri: quoteUri })).contents[0].text);
+    assert.equal(quoteAfterContractCheck.instrument_id, "APEX:FX:EURUSD");
+    assert(quoteAfterContractCheck.sequence >= quoteBeforeReconnect.sequence);
+    printCheck("verified resource baseline under replay-capable session");
 
-    const quoteAfterReconnect = JSON.parse((await client.readResource({ uri: quoteUri })).contents[0].text);
-    assert.equal(quoteAfterReconnect.instrument_id, "APEX:FX:EURUSD");
-    printCheck("reconnected and rebuilt no-replay baseline");
+    await verifyReplayReconnect(session, client);
 
     if (!hasFaultTool) {
       printCheck("fault injection tool unavailable; skipped stale/gap resilience checks");

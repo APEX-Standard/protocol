@@ -8,7 +8,7 @@ build: fmt lint
 release:
     cargo build --release
 
-# Run the server (stdio transport)
+# Run the server on the default port (8888)
 run:
     cargo run
 

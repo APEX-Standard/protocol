@@ -156,7 +156,7 @@ Keep-alive ping. Brokers should respond within 500ms or the hub marks the sessio
 
 ### `apex.session.acknowledge`
 
-Acknowledge receipt of SSE events through the given event ID. The server discards events at or before the acknowledged ID to reclaim storage. In stdio mode this tool is a no-op.
+Acknowledge receipt of SSE events through the given event ID. The server discards events at or before the acknowledged ID to reclaim storage.
 
 **Annotations:** `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`
 

@@ -59,7 +59,7 @@ APEX is a layer on top of MCP, not a replacement for it. MCP (Model Context Prot
 - Resources as the state interface
 - Subscriptions for change notification
 - Notifications for server-pushed events
-- Transport: HTTP with SSE for remote sessions, stdio for local development
+- Transport: HTTP with SSE for remote sessions
 
 APEX adds what MCP intentionally does not define:
 

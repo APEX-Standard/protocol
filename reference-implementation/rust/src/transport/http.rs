@@ -905,9 +905,7 @@ async fn handle_tool_call(
 
             json_result_value(&payload)
         }
-        "apex.session.capabilities" => {
-            json_result_value(&handlers::handle_capabilities("streamable_http"))
-        }
+        "apex.session.capabilities" => json_result_value(&handlers::handle_capabilities()),
         "apex.session.heartbeat" => json_result_value(&handlers::handle_heartbeat()),
         "apex.session.acknowledge" => {
             // HTTP-specific: uses replay buffer
@@ -995,8 +993,7 @@ async fn handle_tool_call(
                     let is_market = order["order_type"].as_str() == Some("market");
 
                     if is_market {
-                        let fill_seq =
-                            state.trading_state.get_sequence(&crate::state::fills_uri());
+                        let fill_seq = state.trading_state.get_sequence(&crate::state::fills_uri());
                         let side = order["side"].as_str().unwrap_or("buy");
                         let fill_quantity = payload["fill_quantity"].as_f64().unwrap_or(0.0);
                         let instrument_id =
@@ -1052,12 +1049,8 @@ async fn handle_tool_call(
             let target_id = args["target_id"].as_str().unwrap_or("");
             let mods = args.get("modifications").cloned().unwrap_or(json!({}));
 
-            match handlers::handle_order_modify(
-                &state.trading_state,
-                target_type,
-                target_id,
-                &mods,
-            ) {
+            match handlers::handle_order_modify(&state.trading_state, target_type, target_id, &mods)
+            {
                 Ok((payload, updates)) => {
                     state.notify_resource_updates(session_id, &updates).await;
                     json_result_value(&payload)
@@ -1067,8 +1060,7 @@ async fn handle_tool_call(
         }
         "apex.order.cancel" => {
             let order_id = args["order_id"].as_str().unwrap_or("");
-            let (payload, updates) =
-                handlers::handle_order_cancel(&state.trading_state, order_id);
+            let (payload, updates) = handlers::handle_order_cancel(&state.trading_state, order_id);
             state.notify_resource_updates(session_id, &updates).await;
             json_result_value(&payload)
         }
@@ -1086,8 +1078,7 @@ async fn handle_tool_call(
 
                     // HTTP-specific: emit fill notification
                     let order_id = payload["order_id"].as_str().unwrap_or("");
-                    let fill_seq =
-                        state.trading_state.get_sequence(&crate::state::fills_uri());
+                    let fill_seq = state.trading_state.get_sequence(&crate::state::fills_uri());
                     let account_id = args["account_id"].as_str().unwrap_or(ACCOUNT_ID);
                     let close_quantity = payload["fill_quantity"].as_f64().unwrap_or(0.0);
                     // Reconstruct close_side from the position data
@@ -1101,7 +1092,11 @@ async fn handle_tool_call(
                         if let Some((_inst, side, _qty)) =
                             state.trading_state.find_position(position_id)
                         {
-                            if side == "buy" { "sell" } else { "buy" }
+                            if side == "buy" {
+                                "sell"
+                            } else {
+                                "buy"
+                            }
                         } else {
                             // Position was fully closed and removed; default based on
                             // convention.  In practice the position was just closed above
@@ -1136,8 +1131,7 @@ async fn handle_tool_call(
                         .and_then(|p| p["kill_switch_active"].as_bool())
                         .unwrap_or(false)
                     {
-                        let seq =
-                            state.trading_state.get_sequence(&crate::state::risk_uri());
+                        let seq = state.trading_state.get_sequence(&crate::state::risk_uri());
                         let reason = err_payload["error"]["message"].as_str().unwrap_or("");
                         let code = err_payload["error"]["code"].as_str().unwrap_or("");
                         let notif = notifications::order_rejected(code, reason, seq);

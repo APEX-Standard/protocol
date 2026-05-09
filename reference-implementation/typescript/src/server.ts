@@ -4,17 +4,15 @@
  * This implementation keeps the reference behavior intentionally simple while
  * using a structure that maps more naturally to a production TypeScript service.
  *
- * Supports two transport modes:
- *   stdio  (default)     — `node dist/server.js`
- *   HTTP/SSE             — `node dist/server.js --http <port>`
+ * Start with: `node dist/server.js` (defaults to port 8888) or
+ * `node dist/server.js --http <port>`.
  */
 
 import { randomUUID } from "node:crypto";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { SubscribeRequestSchema, UnsubscribeRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { isInitializeRequest, SubscribeRequestSchema, UnsubscribeRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 import { SERVER_NAME, SERVER_VERSION } from "./lib/constants.js";
 import type { ApexNotification } from "./lib/notifications.js";
@@ -37,16 +35,20 @@ import { z } from "zod";
 /*  Argument parsing                                                   */
 /* ------------------------------------------------------------------ */
 
-function parseArgs(): { mode: "stdio" } | { mode: "http"; port: number } {
+function parseArgs(): { port: number } {
+  const defaultPort = 8888;
   const idx = process.argv.indexOf("--http");
-  if (idx === -1) return { mode: "stdio" };
+  if (idx === -1) return { port: defaultPort };
+
   const portStr = process.argv[idx + 1];
+  if (!portStr) return { port: defaultPort };
+
   const port = Number(portStr);
-  if (!portStr || Number.isNaN(port) || port < 1 || port > 65535) {
-    console.error("Usage: node server.js --http <port>");
+  if (Number.isNaN(port) || port < 1 || port > 65535) {
+    console.error("Usage: node server.js [--http <port>]");
     process.exit(1);
   }
-  return { mode: "http", port };
+  return { port };
 }
 
 /* ------------------------------------------------------------------ */
@@ -103,240 +105,308 @@ function setupCommon(server: McpServer): { emitResourceUpdated: (uri: string) =>
   return { emitResourceUpdated };
 }
 
-/* ------------------------------------------------------------------ */
-/*  Stdio mode                                                         */
-/* ------------------------------------------------------------------ */
-
 const APEX_VERSION = "0.1.0-alpha";
-
-async function startStdio() {
-  const server = new McpServer({
-    name: SERVER_NAME,
-    version: SERVER_VERSION,
-    apex_version: APEX_VERSION,
-  } as any);
-  const state = new ReferenceTradingState();
-
-  setupCommon(server);
-
-  registerSessionTools(server, state);
-  registerReferenceResources(server, state);
-  registerAccountTools(server, state);
-  registerOrderTools(server, state);
-  registerMarketTools(server, state);
-  registerRiskTools(server, state);
-  registerFxTools(server, state);
-  registerCfdTools(server, state);
-  registerCryptoTools(server, state);
-
-  await server.connect(new StdioServerTransport());
-  console.error(`APEX Protocol Reference Server v${SERVER_VERSION} running`);
-}
 
 /* ------------------------------------------------------------------ */
 /*  HTTP/SSE mode                                                      */
 /* ------------------------------------------------------------------ */
 
 async function startHttp(port: number) {
-  // Dynamic import of express to keep it out of the stdio path
   const express = (await import("express")).default;
 
   const app = express();
   app.use(express.json());
 
-  const replayBuffer = new ReplayBuffer();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
-    eventStore: replayBuffer,
-  });
-
-  // Guard against SSE cancel race condition.
-  // The SDK's ReadableStream cancel callback unconditionally deletes '_GET_stream'
-  // from _streamMapping. If the old stream's cancel fires after a new stream is
-  // registered under the same key, it removes the new stream. We intercept delete
-  // to only allow it when the entry's controller matches what was most recently set.
-  {
-    const webTransport = (transport as any);
-    const streamMapping: Map<string, any> = webTransport._streamMapping;
-    if (streamMapping) {
-      let currentStandaloneController: any = null;
-      const standaloneSseStreamId = webTransport._standaloneSseStreamId ?? "_GET_stream";
-
-      const originalSet = streamMapping.set.bind(streamMapping);
-      const originalDelete = streamMapping.delete.bind(streamMapping);
-
-      streamMapping.set = function(key: string, value: any) {
-        if (key === standaloneSseStreamId && value?.controller) {
-          currentStandaloneController = value.controller;
-        }
-        return originalSet(key, value);
-      } as typeof streamMapping.set;
-
-      streamMapping.delete = function(key: string) {
-        if (key === standaloneSseStreamId) {
-          const current = streamMapping.get(key);
-          if (current && current.controller !== currentStandaloneController) {
-            // Stale cancel callback — a new stream has replaced us. Skip.
-            return false;
-          }
-        }
-        return originalDelete(key);
-      } as typeof streamMapping.delete;
-    }
-  }
-
-  const server = new McpServer({
-    name: SERVER_NAME,
-    version: SERVER_VERSION,
-    apex_version: APEX_VERSION,
-  } as any);
-  const state = new ReferenceTradingState();
-
-  const { emitResourceUpdated } = setupCommon(server);
-
-  /* -- Notification helper ----------------------------------------- */
-
-  const emitNotification = (notif: ApexNotification) => {
-    server.server.notification({
-      method: notif.method,
-      params: notif.params,
-    }).catch((err: unknown) => {
-      console.error("Failed to send APEX notification:", err);
-    });
+  type ExpressRequest = import("express").Request;
+  type ExpressResponse = import("express").Response;
+  type HttpSessionContext = {
+    sessionId?: string;
+    server: McpServer;
+    transport: StreamableHTTPServerTransport;
+    tickEngine: TickEngine;
   };
 
-  state.emitNotification = emitNotification;
-  state.emitResourceUpdated = emitResourceUpdated;
+  const sessions = new Map<string, HttpSessionContext>();
 
-  /* -- Tick engine ------------------------------------------------- */
+  function getSessionId(req: ExpressRequest): string | undefined {
+    const value = req.headers["mcp-session-id"];
+    return Array.isArray(value) ? value[0] : value;
+  }
 
-  const tickEngine = new TickEngine({
-    onQuoteUpdate(mid, bid, ask) {
-      state.updateQuote(mid, bid, ask);
-      state.bumpResources(state.uris.quote, state.uris.features);
-      emitResourceUpdated(state.uris.quote);
-      emitResourceUpdated(state.uris.features);
-    },
+  function sendJsonRpcError(res: ExpressResponse, status: number, code: number, message: string) {
+    res.status(status).json({
+      jsonrpc: "2.0",
+      error: { code, message },
+      id: null,
+    });
+  }
 
-    onCandleClose(timeframe, candle) {
-      const candleUri =
-        timeframe === "M1" ? state.uris.candlesM1
-        : timeframe === "M5" ? state.uris.candlesM5
-        : state.uris.candlesH1;
+  function patchStandaloneSseRace(transport: StreamableHTTPServerTransport) {
+    // Guard against SSE cancel race condition.
+    // The SDK's ReadableStream cancel callback unconditionally deletes '_GET_stream'
+    // from _streamMapping. If the old stream's cancel fires after a new stream is
+    // registered under the same key, it removes the new stream. We intercept delete
+    // to only allow it when the entry's controller matches what was most recently set.
+    const webTransport = (transport as any)._webStandardTransport ?? (transport as any);
+    const streamMapping: Map<string, any> | undefined = webTransport._streamMapping;
+    if (!streamMapping) {
+      return;
+    }
 
-      state.bumpResources(candleUri);
+    let currentStandaloneController: any = null;
+    const standaloneSseStreamId = webTransport._standaloneSseStreamId ?? "_GET_stream";
 
-      const seq = (state.getCandles(timeframe as "M1" | "M5" | "H1") as Record<string, unknown>).sequence as number ?? 1;
-      const notif = candleClosedNotification(
-        state.instrumentId,
-        timeframe,
-        {
-          time: candle.openTime,
-          open: candle.open,
-          high: candle.high,
-          low: candle.low,
-          close: candle.close,
-          volume: candle.volume,
-        },
-        seq,
-      );
-      // APEX domain notification — always broadcast
+    const originalSet = streamMapping.set.bind(streamMapping);
+    const originalDelete = streamMapping.delete.bind(streamMapping);
+
+    streamMapping.set = function(key: string, value: any) {
+      if (key === standaloneSseStreamId && value?.controller) {
+        currentStandaloneController = value.controller;
+      }
+      return originalSet(key, value);
+    } as typeof streamMapping.set;
+
+    streamMapping.delete = function(key: string) {
+      if (key === standaloneSseStreamId) {
+        const current = streamMapping.get(key);
+        if (current && current.controller !== currentStandaloneController) {
+          return false;
+        }
+      }
+      return originalDelete(key);
+    } as typeof streamMapping.delete;
+  }
+
+  async function createSessionContext(): Promise<HttpSessionContext> {
+    const replayBuffer = new ReplayBuffer();
+    let context: HttpSessionContext | undefined;
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      eventStore: replayBuffer,
+      onsessioninitialized: (sessionId: string) => {
+        if (!context) {
+          throw new Error("MCP session initialized before context was ready");
+        }
+        context.sessionId = sessionId;
+        sessions.set(sessionId, context);
+      },
+    });
+    patchStandaloneSseRace(transport);
+
+    const server = new McpServer({
+      name: SERVER_NAME,
+      version: SERVER_VERSION,
+      apex_version: APEX_VERSION,
+    } as any);
+    const state = new ReferenceTradingState();
+
+    const { emitResourceUpdated } = setupCommon(server);
+
+    /* -- Notification helper ----------------------------------------- */
+
+    const emitNotification = (notif: ApexNotification) => {
       server.server.notification({
         method: notif.method,
         params: notif.params,
-      }).catch(() => {});
+      }).catch((err: unknown) => {
+        console.error("Failed to send APEX notification:", err);
+      });
+    };
 
-      emitResourceUpdated(candleUri);
-    },
+    state.emitNotification = emitNotification;
+    state.emitResourceUpdated = emitResourceUpdated;
 
-    onCandleUpdate(timeframe) {
-      const candleUri =
-        timeframe === "M1" ? state.uris.candlesM1
-        : timeframe === "M5" ? state.uris.candlesM5
-        : state.uris.candlesH1;
+    /* -- Tick engine ------------------------------------------------- */
 
-      emitResourceUpdated(candleUri);
-    },
+    const tickEngine = new TickEngine({
+      onQuoteUpdate(mid, bid, ask) {
+        state.updateQuote(mid, bid, ask);
+        state.bumpResources(state.uris.quote, state.uris.features);
+        emitResourceUpdated(state.uris.quote);
+        emitResourceUpdated(state.uris.features);
+      },
 
-    onFeatureUpdate() {
-      emitResourceUpdated(state.uris.features);
-    },
-  });
+      onCandleClose(timeframe, candle) {
+        const candleUri =
+          timeframe === "M1" ? state.uris.candlesM1
+          : timeframe === "M5" ? state.uris.candlesM5
+          : state.uris.candlesH1;
 
-  /* -- Register tools ---------------------------------------------- */
+        state.bumpResources(candleUri);
 
-  registerSessionTools(server, state, {
-    transportMode: "streamable_http",
-    replayBuffer,
-    onAuthenticated: () => {
-      tickEngine.start();
-      console.error("Tick engine started after authentication");
-    },
-  });
-  registerReferenceResources(server, state);
-  registerAccountTools(server, state);
-  registerOrderTools(server, state, emitNotification);
-  registerMarketTools(server, state);
-  registerRiskTools(server, state);
-  registerFxTools(server, state);
-  registerCfdTools(server, state);
-  registerCryptoTools(server, state);
+        const seq = (state.getCandles(timeframe as "M1" | "M5" | "H1") as Record<string, unknown>).sequence as number ?? 1;
+        const notif = candleClosedNotification(
+          state.instrumentId,
+          timeframe,
+          {
+            time: candle.openTime,
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+            volume: candle.volume,
+          },
+          seq,
+        );
+        server.server.notification({
+          method: notif.method,
+          params: notif.params,
+        }).catch(() => {});
 
-  /* -- Test-only: force candle close ------------------------------- */
+        emitResourceUpdated(candleUri);
+      },
 
-  server.registerTool(
-    "reference.test.force_candle_close",
-    {
-      description: "Force-close the current partial candle for a given timeframe. Test-only.",
-      inputSchema: { timeframe: z.enum(["M1", "M5", "H1"]) },
-    },
-    async ({ timeframe }) => {
-      tickEngine.forceCandleClose(timeframe);
-      return { structuredContent: { closed: true, timeframe }, content: [] };
-    },
-  );
+      onCandleUpdate(timeframe) {
+        const candleUri =
+          timeframe === "M1" ? state.uris.candlesM1
+          : timeframe === "M5" ? state.uris.candlesM5
+          : state.uris.candlesH1;
 
-  /* -- Test-only: stop tick engine ---------------------------------- */
+        emitResourceUpdated(candleUri);
+      },
 
-  server.registerTool(
-    "reference.test.stop_ticks",
-    {
-      description: "Stop the tick engine. Test-only tool for deterministic event counts.",
-      inputSchema: {},
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    },
-    async () => {
+      onFeatureUpdate() {
+        emitResourceUpdated(state.uris.features);
+      },
+    });
+
+    /* -- Register tools ---------------------------------------------- */
+
+    registerSessionTools(server, state, {
+      transportMode: "streamable_http",
+      replayBuffer,
+      onAuthenticated: () => {
+        tickEngine.start();
+        console.error("Tick engine started after authentication");
+      },
+    });
+    registerReferenceResources(server, state);
+    registerAccountTools(server, state);
+    registerOrderTools(server, state, emitNotification);
+    registerMarketTools(server, state);
+    registerRiskTools(server, state);
+    registerFxTools(server, state);
+    registerCfdTools(server, state);
+    registerCryptoTools(server, state);
+
+    /* -- Test-only: force candle close ------------------------------- */
+
+    server.registerTool(
+      "reference.test.force_candle_close",
+      {
+        description: "Force-close the current partial candle for a given timeframe. Test-only.",
+        inputSchema: { timeframe: z.enum(["M1", "M5", "H1"]) },
+      },
+      async ({ timeframe }) => {
+        tickEngine.forceCandleClose(timeframe);
+        return { structuredContent: { closed: true, timeframe }, content: [] };
+      },
+    );
+
+    /* -- Test-only: stop tick engine ---------------------------------- */
+
+    server.registerTool(
+      "reference.test.stop_ticks",
+      {
+        description: "Stop the tick engine. Test-only tool for deterministic event counts.",
+        inputSchema: {},
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      },
+      async () => {
+        tickEngine.stop();
+        return { structuredContent: { stopped: true }, content: [] };
+      },
+    );
+
+    context = { server, transport, tickEngine };
+    transport.onclose = () => {
+      if (context?.sessionId) {
+        sessions.delete(context.sessionId);
+      }
       tickEngine.stop();
-      return { structuredContent: { stopped: true }, content: [] };
-    },
-  );
+      console.error("Tick engine stopped (transport closed)");
+    };
+
+    await server.connect(transport);
+    return context;
+  }
+
+  function getExistingContext(req: ExpressRequest, res: ExpressResponse): HttpSessionContext | undefined {
+    const sessionId = getSessionId(req);
+    if (!sessionId) {
+      sendJsonRpcError(res, 400, -32000, "Bad Request: Mcp-Session-Id header is required");
+      return undefined;
+    }
+
+    const context = sessions.get(sessionId);
+    if (!context) {
+      sendJsonRpcError(res, 404, -32001, "Session not found");
+      return undefined;
+    }
+    return context;
+  }
 
   /* -- Express routes ---------------------------------------------- */
 
-  app.post("/mcp", (req, res) => {
-    transport.handleRequest(req, res, req.body);
+  app.post("/mcp", async (req, res) => {
+    try {
+      const sessionId = getSessionId(req);
+      if (sessionId) {
+        const context = sessions.get(sessionId);
+        if (!context) {
+          sendJsonRpcError(res, 404, -32001, "Session not found");
+          return;
+        }
+        await context.transport.handleRequest(req, res, req.body);
+        return;
+      }
+
+      if (!isInitializeRequest(req.body)) {
+        sendJsonRpcError(res, 400, -32000, "Bad Request: No valid session ID provided");
+        return;
+      }
+
+      const context = await createSessionContext();
+      await context.transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      console.error("Error handling MCP POST:", error);
+      if (!res.headersSent) {
+        sendJsonRpcError(res, 500, -32603, "Internal server error");
+      }
+    }
   });
-  app.get("/mcp", (req, res) => {
-    // Always close any previous standalone SSE stream before handling a new GET.
-    // Client-side aborts are not reliably detected by Node.js, so the old stream
-    // may still be in the mapping. This prevents 409 conflicts.
-    transport.closeStandaloneSSEStream();
-    transport.handleRequest(req, res);
+  app.get("/mcp", async (req, res) => {
+    try {
+      const context = getExistingContext(req, res);
+      if (!context) {
+        return;
+      }
+      // Always close any previous standalone SSE stream before handling a new GET.
+      // Client-side aborts are not reliably detected by Node.js, so the old stream
+      // may still be in the mapping. This prevents 409 conflicts.
+      context.transport.closeStandaloneSSEStream();
+      await context.transport.handleRequest(req, res);
+    } catch (error) {
+      console.error("Error handling MCP GET:", error);
+      if (!res.headersSent) {
+        sendJsonRpcError(res, 500, -32603, "Internal server error");
+      }
+    }
   });
-  app.delete("/mcp", (req, res) => {
-    transport.handleRequest(req, res);
+  app.delete("/mcp", async (req, res) => {
+    try {
+      const context = getExistingContext(req, res);
+      if (!context) {
+        return;
+      }
+      await context.transport.handleRequest(req, res);
+    } catch (error) {
+      console.error("Error handling MCP DELETE:", error);
+      if (!res.headersSent) {
+        sendJsonRpcError(res, 500, -32603, "Internal server error");
+      }
+    }
   });
-
-  /* -- Cleanup on session close ------------------------------------- */
-
-  transport.onclose = () => {
-    tickEngine.stop();
-    console.error("Tick engine stopped (transport closed)");
-  };
-
-  /* -- Connect and start ------------------------------------------- */
-
-  await server.connect(transport);
 
   app.listen(port, () => {
     console.error(`APEX Protocol Reference Server v${SERVER_VERSION} listening on http://localhost:${port}/mcp`);
@@ -348,8 +418,4 @@ async function startHttp(port: number) {
 /* ------------------------------------------------------------------ */
 
 const args = parseArgs();
-if (args.mode === "http") {
-  await startHttp(args.port);
-} else {
-  await startStdio();
-}
+await startHttp(args.port);

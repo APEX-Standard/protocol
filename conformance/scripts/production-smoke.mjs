@@ -17,7 +17,7 @@ import {
 } from "./common.mjs";
 
 const target = resolveTarget(process.argv.slice(2));
-const session = await connectClient(target.config, { verbose: target.verbose });
+const session = await connectClient(target, { verbose: target.verbose });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");

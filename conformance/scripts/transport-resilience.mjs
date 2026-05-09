@@ -9,7 +9,7 @@ import {
   openSseStream,
   printCheck,
   resolveTarget,
-  spawnHttpServer,
+  startHttpTarget,
   stopHttpServer,
 } from "./common.mjs";
 
@@ -21,7 +21,7 @@ try {
   /*  Step 1 — Setup                                                    */
   /* ================================================================== */
 
-  server = await spawnHttpServer(target.label, { verbose: target.verbose });
+  server = await startHttpTarget(target, { verbose: target.verbose });
   printCheck(`HTTP server started on ${server.baseUrl}`);
 
   const { sessionId } = await httpInitialize(server.baseUrl);
@@ -835,8 +835,8 @@ try {
   );
   printCheck("partial acknowledge: replay_failed for events before acknowledge point");
 
-  ssePartialStale.close();
-  ssePartialReplay.close();
+  await ssePartialStale.close();
+  await ssePartialReplay.close();
 
   /* ================================================================== */
   /*  Step 14 — Post-failure recovery                                   */
@@ -869,5 +869,5 @@ try {
   }
   throw error;
 } finally {
-  stopHttpServer(server);
+  await stopHttpServer(server);
 }

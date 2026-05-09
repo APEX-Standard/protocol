@@ -224,13 +224,13 @@ The `realtime_contract` block within capabilities tells the agent how the broker
 | Field | Type | Meaning |
 |---|---|---|
 | `transport_mode` | string | How notifications are delivered: `streamable_http` (recommended) or `http_sse_compat` |
-| `reconnect_mode` | string | What happens on reconnect: `no_replay`, `session_replay`, `best_effort_replay`, or `guaranteed_replay` |
+| `reconnect_mode` | string | What happens on reconnect: `session_replay`, `best_effort_replay`, or `guaranteed_replay` |
 | `max_retention_events` | integer | Maximum events the broker retains in the per-session event log before evicting the oldest. 0 means no event-count limit. |
 | `max_retention_seconds` | integer | Maximum seconds the broker retains events. 0 means no time limit. |
 | `quote_freshness_ms` | integer | Expected quote update interval in milliseconds. The agent uses this to calibrate its staleness detection. |
 | `account_freshness_ms` | integer | Expected account state update interval in milliseconds. |
 
-The agent uses this contract to configure its runtime behavior. If `reconnect_mode` is `no_replay`, the agent knows it must rebuild all state from scratch on every reconnect — no Last-Event-ID, no replay, no gap fill. If `max_retention_events` is 10,000 and the agent's decision cycle produces about 100 events per second, the agent knows it has roughly 100 seconds of retention if it stops acknowledging.
+The agent uses this contract to configure its runtime behavior. If `max_retention_events` is 10,000 and the agent's decision cycle produces about 100 events per second, the agent knows it has roughly 100 seconds of retention if it stops acknowledging.
 
 If `quote_freshness_ms` is 1000, the agent knows that a quote older than 1 second is likely stale. If the agent's trading strategy requires sub-200ms freshness and the broker advertises 1000ms, the agent knows this broker is not suitable for that strategy — and it knows this before placing a single order.
 

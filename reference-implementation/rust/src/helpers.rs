@@ -1,5 +1,4 @@
 use chrono::Timelike;
-use rmcp::model::{CallToolResult, Content};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -34,15 +33,6 @@ pub fn apex_error(
             retry_after: (category == "rate_limit").then_some(1),
         },
     }
-}
-
-pub fn json_result<T>(payload: &T) -> CallToolResult
-where
-    T: Serialize,
-{
-    CallToolResult::success(vec![Content::text(
-        serde_json::to_string(payload).expect("reference responses should serialize"),
-    )])
 }
 
 pub fn now_iso() -> String {

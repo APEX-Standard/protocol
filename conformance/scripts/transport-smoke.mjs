@@ -11,7 +11,7 @@ import {
   openSseStream,
   printCheck,
   resolveTarget,
-  spawnHttpServer,
+  startHttpTarget,
   stopHttpServer,
 } from "./common.mjs";
 
@@ -19,7 +19,7 @@ const target = resolveTarget(process.argv.slice(2));
 let server;
 
 try {
-  server = await spawnHttpServer(target.label, { verbose: target.verbose });
+  server = await startHttpTarget(target, { verbose: target.verbose });
   printCheck(`HTTP server started on ${server.baseUrl}`);
 
   /* -- Initialize ---------------------------------------------------- */
@@ -470,7 +470,7 @@ try {
 
   /* -- Cleanup ------------------------------------------------------- */
 
-  sse.close();
+  await sse.close();
   printCheck("SSE stream closed");
 
   console.log(`Transport smoke passed for ${target.label}`);
@@ -484,5 +484,5 @@ try {
   }
   throw error;
 } finally {
-  stopHttpServer(server);
+  await stopHttpServer(server);
 }

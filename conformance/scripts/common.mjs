@@ -3,43 +3,50 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
+const httpTargetsByBaseUrl = new Map();
+const deleteSessionTimeoutMs = 1000;
 
-export const servers = {
+export const httpServers = {
   typescript: {
     cwd: path.join(repoRoot, "reference-implementation", "typescript"),
     command: "node",
-    args: ["dist/server.js"],
+    args: ["dist/server.js", "--http"],
   },
   go: {
     cwd: path.join(repoRoot, "reference-implementation", "go"),
     command: "go",
-    args: ["run", "."],
+    args: ["run", ".", "--http"],
   },
   rust: {
     cwd: path.join(repoRoot, "reference-implementation", "rust"),
     command: "./target/debug/apex-reference",
-    args: [],
+    args: ["--http"],
   },
   java: {
     cwd: path.join(repoRoot, "reference-implementation", "java"),
     command: "java",
-    args: ["-jar", "target/apex-reference-java-0.1.0.jar"],
+    args: ["-jar", "target/apex-reference-java-0.1.0.jar", "--http"],
   },
 };
 
-export function getServerConfig(name) {
-  const config = servers[name];
+export function getHttpServerConfig(name) {
+  const config = httpServers[name];
   assert(config, `Unknown server target: ${name}`);
   return config;
 }
 
 function normalizeConfig(config) {
+  if (config?.url) {
+    return {
+      url: config.url.replace(/\/$/, ""),
+    };
+  }
+
   assert(config?.command, "Server config must include a command");
   return {
     command: config.command,
@@ -103,10 +110,22 @@ export function resolveTarget(argv) {
   if (options.config) {
     const configPath = path.resolve(process.cwd(), options.config);
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    const normalized = normalizeConfig(config);
     return {
       label: config.name ?? path.basename(configPath),
-      config: normalizeConfig(config),
+      config: normalized.url ? null : normalized,
+      baseUrl: normalized.url,
       testOptions: normalizeTestOptions(options, config),
+      verbose: Boolean(options.verbose),
+    };
+  }
+
+  if (options.url) {
+    return {
+      label: options.name ?? options.url,
+      config: null,
+      baseUrl: options.url.replace(/\/$/, ""),
+      testOptions: normalizeTestOptions(options),
       verbose: Boolean(options.verbose),
     };
   }
@@ -127,10 +146,10 @@ export function resolveTarget(argv) {
   }
 
   const serverName = positional[0];
-  assert(serverName, "Usage: node <script> <typescript|go|rust|java> or --command <cmd> [--args '[...]'] [--cwd <dir>] or --config <path>");
+  assert(serverName, "Usage: node <script> <typescript|go|rust|java> or --url <http://host:port> or --command <cmd> [--args '[...]'] [--cwd <dir>] or --config <path>");
   return {
     label: serverName,
-    config: normalizeConfig(getServerConfig(serverName)),
+    config: normalizeConfig(getHttpServerConfig(serverName)),
     testOptions: normalizeTestOptions(options),
     verbose: Boolean(options.verbose),
   };
@@ -141,46 +160,71 @@ export function formatCommand(config) {
   return [config.command, renderedArgs].filter(Boolean).join(" ");
 }
 
-export async function connectClient(target, options = {}) {
-  const config = normalizeConfig(target);
-  const verbose = Boolean(options.verbose);
-
-  if (verbose) {
-    printCheck(`starting server: ${formatCommand(config)} (cwd: ${config.cwd})`);
-  }
-
-  const transport = new StdioClientTransport({
-    command: config.command,
-    args: config.args,
-    cwd: config.cwd,
-    stderr: "pipe",
+async function httpJsonRpc(baseUrl, sessionId, method, params = {}) {
+  const { json } = await httpPost(baseUrl, sessionId, {
+    jsonrpc: "2.0",
+    id: nextId(),
+    method,
+    params,
   });
+  if (json?.error) {
+    const error = new Error(`MCP error ${json.error.code}: ${json.error.message}`);
+    error.code = json.error.code;
+    error.data = json.error.data;
+    throw error;
+  }
+  return json?.result ?? {};
+}
 
-  let stderr = "";
-  transport.stderr?.on("data", (chunk) => {
-    const text = chunk.toString();
-    stderr += text;
-    if (verbose) {
-      process.stderr.write(text);
+export async function connectClient(target, options = {}) {
+  const server = await startHttpTarget(target, options);
+  const { sessionId } = await httpInitialize(server.baseUrl);
+  const notificationHandlers = [];
+  const sse = openSseStream(server.baseUrl, sessionId, undefined, (event) => {
+    if (!event.data?.method) return;
+    for (const handler of notificationHandlers) {
+      handler(event.data);
     }
   });
 
-  const client = new Client({
-    name: "apex-conformance-runner",
-    version: "0.1.0",
-  });
+  await delay(50);
 
-  await client.connect(transport);
+  let notificationStreamClosed = false;
+  async function closeNotificationStream() {
+    if (notificationStreamClosed) {
+      return;
+    }
+    notificationStreamClosed = true;
+    await sse.close();
+  }
+
+  const client = {
+    listTools: () => httpJsonRpc(server.baseUrl, sessionId, "tools/list"),
+    listResources: () => httpJsonRpc(server.baseUrl, sessionId, "resources/list"),
+    readResource: ({ uri }) => httpJsonRpc(server.baseUrl, sessionId, "resources/read", { uri }),
+    subscribeResource: ({ uri }) => httpJsonRpc(server.baseUrl, sessionId, "resources/subscribe", { uri }),
+    unsubscribeResource: ({ uri }) => httpJsonRpc(server.baseUrl, sessionId, "resources/unsubscribe", { uri }),
+    callTool: ({ name, arguments: args }) => httpJsonRpc(server.baseUrl, sessionId, "tools/call", { name, arguments: args }),
+    setNotificationHandler: (_schema, handler) => {
+      notificationHandlers.push(handler);
+    },
+  };
 
   return {
     client,
-    transport,
-    getStderr: () => stderr.trim(),
+    server,
+    sessionId,
+    getStderr: () => server.getStderr?.() ?? "",
+    closeNotificationStream,
+    close: async () => {
+      await closeNotificationStream();
+      await stopHttpServer(server);
+    },
   };
 }
 
 export async function disconnectClient(session) {
-  await session.transport.close();
+  await session.close?.();
 }
 
 export function extractPayload(result) {
@@ -229,41 +273,22 @@ export function printCapturedStderr(session) {
   process.stderr.write(`${stderr}\n`);
 }
 
-/* ------------------------------------------------------------------ */
-/*  HTTP/SSE transport infrastructure                                  */
-/* ------------------------------------------------------------------ */
+export async function startHttpTarget(target, options = {}) {
+  if (target.baseUrl) {
+    return trackHttpTarget({
+      baseUrl: target.baseUrl,
+      process: null,
+      port: null,
+      sessionIds: new Set(),
+      getStderr: () => "",
+    });
+  }
 
-export const httpServers = {
-  typescript: {
-    cwd: path.join(repoRoot, "reference-implementation", "typescript"),
-    command: "node",
-    args: ["dist/server.js", "--http"],
-  },
-  go: {
-    cwd: path.join(repoRoot, "reference-implementation", "go"),
-    command: "go",
-    args: ["run", ".", "--http"],
-  },
-  rust: {
-    cwd: path.join(repoRoot, "reference-implementation", "rust"),
-    command: "./target/debug/apex-reference",
-    args: ["--http"],
-  },
-  java: {
-    cwd: path.join(repoRoot, "reference-implementation", "java"),
-    command: "java",
-    args: ["-jar", "target/apex-reference-java-0.1.0.jar", "--http"],
-  },
-};
-
-export function getHttpServerConfig(name) {
-  const config = httpServers[name];
-  assert(config, `Unknown HTTP server target: ${name}`);
-  return config;
+  return spawnHttpServer(target.config, options);
 }
 
-export async function spawnHttpServer(name, options = {}) {
-  const config = getHttpServerConfig(name);
+export async function spawnHttpServer(target, options = {}) {
+  const config = typeof target === "string" ? getHttpServerConfig(target) : normalizeConfig(target);
   const port = 10000 + Math.floor(Math.random() * 50000);
   const args = [...config.args, String(port)];
   const verbose = Boolean(options.verbose);
@@ -274,7 +299,6 @@ export async function spawnHttpServer(name, options = {}) {
 
   const child = spawn(config.command, args, {
     cwd: config.cwd,
-    stdio: ["pipe", "pipe", "pipe"],
   });
 
   let stderr = "";
@@ -316,18 +340,43 @@ export async function spawnHttpServer(name, options = {}) {
     });
   });
 
-  return {
+  return trackHttpTarget({
     baseUrl: `http://localhost:${port}`,
     process: child,
     port,
+    sessionIds: new Set(),
     getStderr: () => stderr.trim(),
-  };
+  });
 }
 
-export function stopHttpServer(server) {
+function trackHttpTarget(server) {
+  httpTargetsByBaseUrl.set(server.baseUrl, server);
+  return server;
+}
+
+export async function stopHttpServer(server) {
+  if (!server) {
+    return;
+  }
+
+  const hasSpawnedProcess = Boolean(server.process);
+  const cleanupErrors = [];
+  try {
+    for (const sessionId of server.sessionIds ?? []) {
+      try {
+        await httpDeleteSession(server.baseUrl, sessionId);
+        server.sessionIds.delete(sessionId);
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+    }
+  } finally {
+    httpTargetsByBaseUrl.delete(server.baseUrl);
+  }
+
   if (server?.process) {
     server.process.kill("SIGTERM");
-    // Destroy stdio pipes so Node won't block on a grandchild process
+    // Destroy process pipes so Node won't block on a grandchild process
     // (`go run` spawns a child binary that inherits the pipes).
     server.process.stdin?.destroy();
     server.process.stdout?.destroy();
@@ -341,6 +390,10 @@ export function stopHttpServer(server) {
       }
     }, 2000);
     timer.unref();
+  }
+
+  if (cleanupErrors.length > 0 && !hasSpawnedProcess) {
+    throw new AggregateError(cleanupErrors, "Failed to delete one or more MCP sessions");
   }
 }
 
@@ -381,7 +434,36 @@ export async function httpPost(baseUrl, sessionId, body) {
   return { json, headers: response.headers, status: response.status };
 }
 
-export function openSseStream(baseUrl, sessionId, lastEventId) {
+export async function httpDeleteSession(baseUrl, sessionId) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, deleteSessionTimeoutMs);
+
+  let response;
+  try {
+    response = await fetch(`${baseUrl}/mcp`, {
+      method: "DELETE",
+      headers: { "Mcp-Session-Id": sessionId },
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error(`DELETE /mcp timed out after ${deleteSessionTimeoutMs}ms for session ${sessionId}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  // 404 means the session was already gone; cleanup is idempotent from the
+  // harness perspective.
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`DELETE /mcp failed for session ${sessionId}: HTTP ${response.status}`);
+  }
+}
+
+export function openSseStream(baseUrl, sessionId, lastEventId, onEvent) {
   const headers = { Accept: "text/event-stream" };
   if (sessionId) {
     headers["Mcp-Session-Id"] = sessionId;
@@ -420,6 +502,7 @@ export function openSseStream(baseUrl, sessionId, lastEventId) {
           const event = parseSseBlock(part);
           if (event) {
             events.push(event);
+            onEvent?.(event);
             // Resolve any waiters
             for (const waiter of waiters) {
               if (events.length >= waiter.count) {
@@ -518,6 +601,7 @@ export async function httpInitialize(baseUrl) {
   });
   const sessionId = headers.get("mcp-session-id");
   assert(sessionId, "Expected Mcp-Session-Id header in initialize response");
+  httpTargetsByBaseUrl.get(baseUrl)?.sessionIds.add(sessionId);
 
   // Send initialized notification
   await httpPost(baseUrl, sessionId, {

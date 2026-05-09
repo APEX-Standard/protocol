@@ -8,6 +8,10 @@ import (
 )
 
 func registerAccountTools(s *server.MCPServer) {
+	registerAccountToolsWithState(s, state)
+}
+
+func registerAccountToolsWithState(s *server.MCPServer, st *referenceState) {
 	s.AddTool(
 		mcp.NewTool("apex.account.summary",
 			mcp.WithDescription("Current account state — balances, margin utilisation, equity."),
@@ -17,7 +21,14 @@ func registerAccountTools(s *server.MCPServer) {
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithIdempotentHintAnnotation(true),
 		),
-		handleAccountSummary,
+		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := request.GetArguments()
+			accountID := strParam(args, "account_id", "")
+			if accountID == "" {
+				return jsonResult(apexError("APEX_4011", "validation", "account_id is required"))
+			}
+			return jsonResult(st.accountSummary(strParam(args, "currency", "USD")))
+		},
 	)
 
 	s.AddTool(
@@ -30,7 +41,9 @@ func registerAccountTools(s *server.MCPServer) {
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithIdempotentHintAnnotation(true),
 		),
-		handleAccountPositions,
+		func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return jsonResult(st.positionsResponse())
+		},
 	)
 
 	s.AddTool(
@@ -43,7 +56,9 @@ func registerAccountTools(s *server.MCPServer) {
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithIdempotentHintAnnotation(true),
 		),
-		handleAccountOrders,
+		func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return jsonResult(st.ordersResponse())
+		},
 	)
 
 	s.AddTool(
@@ -61,23 +76,6 @@ func registerAccountTools(s *server.MCPServer) {
 		),
 		handleAccountHistory,
 	)
-}
-
-func handleAccountSummary(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	args := request.GetArguments()
-	accountID := strParam(args, "account_id", "")
-	if accountID == "" {
-		return jsonResult(apexError("APEX_4011", "validation", "account_id is required"))
-	}
-	return jsonResult(state.accountSummary(strParam(args, "currency", "USD")))
-}
-
-func handleAccountPositions(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return jsonResult(state.positionsResponse())
-}
-
-func handleAccountOrders(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return jsonResult(state.ordersResponse())
 }
 
 func handleAccountHistory(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {

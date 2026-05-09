@@ -56,7 +56,7 @@ If you're a **broker implementer**, start with the broker guide, then read the d
 | Document | Description |
 |----------|-------------|
 | [Schema Design](schema-design.md) | The 12 normative JSON Schemas as wire format contracts. Tool output vs resource schema duality, the `additionalProperties` policy (sealed vs permissive), required vs optional field patterns, the notification envelope, event vs resource schemas, profile extension through `profile_data`, and schema evolution rules. |
-| [Conformance Testing](conformance-design.md) | The conformance harness architecture. Testing philosophy (behavior, not just shape), three test tiers (REQUIRED/RECOMMENDED/OPTIONAL), seven test suites, transport modes (stdio vs HTTP/SSE), fault injection via `reference.test.*` tools, schema validation, the parity matrix, and the path from alpha to production conformance. |
+| [Conformance Testing](conformance-design.md) | The conformance harness architecture. Testing philosophy (behavior, not just shape), three test tiers (REQUIRED/RECOMMENDED/OPTIONAL), seven test suites, remote HTTP/SSE execution, fault injection via `reference.test.*` tools, schema validation, the parity matrix, and the path from alpha to production conformance. |
 
 ### Multi-Broker & Operations
 

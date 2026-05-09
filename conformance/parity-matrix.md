@@ -92,7 +92,7 @@ All four reference implementations are currently:
 
 | Behavior | TypeScript | Go | Rust | Java | Executably Verified |
 | --- | --- | --- | --- | --- | --- |
-| Reconnect baseline with `no_replay` contract | Yes | Yes | Yes | Yes | Yes |
+| Replay-capable reconnect contract | Yes | Yes | Yes | Yes | Yes |
 | Stale quote rejection | Yes | Yes | Yes | Yes | Yes |
 | Stale risk rejection | Yes | Yes | Yes | Yes | Yes |
 | Kill-switch surfaced in risk state | Yes | Yes | Yes | Yes | Yes |
@@ -113,7 +113,7 @@ All four reference implementations are currently:
 
 | Capability | TypeScript | Go | Rust | Java | Executably Verified |
 | --- | --- | --- | --- | --- | --- |
-| HTTP/SSE transport (`--http <port>`) | Yes | Yes | Yes | Yes | Yes |
+| HTTP/SSE transport (default `8888`, override with `--http <port>`) | Yes | Yes | Yes | Yes | Yes |
 | Session management (`Mcp-Session-Id`) | Yes | Yes | Yes | Yes | Yes |
 | SSE event IDs (monotonic integers) | Yes | Yes | Yes | Yes | Yes |
 | Replay via `Last-Event-ID` | Yes | Yes | Yes | Yes | Yes |
@@ -137,7 +137,7 @@ All four reference implementations are currently:
 ## Notes
 
 - The parity claim is intentionally scoped to the **alpha spec and current conformance coverage**.
-- In stdio mode, the reconnect contract is `no_replay`. In HTTP mode, the reconnect contract is `session_replay` with acknowledgment-driven retention (max 10000 events) and gap fill for ephemeral event elision during replay.
+- The reconnect contract is `session_replay` with acknowledgment-driven retention (max 10000 events) and gap fill for ephemeral event elision during replay.
 - Order and fill schema validation is performed against normalized event payloads derived from the orders and fills resources.
 - The references are protocol-complete for alpha, but they are still reference servers, not real broker/exchange integrations.
 

@@ -127,7 +127,7 @@ The reference harness now executes:
 - resource subscription smoke test
 - schema validation for quote, candle (M1, M5, H1), feature, decision-context, account summary, positions, orders, fills, and risk resources
 - schema validation against normative order-event and fill-event schemas
-- reconnect without replay baseline rebuild checks (stdio)
+- replay-capable reconnect baseline checks
 - stale quote and stale risk order rejection checks
 - injected sequence gap detection and sequence-gap rejection checks
 - partial fill lifecycle and event schema validation

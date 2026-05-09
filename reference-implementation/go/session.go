@@ -17,11 +17,7 @@ var coreTools = []string{
 	"apex.risk.*",
 }
 
-func registerSessionTools(s *server.MCPServer) {
-	registerSessionToolsWithMode(s, state, false)
-}
-
-func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState, httpMode bool) {
+func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState) {
 	s.AddTool(
 		mcp.NewTool("apex.session.authenticate",
 			mcp.WithDescription("Establish an authenticated trading session. The broker validates credentials directly and binds the result to the MCP session."),
@@ -40,7 +36,7 @@ func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState, httpM
 				return jsonResult(apexError("APEX_4001", "auth", "Invalid or expired token"))
 			}
 
-			// Trigger onAuthenticated callback (starts tick engine in HTTP mode)
+			// Trigger onAuthenticated callback.
 			if st.onAuthenticated != nil {
 				st.onAuthenticated()
 			}
@@ -65,33 +61,23 @@ func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState, httpM
 			mcp.WithIdempotentHintAnnotation(true),
 		),
 		func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			var realtimeContract map[string]any
-			if httpMode {
-				realtimeContract = map[string]any{
-					"transport_mode":         "streamable_http",
-					"reconnect_mode":         "session_replay",
-					"max_retention_events":   10000,
-					"max_retention_seconds":  0,
-					"quote_freshness_ms":     1000,
-					"account_freshness_ms":   2000,
-					"tick_interval_ms":       2000,
-					"notifications": []string{
-						"notifications/apex.order.filled",
-						"notifications/apex.order.partially_filled",
-						"notifications/apex.order.rejected",
-						"notifications/apex.market.candle_closed",
-						"notifications/apex.risk.kill_switch_engaged",
-						"notifications/apex.session.replay_failed",
-						"notifications/apex.session.gap_fill",
-					},
-				}
-			} else {
-				realtimeContract = map[string]any{
-					"transport_mode":       "stdio",
-					"reconnect_mode":       "no_replay",
-					"quote_freshness_ms":   1000,
-					"account_freshness_ms": 2000,
-				}
+			realtimeContract := map[string]any{
+				"transport_mode":        "streamable_http",
+				"reconnect_mode":        "session_replay",
+				"max_retention_events":  10000,
+				"max_retention_seconds": 0,
+				"quote_freshness_ms":    1000,
+				"account_freshness_ms":  2000,
+				"tick_interval_ms":      2000,
+				"notifications": []string{
+					"notifications/apex.order.filled",
+					"notifications/apex.order.partially_filled",
+					"notifications/apex.order.rejected",
+					"notifications/apex.market.candle_closed",
+					"notifications/apex.risk.kill_switch_engaged",
+					"notifications/apex.session.replay_failed",
+					"notifications/apex.session.gap_fill",
+				},
 			}
 
 			return jsonResult(capabilitiesResponse{
@@ -101,10 +87,10 @@ func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState, httpM
 				Profiles:            map[string]string{"fx": serverVersion},
 				VendorExtensions:    nil,
 				RateLimits:          map[string]int{"orders_per_second": 10, "market_data_per_second": 100},
-				SupportedOrderTypes:  []string{"market", "limit", "stop", "stop_limit"},
-				SupportedTif:         []string{"GTC", "IOC", "FOK", "DAY"},
-				ProductionProfiles:   map[string]bool{"realtime": true, "autonomous": false},
-				RealtimeContract:     realtimeContract,
+				SupportedOrderTypes: []string{"market", "limit", "stop", "stop_limit"},
+				SupportedTif:        []string{"GTC", "IOC", "FOK", "DAY"},
+				ProductionProfiles:  map[string]bool{"realtime": true, "autonomous": false},
+				RealtimeContract:    realtimeContract,
 			})
 		},
 	)
@@ -135,7 +121,6 @@ func registerSessionToolsWithMode(s *server.MCPServer, st *referenceState, httpM
 				return jsonResult(apexError("APEX_4011", "validation", "last_event_id is required"))
 			}
 			if st.replayBuffer == nil {
-				// No-op in stdio mode (no replay buffer)
 				return jsonResult(map[string]any{
 					"acknowledged_through": "0",
 					"buffer_depth":         0,

@@ -7,8 +7,13 @@
   "scripts": {
     "smoke": "node scripts/smoke.mjs",
     "dry-run": "node scripts/dry-run.mjs",
+    "go-http-account-state": "node scripts/go-http-account-state-regression.mjs",
     "production-smoke": "node scripts/production-smoke.mjs",
     "production-resilience": "node scripts/production-resilience.mjs",
+    "cleanup-timeout": "node scripts/cleanup-timeout-regression.mjs",
+    "production-replay": "node scripts/production-replay-regression.mjs",
+    "session-cleanup": "node scripts/session-cleanup-regression.mjs",
+    "typescript-http-reuse": "node scripts/typescript-http-reuse-regression.mjs",
     "smoke:typescript": "node scripts/smoke.mjs typescript",
     "smoke:go": "node scripts/smoke.mjs go",
     "smoke:rust": "node scripts/smoke.mjs rust",
@@ -37,9 +42,9 @@
     "transport-marketdata:go": "node scripts/transport-marketdata.mjs go",
     "transport-marketdata:rust": "node scripts/transport-marketdata.mjs rust",
     "transport-marketdata:java": "node scripts/transport-marketdata.mjs java",
-    "verify:alpha": "node scripts/smoke.mjs typescript && node scripts/smoke.mjs go && node scripts/smoke.mjs rust && node scripts/smoke.mjs java && node scripts/dry-run.mjs typescript && node scripts/dry-run.mjs go && node scripts/dry-run.mjs rust && node scripts/dry-run.mjs java",
-    "verify:production": "node scripts/production-smoke.mjs typescript && node scripts/production-smoke.mjs go && node scripts/production-smoke.mjs rust && node scripts/production-smoke.mjs java && node scripts/production-resilience.mjs typescript && node scripts/production-resilience.mjs go && node scripts/production-resilience.mjs rust && node scripts/production-resilience.mjs java",
-    "verify:transport": "node scripts/transport-smoke.mjs typescript && node scripts/transport-smoke.mjs go && node scripts/transport-smoke.mjs rust && node scripts/transport-smoke.mjs java && node scripts/transport-resilience.mjs typescript && node scripts/transport-resilience.mjs go && node scripts/transport-resilience.mjs rust && node scripts/transport-resilience.mjs java && node scripts/transport-marketdata.mjs typescript && node scripts/transport-marketdata.mjs go && node scripts/transport-marketdata.mjs rust && node scripts/transport-marketdata.mjs java",
+    "verify:alpha": "npm run go-http-account-state && node scripts/smoke.mjs typescript && node scripts/smoke.mjs go && node scripts/smoke.mjs rust && node scripts/smoke.mjs java && node scripts/dry-run.mjs typescript && node scripts/dry-run.mjs go && node scripts/dry-run.mjs rust && node scripts/dry-run.mjs java",
+    "verify:production": "npm run production-replay && node scripts/production-smoke.mjs typescript && node scripts/production-smoke.mjs go && node scripts/production-smoke.mjs rust && node scripts/production-smoke.mjs java && node scripts/production-resilience.mjs typescript && node scripts/production-resilience.mjs go && node scripts/production-resilience.mjs rust && node scripts/production-resilience.mjs java",
+    "verify:transport": "npm run session-cleanup && npm run cleanup-timeout && npm run typescript-http-reuse && node scripts/transport-smoke.mjs typescript && node scripts/transport-smoke.mjs go && node scripts/transport-smoke.mjs rust && node scripts/transport-smoke.mjs java && node scripts/transport-resilience.mjs typescript && node scripts/transport-resilience.mjs go && node scripts/transport-resilience.mjs rust && node scripts/transport-resilience.mjs java && node scripts/transport-marketdata.mjs typescript && node scripts/transport-marketdata.mjs go && node scripts/transport-marketdata.mjs rust && node scripts/transport-marketdata.mjs java",
     "verify:all": "npm run verify:alpha && npm run verify:production && npm run verify:transport"
   },
   "dependencies": {

@@ -32,7 +32,7 @@ final class ToolRegistry {
                  NotificationDispatcher dispatcher, ReplayBuffer replayBuffer) {
         this.mapper = mapper;
         this.state = state;
-        this.transportMode = transportMode != null ? transportMode : "stdio";
+        this.transportMode = transportMode != null ? transportMode : "streamable_http";
         this.dispatcher = dispatcher;
         this.replayBuffer = replayBuffer;
     }
@@ -197,34 +197,24 @@ final class ToolRegistry {
             "Query the full capability manifest of this broker implementation.",
             new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null),
             args -> {
-                Object realtimeContract;
-                if ("streamable_http".equals(transportMode)) {
-                    realtimeContract = Map.ofEntries(
-                        Map.entry("transport_mode", "streamable_http"),
-                        Map.entry("reconnect_mode", "session_replay"),
-                        Map.entry("max_retention_events", 10000),
-                        Map.entry("max_retention_seconds", 0),
-                        Map.entry("quote_freshness_ms", 1000),
-                        Map.entry("account_freshness_ms", 2000),
-                        Map.entry("tick_interval_ms", 2000),
-                        Map.entry("notifications", List.of(
-                            "notifications/apex.order.filled",
-                            "notifications/apex.order.partially_filled",
-                            "notifications/apex.order.rejected",
-                            "notifications/apex.market.candle_closed",
-                            "notifications/apex.risk.kill_switch_engaged",
-                            "notifications/apex.session.replay_failed",
-                            "notifications/apex.session.gap_fill"
-                        ))
-                    );
-                } else {
-                    realtimeContract = Map.of(
-                        "transport_mode", "stdio",
-                        "reconnect_mode", "no_replay",
-                        "quote_freshness_ms", 1000,
-                        "account_freshness_ms", 2000
-                    );
-                }
+                Object realtimeContract = Map.ofEntries(
+                    Map.entry("transport_mode", transportMode),
+                    Map.entry("reconnect_mode", "session_replay"),
+                    Map.entry("max_retention_events", 10000),
+                    Map.entry("max_retention_seconds", 0),
+                    Map.entry("quote_freshness_ms", 1000),
+                    Map.entry("account_freshness_ms", 2000),
+                    Map.entry("tick_interval_ms", 2000),
+                    Map.entry("notifications", List.of(
+                        "notifications/apex.order.filled",
+                        "notifications/apex.order.partially_filled",
+                        "notifications/apex.order.rejected",
+                        "notifications/apex.market.candle_closed",
+                        "notifications/apex.risk.kill_switch_engaged",
+                        "notifications/apex.session.replay_failed",
+                        "notifications/apex.session.gap_fill"
+                    ))
+                );
                 return new CapabilitiesResponse(
                     SERVER_VERSION,
                     "reference-broker",

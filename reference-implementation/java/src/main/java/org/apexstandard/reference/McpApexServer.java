@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
-import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
 
@@ -18,56 +17,13 @@ import java.util.Map;
 public final class McpApexServer {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final int DEFAULT_HTTP_PORT = 8888;
 
     private McpApexServer() {
     }
 
     /* ================================================================== */
-    /*  Stdio mode                                                         */
-    /* ================================================================== */
-
-    private static void runStdio() throws Exception {
-        System.err.println("APEX Protocol Reference Server v" + ToolRegistry.SERVER_VERSION
-                + " (Java 21, MCP SDK) running on stdio");
-
-        ReferenceTradingState state = new ReferenceTradingState();
-        ToolRegistry registry = new ToolRegistry(MAPPER, state, "stdio", null);
-        List<McpServerFeatures.SyncToolSpecification> toolSpecs = registry.createToolSpecifications();
-
-        // Build resource specifications from state.resources()
-        List<McpServerFeatures.SyncResourceSpecification> resourceSpecs =
-                state.resources().stream().map(r -> toResourceSpec(state, r)).toList();
-
-        StdioServerTransportProvider transport =
-                new StdioServerTransportProvider(new JacksonMcpJsonMapper(MAPPER));
-
-        McpSyncServer server = McpServer.sync(transport)
-                .serverInfo(new McpSchema.Implementation(ToolRegistry.SERVER_NAME, null, ToolRegistry.SERVER_VERSION))
-                .capabilities(new McpSchema.ServerCapabilities(
-                        null, null, null, null,
-                        new McpSchema.ServerCapabilities.ResourceCapabilities(true, true),
-                        new McpSchema.ServerCapabilities.ToolCapabilities(false)
-                ))
-                .tools(toolSpecs)
-                .resources(resourceSpecs)
-                .build();
-
-        // Wire resource update notifications so the SDK client receives them after tool calls
-        state.setResourceUpdateCallback(uri ->
-                transport.notifyClients("notifications/resources/updated", Map.of("uri", uri)).block());
-
-        // The transport handles the stdin read loop; just block until the process ends.
-        try {
-            Thread.currentThread().join();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } finally {
-            server.close();
-        }
-    }
-
-    /* ================================================================== */
-    /*  HTTP mode (stub)                                                    */
+    /*  HTTP mode                                                          */
     /* ================================================================== */
 
     private static void runHttp(int port) throws Exception {
@@ -243,26 +199,34 @@ public final class McpApexServer {
     /* ================================================================== */
 
     public static void main(String[] args) throws Exception {
-        int httpIdx = -1;
-        for (int i = 0; i < args.length; i++) {
-            if ("--http".equals(args[i])) {
-                httpIdx = i;
-                break;
-            }
+        if (args.length == 0) {
+            runHttp(DEFAULT_HTTP_PORT);
+            return;
         }
 
-        if (httpIdx >= 0 && httpIdx + 1 < args.length) {
-            int port;
+        if (args.length > 2 || !"--http".equals(args[0])) {
+            usage();
+            return;
+        }
+
+        int port = DEFAULT_HTTP_PORT;
+        if (args.length == 2) {
             try {
-                port = Integer.parseInt(args[httpIdx + 1]);
+                port = Integer.parseInt(args[1]);
             } catch (NumberFormatException e) {
-                System.err.println("Usage: java -jar apex-reference-java-0.1.0.jar [--http <port>]");
-                System.exit(1);
+                usage();
                 return;
             }
-            runHttp(port);
-        } else {
-            runStdio();
+            if (port < 1 || port > 65535) {
+                usage();
+                return;
+            }
         }
+        runHttp(port);
+    }
+
+    private static void usage() {
+        System.err.println("Usage: java -jar apex-reference-java-0.1.0.jar [--http <port>]");
+        System.exit(1);
     }
 }

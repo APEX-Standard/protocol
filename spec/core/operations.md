@@ -129,22 +129,13 @@ For alpha, exact sequence arithmetic may remain implementation-specific, but cli
 
 Implementations should document one of the following reconnect modes:
 
-- `no_replay`
 - `session_replay`
 - `best_effort_replay`
 - `guaranteed_replay`
 
 For alpha HTTP/SSE interoperability, replay applies to server-initiated notifications first. Resource state remains the canonical rebuild path even when notification replay is available.
 
-### 4.1 No Replay
-
-After reconnect:
-
-- the client must discard prior freshness assumptions
-- the client must re-read all execution-critical resources
-- autonomous execution should remain paused until the new baseline is established
-
-### 4.2 Session Replay
+### 4.1 Session Replay
 
 Session-scoped replay using SSE event IDs as cursors with acknowledgment-driven retention and gap fill.
 

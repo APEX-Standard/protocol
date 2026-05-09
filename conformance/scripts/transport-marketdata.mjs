@@ -9,7 +9,7 @@ import {
   openSseStream,
   printCheck,
   resolveTarget,
-  spawnHttpServer,
+  startHttpTarget,
   stopHttpServer,
 } from "./common.mjs";
 
@@ -43,7 +43,7 @@ try {
   /*  1. Setup: spawn server, initialize, authenticate                   */
   /* ------------------------------------------------------------------ */
 
-  server = await spawnHttpServer(target.label, { verbose: target.verbose });
+  server = await startHttpTarget(target, { verbose: target.verbose });
   printCheck(`HTTP server started on ${server.baseUrl}`);
 
   const { sessionId } = await httpInitialize(server.baseUrl);
@@ -207,7 +207,7 @@ try {
   /*  8. Cleanup                                                         */
   /* ------------------------------------------------------------------ */
 
-  sse.close();
+  await sse.close();
   printCheck("SSE stream closed");
 
   console.log(`\nTransport market data test passed for ${target.label}`);
@@ -221,5 +221,5 @@ try {
   }
   throw error;
 } finally {
-  stopHttpServer(server);
+  await stopHttpServer(server);
 }

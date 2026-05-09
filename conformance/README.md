@@ -8,12 +8,12 @@ This directory contains the alpha conformance harness for broker implementations
 
 ## Executable Harness
 
-This package is meant to be run by any broker or implementer with an MCP stdio server. The harness starts your server process, connects over MCP stdio, and runs the same alpha-level assertions the reference implementations are held to.
+This package is meant to be run by any broker or implementer with a remote MCP HTTP endpoint. The harness starts your server process or targets an existing URL, then runs the same alpha-level assertions the reference implementations are held to.
 
 ```bash
 npm install
-npm run smoke -- --command node --args '["dist/server.js"]' --cwd ../your-server
-npm run dry-run -- --command node --args '["dist/server.js"]' --cwd ../your-server
+npm run smoke -- --url http://localhost:8888
+npm run dry-run -- --url http://localhost:8888
 ```
 
 You can also point the harness at a JSON config file:
@@ -22,7 +22,7 @@ You can also point the harness at a JSON config file:
 {
   "name": "broker-sim",
   "command": "node",
-  "args": ["dist/server.js"],
+  "args": ["dist/server.js", "--http"],
   "cwd": "../your-server"
 }
 ```
@@ -32,7 +32,7 @@ npm run smoke -- --config ./broker-config.json
 npm run dry-run -- --config ./broker-config.json
 ```
 
-The smoke suite connects over MCP stdio, exercises core tools, and asserts key interoperability rules such as:
+The smoke suite connects over remote MCP HTTP, exercises core tools, and asserts key interoperability rules such as:
 - account base currency vs response currency separation
 - market fills returning a `position_id`
 - position-targeted modification rejecting `limit_price`, `stop_price`, and `quantity`
@@ -49,21 +49,24 @@ The suite is implementation-neutral. It does not require your server to return t
 cd protocol/conformance
 npm install
 
-# Run against your MCP stdio server command
+# Run against an already-running remote endpoint
 npm run smoke -- \
-  --command node \
-  --args '["dist/server.js"]' \
-  --cwd ../my-broker-server
+  --url http://localhost:8888
 
 npm run dry-run -- \
+  --url http://localhost:8888
+
+# Or let the harness start a server command.
+# The harness appends the selected port as the final argument.
+npm run smoke -- \
   --command node \
-  --args '["dist/server.js"]' \
+  --args '["dist/server.js","--http"]' \
   --cwd ../my-broker-server
 
 # Stream server stderr and print the spawned command
 npm run smoke -- \
   --command node \
-  --args '["dist/server.js"]' \
+  --args '["dist/server.js","--http"]' \
   --cwd ../my-broker-server \
   --verbose
 ```
@@ -73,7 +76,7 @@ If your server needs different test inputs, you can override them:
 ```bash
 npm run smoke -- \
   --command node \
-  --args '["dist/server.js"]' \
+  --args '["dist/server.js","--http"]' \
   --cwd ../my-broker-server \
   --auth-token "broker-issued-test-token" \
   --invalid-token "definitely-invalid" \
@@ -88,7 +91,7 @@ You can also put those values in `test_options` inside your `--config` JSON:
 {
   "name": "broker-sim",
   "command": "node",
-  "args": ["dist/server.js"],
+  "args": ["dist/server.js", "--http"],
   "cwd": "../your-server",
   "test_options": {
     "auth_token": "broker-issued-test-token",
@@ -127,7 +130,7 @@ npm run verify:all          # includes alpha + production + transport
 
 ### Transport Tests (HTTP/SSE)
 
-The transport test suites validate HTTP/SSE behavior. They start the server in HTTP mode using `--http <port>` and exercise the wire protocol directly with raw `fetch` and SSE parsing (not the MCP SDK client).
+The transport test suites validate HTTP/SSE behavior. They start the server with a selected port and exercise the wire protocol directly with raw `fetch` and SSE parsing.
 
 ```bash
 npm run transport-smoke:typescript
@@ -166,21 +169,14 @@ For production-grade realtime and autonomous trading claims, use the additional 
 
 ## What The Harness Starts
 
-The harness launches the target MCP server itself using the supplied stdio command, then connects to it with the official MCP SDK client. For the built-in shortcuts, that means:
+The harness launches the target MCP server with an explicit HTTP port argument, unless you provide `--url` for an already-running endpoint. The reference implementations also default to port `8888` when started without arguments. For the built-in shortcuts, the harness overrides that default:
 
-- TypeScript: `node dist/server.js`
-- Go: `go run .`
-- Rust: `cargo run --quiet`
-- Java: `java -jar target/apex-reference-java-0.1.0.jar`
+- TypeScript: `node dist/server.js --http <port>`
+- Go: `go run . --http <port>`
+- Rust: `cargo run --quiet -- --http <port>`
+- Java: `java -jar target/apex-reference-java-0.1.0.jar --http <port>`
 
-For HTTP/SSE transport tests, the harness starts the server with the `--http <port>` flag:
-
-- TypeScript: `node dist/server.js --http 0`
-- Go: `go run . --http 0`
-- Rust: `cargo run --quiet -- --http 0`
-- Java: `java -jar target/apex-reference-java-0.1.0.jar --http 0`
-
-Port `0` tells the server to bind to a random available port. The harness reads the actual port from the server's stderr output to avoid conflicts when running tests in parallel.
+For third-party command targets, include your server's HTTP flag in `--args`; the harness appends the selected port as the final argument.
 
 For third-party implementations, replace those with your own server command via `--command` and `--args`, or via `--config`.
 
@@ -188,8 +184,6 @@ If you pass `--verbose`, the harness will:
 - print the exact server command it is starting
 - stream the server's `stderr` to your terminal
 - dump captured `stderr` again on failure
-
-The harness does not print server `stdout` because MCP stdio uses `stdout` for protocol messages.
 
 ---
 
