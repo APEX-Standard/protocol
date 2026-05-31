@@ -1,6 +1,6 @@
 # APEX Protocol — Schema Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -47,10 +47,10 @@ Walk through a concrete example. The agent calls `apex.market.quote` (a tool). T
 {
   "instrument_id": "APEX:FX:EURUSD",
   "broker_symbol": "EURUSD",
-  "bid": 1.08740,
-  "ask": 1.08760,
-  "mid": 1.08750,
-  "spread": 0.00020,
+  "bid": "1.08740",
+  "ask": "1.08760",
+  "mid": "1.08750",
+  "spread": "0.00020",
   "timestamp": "2026-03-27T14:30:00.123Z",
   "is_tradeable": true,
   "market_status": "open"
@@ -64,10 +64,10 @@ The agent reads `apex://market/quote/APEX:FX:EURUSD` (a resource). The broker re
 {
   "instrument_id": "APEX:FX:EURUSD",
   "broker_symbol": "EURUSD",
-  "bid": 1.08740,
-  "ask": 1.08760,
-  "mid": 1.08750,
-  "spread": 0.00020,
+  "bid": "1.08740",
+  "ask": "1.08760",
+  "mid": "1.08750",
+  "spread": "0.00020",
   "timestamp": "2026-03-27T14:30:00.123Z",
   "is_tradeable": true,
   "market_status": "open",
@@ -218,9 +218,9 @@ The `fill-event.schema.json` defines the payload for a single execution fill:
   "account_id": "ACC_12345",
   "instrument_id": "APEX:FX:EURUSD",
   "side": "buy",
-  "fill_quantity": 100000,
-  "fill_price": 1.08755,
-  "commission": -0.50,
+  "fill_quantity": "100000",
+  "fill_price": "1.08755",
+  "commission": "-0.50",
   "commission_currency": "USD",
   "liquidity_flag": "taker",
   "position_id": "pos_001",
@@ -242,11 +242,11 @@ The `order-event.schema.json` defines the payload for an order lifecycle transit
   "instrument_id": "APEX:FX:EURUSD",
   "side": "buy",
   "order_type": "market",
-  "quantity": 100000,
+  "quantity": "100000",
   "status": "filled",
-  "filled_quantity": 100000,
-  "remaining_quantity": 0,
-  "average_fill_price": 1.08755,
+  "filled_quantity": "100000",
+  "remaining_quantity": "0",
+  "average_fill_price": "1.08755",
   "reason": null,
   "updated_at": "2026-03-27T14:30:00.123Z"
 }
@@ -323,7 +323,9 @@ The schema evolution rules from `stability.md` Section 4 define what changes are
 
 1. **Required fields may only be added** if the capability or profile claim that depends on them is also tightened in the same change. You cannot add a new required field to `quote.resource.schema.json` without simultaneously updating the production capability profile to advertise that it expects the new field. This prevents a schema from requiring something that existing implementations do not provide.
 
-2. **Existing required fields keep meaning, type, and units.** If `fill_price` is a number in `fill-event.schema.json` today, it is a number tomorrow. If `spread` means ask minus bid today, it means ask minus bid tomorrow. If `quantity` is in base units today, it is in base units tomorrow. Changing the meaning of an existing field is an incompatible change, full stop.
+2. **Existing required fields keep meaning, type, and units.** If `fill_price` is a string-encoded decimal in `fill-event.schema.json` today, it is a string-encoded decimal tomorrow. If `spread` means ask minus bid today, it means ask minus bid tomorrow. If `quantity` is in base units today, it is in base units tomorrow. Changing the meaning of an existing field — including its wire encoding — is an incompatible change, full stop.
+
+   > **Note (v0.2.0-alpha):** All monetary, price, rate, P&L, margin, and quantity fields are encoded as **string-decimals** (JSON `string` matching `^-?[0-9]+(\.[0-9]+)?$`), never as IEEE-754 `number`. This mirrors FIX, which carries prices as ASCII decimals for exact, reproducible values. Doubles cannot exactly represent decimal prices (e.g. `1.08745`), so a trading/audit protocol must carry exact decimals. This encoding is now part of the type guarantee above. The change from JSON `number` to string-decimal was made in `0.2.0-alpha` (see the migration note in `version-stability-design.md`); from `0.2.0-alpha` onward the string-decimal encoding is frozen under this rule.
 
 3. **Optional fields may be added freely.** Adding `margin_call_level_pct` to the risk schema as an optional field is safe — existing validators ignore it, existing consumers never depended on it. This is the primary mechanism for forward-compatible schema growth.
 

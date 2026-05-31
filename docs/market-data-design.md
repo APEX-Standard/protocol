@@ -1,6 +1,6 @@
 # APEX Protocol — Market Data Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -34,10 +34,10 @@ apex://market/quote/APEX:FX:EURUSD
 {
   "instrument_id": "APEX:FX:EURUSD",
   "broker_symbol": "EURUSD",
-  "bid": 1.08740,
-  "ask": 1.08760,
-  "mid": 1.08750,
-  "spread": 0.00020,
+  "bid": "1.08740",
+  "ask": "1.08760",
+  "mid": "1.08750",
+  "spread": "0.00020",
   "timestamp": "2026-03-27T14:30:00.123Z",
   "is_tradeable": true,
   "market_status": "open",
@@ -85,28 +85,28 @@ apex://market/candles/APEX:FX:EURUSD?timeframe=M1&limit=200
   "candles": [
     {
       "time": "2026-03-27T14:28:00.000Z",
-      "open": 1.0850,
-      "high": 1.0890,
-      "low": 1.0840,
-      "close": 1.0875,
+      "open": "1.0850",
+      "high": "1.0890",
+      "low": "1.0840",
+      "close": "1.0875",
       "volume": 125000,
       "complete": true
     },
     {
       "time": "2026-03-27T14:29:00.000Z",
-      "open": 1.0875,
-      "high": 1.0882,
-      "low": 1.0871,
-      "close": 1.0878,
+      "open": "1.0875",
+      "high": "1.0882",
+      "low": "1.0871",
+      "close": "1.0878",
       "volume": 98000,
       "complete": true
     },
     {
       "time": "2026-03-27T14:30:00.000Z",
-      "open": 1.0878,
-      "high": 1.0881,
-      "low": 1.0876,
-      "close": 1.0879,
+      "open": "1.0878",
+      "high": "1.0881",
+      "low": "1.0876",
+      "close": "1.0879",
       "volume": 42000,
       "complete": false
     }
@@ -149,10 +149,10 @@ When a candle completes on a wall-clock boundary, the server fires `notification
     "payload": {
       "instrument_id": "APEX:FX:EURUSD",
       "timeframe": "M1",
-      "open": 1.08750,
-      "high": 1.08780,
-      "low": 1.08740,
-      "close": 1.08765,
+      "open": "1.08750",
+      "high": "1.08780",
+      "low": "1.08740",
+      "close": "1.08765",
       "volume": 1500000,
       "complete": true
     }
@@ -366,17 +366,17 @@ Once the agent has identified an instrument, it calls `apex.market.details` to g
   "profile": "fx",
   "base_currency": "EUR",
   "quote_currency": "USD",
-  "pip_size": 0.0001,
+  "pip_size": "0.0001",
   "lot_size": 100000,
   "quantity_unit": "base_units",
   "broker_quantity_unit": "lots",
-  "min_quantity": 1000,
-  "max_quantity": 50000000,
-  "quantity_step": 1000,
-  "margin_rate_pct": 0.5,
-  "commission_per_lot": 0.0,
+  "min_quantity": "1000",
+  "max_quantity": "50000000",
+  "quantity_step": "1000",
+  "margin_rate_pct": "0.5",
+  "commission_per_lot": "0.0",
   "spread_type": "variable",
-  "typical_spread_pips": 0.8,
+  "typical_spread_pips": "0.8",
   "trading_hours": [
     { "day": "monday", "open": "00:00", "close": "23:59", "timezone": "UTC" }
   ]

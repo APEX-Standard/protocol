@@ -1,6 +1,6 @@
 # APEX Protocol — Layer 2: CFD Profile
 
-**Version:** `0.1.0-alpha`  
+**Version:** `0.2.0-alpha`  
 **Applies to:** CFD Equities, CFD Indices, CFD Commodities  
 **Depends on:** Core `0.1.0`
 
@@ -52,12 +52,12 @@ The CFD profile covers three sub-types, declared in the instrument registry:
   "profile_data": {
     "cfd_type": "equity|index|commodity",
     "underlying_exchange": "NASDAQ",
-    "overnight_financing_rate": -0.0275,
-    "overnight_financing_daily": -1.23,
-    "accrued_financing": -3.69,
-    "pending_dividend_adjustment": 0.00,
+    "overnight_financing_rate": "-0.0275",
+    "overnight_financing_daily": "-1.23",
+    "accrued_financing": "-3.69",
+    "pending_dividend_adjustment": "0.00",
     "contract_size": 1,
-    "point_value": 10.00,
+    "point_value": "10.00",
     "point_value_currency": "USD"
   }
 }
@@ -93,13 +93,13 @@ Query upcoming and recent corporate actions affecting open positions or watchlis
       "record_date": "ISO8601",
       "payment_date": "ISO8601",
       "details": {
-        "dividend_amount": 0.25,
+        "dividend_amount": "0.25",
         "dividend_currency": "USD",
         "split_ratio": null
       },
       "position_impact": {
         "position_id": "string",
-        "estimated_adjustment": -25.00,
+        "estimated_adjustment": "-25.00",
         "adjustment_currency": "USD",
         "adjustment_type": "cash|price"
       }
@@ -133,7 +133,7 @@ Query pending and historical dividend cash adjustments on CFD positions.
       "instrument_id": "APEX:CFD:EQ:AAPL.XNAS",
       "position_id": "string",
       "side": "buy|sell",
-      "amount": -25.00,
+      "amount": "-25.00",
       "currency": "USD",
       "ex_date": "ISO8601",
       "payment_date": "ISO8601",

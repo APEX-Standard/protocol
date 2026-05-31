@@ -58,7 +58,7 @@ final class NotificationDispatcher {
         payload.put("side", order.get("side"));
         payload.put("fill_price", order.get("average_fill_price"));
         payload.put("fill_quantity", order.get("filled_quantity"));
-        payload.put("commission", -0.5);
+        payload.put("commission", ProtocolModels.dec(-0.5));
         payload.put("position_id", "pos_001");
 
         return buildApexNotification("notifications/apex.order.filled", Map.of(
@@ -107,10 +107,10 @@ final class NotificationDispatcher {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("instrument_id", instrumentId);
         payload.put("timeframe", timeframe);
-        payload.put("open", open);
-        payload.put("high", high);
-        payload.put("low", low);
-        payload.put("close", close);
+        payload.put("open", ProtocolModels.dec(open));
+        payload.put("high", ProtocolModels.dec(high));
+        payload.put("low", ProtocolModels.dec(low));
+        payload.put("close", ProtocolModels.dec(close));
         payload.put("volume", volume);
         payload.put("complete", true);
 

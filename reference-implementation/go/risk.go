@@ -39,10 +39,10 @@ func registerRiskToolsWithState(s *server.MCPServer, st *referenceState) {
 
 			return jsonResult(riskCheckResponse{
 				Approved:         true,
-				RequiredMargin:   requiredMargin,
-				AvailableMargin:  availableMargin,
-				MarginAfterTrade: availableMargin - requiredMargin,
-				ExposureIncrease: floatParam(order, "quantity", 0),
+				RequiredMargin:   dec(requiredMargin),
+				AvailableMargin:  dec(availableMargin),
+				MarginAfterTrade: dec(availableMargin - requiredMargin),
+				ExposureIncrease: dec(floatParam(order, "quantity", 0)),
 				Warnings:         []any{},
 				RejectionReason:  nil,
 			})
@@ -60,12 +60,12 @@ func registerRiskToolsWithState(s *server.MCPServer, st *referenceState) {
 		func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return jsonResult(riskLimitsResponse{
 				AccountID:             strParam(request.GetArguments(), "account_id", ""),
-				MaxPositionSize:       5000000,
+				MaxPositionSize:       dec(5000000),
 				MaxOpenOrders:         50,
-				DailyLossLimit:        -1000,
-				DailyLossUsed:         -150,
-				MarginCallLevelPct:    100,
-				StopOutLevelPct:       50,
+				DailyLossLimit:        dec(-1000),
+				DailyLossUsed:         dec(-150),
+				MarginCallLevelPct:    dec(100),
+				StopOutLevelPct:       dec(50),
 				RestrictedInstruments: []any{},
 				KillSwitchActive:      st.isKillSwitchActive(),
 			})

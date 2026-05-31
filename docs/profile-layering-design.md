@@ -1,6 +1,6 @@
 # APEX Protocol — Profile and Layering Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -81,7 +81,7 @@ The core `apex.order.place` tool accepts a standard order object: instrument, si
 {
   "instrument_id": "APEX:FX:EURUSD",
   "side": "buy",
-  "quantity": 100000,
+  "quantity": "100000",
   "order_type": "market",
   "time_in_force": "IOC",
   "profile": "fx",
@@ -89,7 +89,7 @@ The core `apex.order.place` tool accepts a standard order object: instrument, si
     "base_currency": "EUR",
     "quote_currency": "USD",
     "execution_type": "market",
-    "slippage_tolerance_pips": 2,
+    "slippage_tolerance_pips": "2",
     "netting_mode": "hedge"
   }
 }
@@ -110,8 +110,8 @@ For an FX position, `profile_data` adds what FX agents need:
     "quote_currency": "USD",
     "rollover_long_daily": -2.50,
     "rollover_short_daily": 1.80,
-    "accrued_rollover": -7.50,
-    "pip_value": 10.00,
+    "accrued_rollover": "-7.50",
+    "pip_value": "10.00",
     "pip_value_currency": "USD"
   }
 }
@@ -125,13 +125,13 @@ For a crypto perpetual position, `profile_data` adds what crypto agents need:
     "crypto_type": "perpetual",
     "margin_mode": "isolated",
     "leverage": 10,
-    "liquidation_price": 45250.00,
-    "initial_margin": 5000.00,
-    "maintenance_margin": 2500.00,
+    "liquidation_price": "45250.00",
+    "initial_margin": "5000.00",
+    "maintenance_margin": "2500.00",
     "margin_currency": "USDT",
-    "accrued_funding": -12.50,
+    "accrued_funding": "-12.50",
     "next_funding_time": "2026-03-29T16:00:00Z",
-    "mark_price": 50100.00
+    "mark_price": "50100.00"
   }
 }
 ```
@@ -143,12 +143,12 @@ For a CFD equity position, `profile_data` adds what CFD agents need:
   "profile_data": {
     "cfd_type": "equity",
     "underlying_exchange": "NASDAQ",
-    "overnight_financing_rate": -0.0275,
-    "overnight_financing_daily": -1.23,
-    "accrued_financing": -3.69,
-    "pending_dividend_adjustment": 0.00,
+    "overnight_financing_rate": "-0.0275",
+    "overnight_financing_daily": "-1.23",
+    "accrued_financing": "-3.69",
+    "pending_dividend_adjustment": "0.00",
     "contract_size": 1,
-    "point_value": 10.00,
+    "point_value": "10.00",
     "point_value_currency": "USD"
   }
 }
@@ -169,9 +169,9 @@ A broker can declare multiple profiles. A multi-asset broker offering FX, CFDs, 
 ```json
 {
   "profiles": {
-    "fx": "0.1.0",
-    "cfd": "0.1.0",
-    "crypto": "0.1.0"
+    "fx": "0.2.0",
+    "cfd": "0.2.0",
+    "crypto": "0.2.0"
   }
 }
 ```
@@ -221,12 +221,12 @@ When an agent connects and calls `apex.session.capabilities`, the broker returns
 
 ```json
 {
-  "apex_version": "0.1.0",
+  "apex_version": "0.2.0",
   "core_tools": ["apex.session.*", "apex.account.*", "apex.order.*", "apex.market.*", "apex.risk.*"],
   "profiles": {
-    "fx": "0.1.0",
-    "cfd": "0.1.0",
-    "crypto": "0.1.0"
+    "fx": "0.2.0",
+    "cfd": "0.2.0",
+    "crypto": "0.2.0"
   },
   "vendor_extensions": {
     "namespace": "fxcm",

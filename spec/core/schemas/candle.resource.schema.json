@@ -2,6 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://apexstandard.org/spec/core/schemas/candle.resource.schema.json",
   "title": "APEX Candle Resource",
+  "$defs": {
+    "decimal": { "type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$" },
+    "decimal_nonneg": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$" }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -48,10 +52,10 @@
             "type": "string",
             "format": "date-time"
           },
-          "open": { "type": "number" },
-          "high": { "type": "number" },
-          "low": { "type": "number" },
-          "close": { "type": "number" },
+          "open": { "$ref": "#/$defs/decimal" },
+          "high": { "$ref": "#/$defs/decimal" },
+          "low": { "$ref": "#/$defs/decimal" },
+          "close": { "$ref": "#/$defs/decimal" },
           "volume": { "type": "number", "minimum": 0 },
           "complete": { "type": "boolean" }
         }

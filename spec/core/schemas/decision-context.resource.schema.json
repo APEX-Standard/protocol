@@ -2,6 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://apexstandard.org/spec/core/schemas/decision-context.resource.schema.json",
   "title": "APEX Decision Context Resource",
+  "$defs": {
+    "decimal": { "type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$" },
+    "decimal_nonneg": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$" }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -61,7 +65,7 @@
       "required": ["kill_switch_active", "max_position_size", "max_open_orders"],
       "properties": {
         "kill_switch_active": { "type": "boolean" },
-        "max_position_size": { "type": "number" },
+        "max_position_size": { "$ref": "#/$defs/decimal_nonneg" },
         "max_open_orders": { "type": "integer", "minimum": 0 }
       }
     }

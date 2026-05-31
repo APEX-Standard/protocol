@@ -2,6 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://apexstandard.org/spec/core/schemas/feature.resource.schema.json",
   "title": "APEX Feature Resource",
+  "$defs": {
+    "decimal": { "type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$" },
+    "decimal_nonneg": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$" }
+  },
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -37,10 +41,10 @@
       "additionalProperties": false,
       "required": ["bid", "ask", "mid", "spread"],
       "properties": {
-        "bid": { "type": "number" },
-        "ask": { "type": "number" },
-        "mid": { "type": "number" },
-        "spread": { "type": "number", "minimum": 0 }
+        "bid": { "$ref": "#/$defs/decimal" },
+        "ask": { "$ref": "#/$defs/decimal" },
+        "mid": { "$ref": "#/$defs/decimal" },
+        "spread": { "$ref": "#/$defs/decimal_nonneg" }
       }
     },
     "returns": {

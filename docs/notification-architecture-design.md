@@ -1,6 +1,6 @@
 # APEX Protocol — Notification Architecture Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -66,9 +66,9 @@ Resource invalidation covers:
     "payload": {
       "order_id": "ord_abc123",
       "side": "buy",
-      "fill_price": 1.08755,
-      "fill_quantity": 100000,
-      "commission": -0.5,
+      "fill_price": "1.08755",
+      "fill_quantity": "100000",
+      "commission": "-0.5",
       "position_id": "pos_001"
     }
   }
@@ -163,9 +163,9 @@ A complete fill. The order's entire quantity has been executed. This is a termin
     "payload": {
       "order_id": "ord_abc123",
       "side": "buy",
-      "fill_price": 1.08755,
-      "fill_quantity": 100000,
-      "commission": -0.5,
+      "fill_price": "1.08755",
+      "fill_quantity": "100000",
+      "commission": "-0.5",
       "position_id": "pos_001"
     }
   }
@@ -195,9 +195,9 @@ A partial fill. Some quantity was executed, but the order remains working for th
     "payload": {
       "order_id": "ord_abc123",
       "side": "buy",
-      "fill_price": 1.08760,
-      "fill_quantity": 50000,
-      "remaining_quantity": 50000
+      "fill_price": "1.08760",
+      "fill_quantity": "50000",
+      "remaining_quantity": "50000"
     }
   }
 }
@@ -253,10 +253,10 @@ A candle bar completed on a wall-clock boundary. The bar is now immutable — it
     "payload": {
       "instrument_id": "APEX:FX:EURUSD",
       "timeframe": "M1",
-      "open": 1.08750,
-      "high": 1.08780,
-      "low": 1.08740,
-      "close": 1.08765,
+      "open": "1.08750",
+      "high": "1.08780",
+      "low": "1.08740",
+      "close": "1.08765",
       "volume": 1500000,
       "complete": true
     }

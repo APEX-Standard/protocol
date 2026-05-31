@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import type { ReferenceTradingState } from "../lib/resources.js";
-import { apexError, nowIso } from "../lib/helpers.js";
+import { apexError, dec, nowIso } from "../lib/helpers.js";
 
 const PERP_INSTRUMENT_ID = "APEX:CRYPTO:PERP:BTCUSDT";
 const PERP_BROKER_SYMBOL = "BTCUSDT";
@@ -52,14 +52,14 @@ export function registerCryptoTools(server: McpServer, state: ReferenceTradingSt
         structuredContent: {
           instrument_id: PERP_INSTRUMENT_ID,
           broker_symbol: PERP_BROKER_SYMBOL,
-          current_rate: 0.0001,
-          current_rate_annualised: 0.1095,
-          predicted_rate: 0.00012,
+          current_rate: dec(0.0001),
+          current_rate_annualised: dec(0.1095),
+          predicted_rate: dec(0.00012),
           funding_interval_hours: 8,
           next_funding_time: funding.iso,
           countdown_seconds: funding.countdownSeconds,
-          index_price: 50000.00,
-          mark_price: 50050.00,
+          index_price: dec(50000.00),
+          mark_price: dec(50050.00),
           timestamp: nowIso(),
         },
         content: [],
@@ -112,12 +112,12 @@ export function registerCryptoTools(server: McpServer, state: ReferenceTradingSt
         structuredContent: {
           instrument_id: PERP_INSTRUMENT_ID,
           side,
-          entry_price,
-          liquidation_price: liquidationPrice,
-          margin_required: Math.round(marginRequired * 100) / 100,
-          maintenance_margin: Math.round(maintenanceMargin * 100) / 100,
+          entry_price: dec(entry_price),
+          liquidation_price: dec(liquidationPrice),
+          margin_required: dec(Math.round(marginRequired * 100) / 100),
+          maintenance_margin: dec(Math.round(maintenanceMargin * 100) / 100),
           margin_currency: "USDT",
-          distance_pct: distancePct,
+          distance_pct: dec(distancePct),
           warnings: [],
         },
         content: [],
@@ -171,7 +171,7 @@ export function registerCryptoTools(server: McpServer, state: ReferenceTradingSt
           from_wallet,
           to_wallet,
           currency,
-          amount,
+          amount: dec(amount),
           status: "completed",
           rejection_reason: null,
           completed_at: nowIso(),

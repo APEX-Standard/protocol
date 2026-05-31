@@ -634,17 +634,17 @@ final class ToolRegistry {
                     "fx",
                     "EUR",
                     "USD",
-                    0.0001,
+                    dec(0.0001),
                     100000,
                     "base_units",
                     "lots",
-                    1000,
-                    50000000,
-                    1000,
-                    0.5,
-                    0.0,
+                    dec(1000),
+                    dec(50000000),
+                    dec(1000),
+                    dec(0.5),
+                    dec(0.0),
                     "variable",
-                    0.8,
+                    dec(0.8),
                     List.of(new TradingHours("monday", "00:00", "23:59", "UTC")),
                     Map.of()
                 );
@@ -672,10 +672,10 @@ final class ToolRegistry {
                 double requiredMargin = (quantity / 100000.0) * 500.0;
                 return new RiskCheckResponse(
                     true,
-                    requiredMargin,
-                    9750.00,
-                    9750.00 - requiredMargin,
-                    quantity,
+                    dec(requiredMargin),
+                    dec(9750.00),
+                    dec(9750.00 - requiredMargin),
+                    dec(quantity),
                     List.of(),
                     null
                 );
@@ -690,12 +690,12 @@ final class ToolRegistry {
             ), List.of("account_id"), false, null, null),
             args -> new RiskLimitsResponse(
                 argStr(args, "account_id", ""),
-                5000000,
+                dec(5000000),
                 50,
-                -1000.00,
-                -150.00,
-                100,
-                50,
+                dec(-1000.00),
+                dec(-150.00),
+                dec(100),
+                dec(50),
                 List.of(),
                 Boolean.TRUE.equals(((Map<?, ?>) state.readResource(ReferenceTradingState.RISK_URI)).get("kill_switch_active"))
             )
@@ -718,8 +718,8 @@ final class ToolRegistry {
                 return new FxRolloverResponse(
                     ReferenceTradingState.INSTRUMENT_ID,
                     ReferenceTradingState.BROKER_SYMBOL,
-                    -0.5,
-                    0.3,
+                    dec(-0.5),
+                    dec(0.3),
                     "USD",
                     "lot",
                     100000,
@@ -749,7 +749,7 @@ final class ToolRegistry {
                 List<String> contributingPositions = new java.util.ArrayList<>();
                 for (var pos : positions) {
                     if (ReferenceTradingState.INSTRUMENT_ID.equals(pos.instrument_id())) {
-                        int qty = pos.quantity();
+                        long qty = (long) Double.parseDouble(pos.quantity());
                         if ("buy".equals(pos.side())) {
                             eurNetUnits += qty;
                         } else {
@@ -766,12 +766,12 @@ final class ToolRegistry {
                     baseCurrency,
                     List.of(new ExposureEntry(
                         "EUR",
-                        eurNetUnits,
+                        dec(eurNetUnits),
                         netDirection,
-                        valueInBase,
+                        dec(valueInBase),
                         List.copyOf(contributingPositions)
                     )),
-                    Math.abs(valueInBase),
+                    dec(Math.abs(valueInBase)),
                     now()
                 );
             }
@@ -806,8 +806,8 @@ final class ToolRegistry {
                 return new FxConversionResponse(
                     fromCurrency,
                     toCurrency,
-                    Math.round(rate * 10000000.0) / 10000000.0,
-                    Math.round(amount * rate * 100.0) / 100.0,
+                    dec(Math.round(rate * 10000000.0) / 10000000.0),
+                    dec(Math.round(amount * rate * 100.0) / 100.0),
                     now()
                 );
             }
@@ -873,14 +873,14 @@ final class ToolRegistry {
                 return new CryptoFundingRateResponse(
                     PERP_INSTRUMENT_ID,
                     PERP_BROKER_SYMBOL,
-                    0.0001,
-                    0.1095,
-                    0.00012,
+                    dec(0.0001),
+                    dec(0.1095),
+                    dec(0.00012),
                     8,
                     fundingTimeStr,
                     countdown,
-                    50000.00,
-                    50050.00,
+                    dec(50000.00),
+                    dec(50050.00),
                     now()
                 );
             }
@@ -922,12 +922,12 @@ final class ToolRegistry {
                 return new CryptoLiquidationEstimateResponse(
                     PERP_INSTRUMENT_ID,
                     side,
-                    entryPrice,
-                    liquidationPrice,
-                    Math.round(marginRequired * 100.0) / 100.0,
-                    Math.round(maintenanceMargin * 100.0) / 100.0,
+                    dec(entryPrice),
+                    dec(liquidationPrice),
+                    dec(Math.round(marginRequired * 100.0) / 100.0),
+                    dec(Math.round(maintenanceMargin * 100.0) / 100.0),
                     "USDT",
-                    distancePct,
+                    dec(distancePct),
                     List.of()
                 );
             }
@@ -962,7 +962,7 @@ final class ToolRegistry {
                     fromWallet,
                     toWallet,
                     currency,
-                    amount,
+                    dec(amount),
                     "completed",
                     null,
                     now()

@@ -2,6 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://apexstandard.org/spec/core/schemas/positions.resource.schema.json",
   "title": "APEX Positions Resource",
+  "$defs": {
+    "decimal": { "type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$" },
+    "decimal_nonneg": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$" }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -37,24 +41,24 @@
           "instrument_id": { "type": "string", "pattern": "^APEX:[A-Z]+:[A-Z0-9:.]+$" },
           "broker_symbol": { "type": "string", "minLength": 1 },
           "side": { "type": "string", "enum": ["buy", "sell"] },
-          "quantity": { "type": "number", "exclusiveMinimum": 0 },
+          "quantity": { "$ref": "#/$defs/decimal_nonneg" },
           "quantity_unit": { "type": "string", "enum": ["base_units", "shares", "contracts"] },
           "broker_quantity": { "type": "string" },
           "broker_quantity_unit": { "type": "string" },
-          "open_price": { "type": "number", "exclusiveMinimum": 0 },
-          "current_price": { "type": "number", "exclusiveMinimum": 0 },
-          "unrealised_pnl": { "type": "number" },
+          "open_price": { "$ref": "#/$defs/decimal" },
+          "current_price": { "$ref": "#/$defs/decimal" },
+          "unrealised_pnl": { "$ref": "#/$defs/decimal" },
           "unrealised_pnl_currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
-          "used_margin": { "type": "number" },
+          "used_margin": { "$ref": "#/$defs/decimal_nonneg" },
           "open_time": { "type": "string", "format": "date-time" },
-          "stop_loss": { "type": "number" },
-          "take_profit": { "type": "number" },
+          "stop_loss": { "$ref": "#/$defs/decimal" },
+          "take_profit": { "$ref": "#/$defs/decimal" },
           "profile_data": { "type": "object" }
         },
         "additionalProperties": true
       }
     },
-    "total_unrealised_pnl": { "type": "number" },
+    "total_unrealised_pnl": { "$ref": "#/$defs/decimal" },
     "sequence": { "type": "integer", "minimum": 0 },
     "stale_after_ms": { "type": "integer", "minimum": 1 }
   }

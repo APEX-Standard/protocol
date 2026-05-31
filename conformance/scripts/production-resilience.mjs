@@ -311,8 +311,8 @@ async function main() {
       }),
     );
     assert.equal(partialFillOrder.status, "partially_filled");
-    assert.equal(partialFillOrder.fill_quantity, 5000);
-    assert.equal(partialFillOrder.remaining_quantity, 5000);
+    assert.equal(partialFillOrder.fill_quantity, "5000");
+    assert.equal(partialFillOrder.remaining_quantity, "5000");
 
     const ordersAfterPartialFill = parseResource(await client.readResource({ uri: ordersUri }));
     const partialOrderEvent = ordersAfterPartialFill.orders.find((order) => order.order_id === partialFillOrder.order_id);

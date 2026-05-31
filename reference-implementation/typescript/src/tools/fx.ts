@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import type { ReferenceTradingState } from "../lib/resources.js";
-import { apexError, nowIso } from "../lib/helpers.js";
+import { apexError, dec, nowIso } from "../lib/helpers.js";
 
 /**
  * Compute the next 21:00 UTC rollover time from the current moment.
@@ -45,8 +45,8 @@ export function registerFxTools(server: McpServer, state: ReferenceTradingState)
         structuredContent: {
           instrument_id: "APEX:FX:EURUSD",
           broker_symbol: "EURUSD",
-          rollover_long: -0.5,
-          rollover_short: 0.3,
+          rollover_long: dec(-0.5),
+          rollover_short: dec(0.3),
           rollover_currency: "USD",
           rollover_per: "lot",
           lot_size: 100000,
@@ -113,13 +113,13 @@ export function registerFxTools(server: McpServer, state: ReferenceTradingState)
           exposures: [
             {
               currency: "EUR",
-              net_units: eurNetUnits,
+              net_units: dec(eurNetUnits),
               net_direction: netDirection,
-              value_in_base: valueInBase,
+              value_in_base: dec(valueInBase),
               contributing_positions: contributingPositions,
             },
           ],
-          total_gross_exposure: Math.abs(valueInBase),
+          total_gross_exposure: dec(Math.abs(valueInBase)),
           as_of: nowIso(),
         },
         content: [],
@@ -171,8 +171,8 @@ export function registerFxTools(server: McpServer, state: ReferenceTradingState)
         structuredContent: {
           from_currency,
           to_currency,
-          rate: Math.round(rate * 10000000) / 10000000,
-          converted_amount: Math.round(amount * rate * 100) / 100,
+          rate: dec(Math.round(rate * 10000000) / 10000000),
+          converted_amount: dec(Math.round(amount * rate * 100) / 100),
           timestamp: nowIso(),
         },
         content: [],

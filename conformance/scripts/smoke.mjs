@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   assertIsoCurrency,
   assertNonEmptyString,
+  assertDecimalString,
   callTool,
   connectClient,
   disconnectClient,
@@ -191,8 +192,8 @@ try {
     closeResult.status === "filled" || closeResult.status === "partially_filled" || closeResult.status === "rejected",
     `Expected filled/partially_filled/rejected status from position close, got ${closeResult.status}`
   );
-  assert(closeResult.fill_price > 0, "Expected positive fill_price");
-  assert(closeResult.fill_quantity > 0, "Expected positive fill_quantity");
+  assert(assertDecimalString(closeResult.fill_price, "fill_price") > 0, "Expected positive fill_price");
+  assert(assertDecimalString(closeResult.fill_quantity, "fill_quantity") > 0, "Expected positive fill_quantity");
   printCheck("position close works");
 
   // Position close with invalid position_id
@@ -322,8 +323,8 @@ try {
 
   const rollover = await callTool(client, "apex.fx.rollover", { instrument_id: "APEX:FX:EURUSD" });
   assert.equal(rollover.instrument_id, "APEX:FX:EURUSD", "Expected EURUSD rollover");
-  assert(typeof rollover.rollover_long === "number", "Expected numeric rollover_long");
-  assert(typeof rollover.rollover_short === "number", "Expected numeric rollover_short");
+  assertDecimalString(rollover.rollover_long, "rollover_long");
+  assertDecimalString(rollover.rollover_short, "rollover_short");
   assert(rollover.rollover_currency, "Expected rollover_currency");
   printCheck("FX rollover rates returned");
 
@@ -333,9 +334,8 @@ try {
   printCheck("FX currency exposure returned");
 
   const conversion = await callTool(client, "apex.fx.conversion", { from_currency: "EUR", to_currency: "USD", amount: 1000 });
-  assert(typeof conversion.rate === "number", "Expected numeric conversion rate");
-  assert(typeof conversion.converted_amount === "number", "Expected numeric converted_amount");
-  assert(conversion.converted_amount > 0, "Expected positive converted_amount");
+  assertDecimalString(conversion.rate, "conversion.rate");
+  assert(assertDecimalString(conversion.converted_amount, "converted_amount") > 0, "Expected positive converted_amount");
   printCheck("FX conversion returned");
 
   // --- CFD profile tools ---
@@ -352,10 +352,10 @@ try {
 
   const fundingRate = await callTool(client, "apex.crypto.funding_rate", { instrument_id: "APEX:CRYPTO:PERP:BTCUSDT" });
   assert.equal(fundingRate.instrument_id, "APEX:CRYPTO:PERP:BTCUSDT", "Expected BTCUSDT funding rate");
-  assert(typeof fundingRate.current_rate === "number", "Expected numeric current_rate");
+  assertDecimalString(fundingRate.current_rate, "current_rate");
   assert(typeof fundingRate.funding_interval_hours === "number", "Expected numeric funding_interval_hours");
-  assert(typeof fundingRate.index_price === "number", "Expected numeric index_price");
-  assert(typeof fundingRate.mark_price === "number", "Expected numeric mark_price");
+  assertDecimalString(fundingRate.index_price, "index_price");
+  assertDecimalString(fundingRate.mark_price, "mark_price");
   printCheck("Crypto funding rate returned");
 
   const liqEstimate = await callTool(client, "apex.crypto.liquidation_estimate", {
@@ -367,10 +367,9 @@ try {
     margin_mode: "isolated",
     entry_price: 50000.00,
   });
-  assert(typeof liqEstimate.liquidation_price === "number", "Expected numeric liquidation_price");
-  assert(liqEstimate.liquidation_price < 50000, "Expected liquidation below entry for long");
-  assert(typeof liqEstimate.margin_required === "number", "Expected numeric margin_required");
-  assert(typeof liqEstimate.distance_pct === "number", "Expected numeric distance_pct");
+  assert(assertDecimalString(liqEstimate.liquidation_price, "liquidation_price") < 50000, "Expected liquidation below entry for long");
+  assertDecimalString(liqEstimate.margin_required, "margin_required");
+  assertDecimalString(liqEstimate.distance_pct, "distance_pct");
   printCheck("Crypto liquidation estimate returned");
 
   const transfer = await callTool(client, "apex.crypto.transfer", {

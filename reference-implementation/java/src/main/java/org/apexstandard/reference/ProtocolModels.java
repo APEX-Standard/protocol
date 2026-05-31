@@ -7,6 +7,18 @@ final class ProtocolModels {
     private ProtocolModels() {
     }
 
+    /**
+     * Encodes a numeric value as a string-decimal matching the wire pattern
+     * {@code ^-?[0-9]+(\.[0-9]+)?$}. Avoids scientific notation and trailing
+     * zeros so {@code 5000.0} renders as "5000" and {@code 1.0875} as "1.0875".
+     */
+    static String dec(double v) {
+        if (v == 0.0) {
+            return "0";
+        }
+        return java.math.BigDecimal.valueOf(v).stripTrailingZeros().toPlainString();
+    }
+
     record ApexError(String code, String category, String message, Object details, String request_id, Integer retry_after) {
     }
 
@@ -45,22 +57,22 @@ final class ProtocolModels {
         String account_id,
         String account_base_currency,
         String response_currency,
-        double balance,
-        double equity,
-        double used_margin,
-        double free_margin,
-        double margin_level_pct,
-        double unrealised_pnl,
-        double realised_pnl_today,
+        String balance,
+        String equity,
+        String used_margin,
+        String free_margin,
+        String margin_level_pct,
+        String unrealised_pnl,
+        String realised_pnl_today,
         String as_of
     ) {
     }
 
     record PositionProfileData(
-        double rollover_long_daily,
-        double rollover_short_daily,
-        double accrued_rollover,
-        double pip_value,
+        String rollover_long_daily,
+        String rollover_short_daily,
+        String accrued_rollover,
+        String pip_value,
         String pip_value_currency
     ) {
     }
@@ -70,23 +82,23 @@ final class ProtocolModels {
         String instrument_id,
         String broker_symbol,
         String side,
-        int quantity,
+        String quantity,
         String quantity_unit,
         String broker_quantity,
         String broker_quantity_unit,
-        double open_price,
-        double current_price,
-        double unrealised_pnl,
+        String open_price,
+        String current_price,
+        String unrealised_pnl,
         String unrealised_pnl_currency,
-        double used_margin,
+        String used_margin,
         String open_time,
-        double stop_loss,
-        double take_profit,
+        String stop_loss,
+        String take_profit,
         PositionProfileData profile_data
     ) {
     }
 
-    record AccountPositionsResponse(List<Position> positions, double total_unrealised_pnl, String as_of) {
+    record AccountPositionsResponse(List<Position> positions, String total_unrealised_pnl, String as_of) {
     }
 
     record OrderListResponse(List<Object> orders, String as_of) {
@@ -100,8 +112,8 @@ final class ProtocolModels {
         Object client_order_id,
         String status,
         Object fill_price,
-        double fill_quantity,
-        double remaining_quantity,
+        String fill_quantity,
+        String remaining_quantity,
         Object position_id,
         Object rejection_reason,
         String created_at
@@ -117,10 +129,10 @@ final class ProtocolModels {
     record MarketQuoteResponse(
         String instrument_id,
         String broker_symbol,
-        double bid,
-        double ask,
-        double mid,
-        double spread,
+        String bid,
+        String ask,
+        String mid,
+        String spread,
         String timestamp,
         boolean is_tradeable,
         String market_status
@@ -146,17 +158,17 @@ final class ProtocolModels {
         String profile,
         String base_currency,
         String quote_currency,
-        double pip_size,
+        String pip_size,
         int lot_size,
         String quantity_unit,
         String broker_quantity_unit,
-        int min_quantity,
-        int max_quantity,
-        int quantity_step,
-        double margin_rate_pct,
-        double commission_per_lot,
+        String min_quantity,
+        String max_quantity,
+        String quantity_step,
+        String margin_rate_pct,
+        String commission_per_lot,
         String spread_type,
-        double typical_spread_pips,
+        String typical_spread_pips,
         List<TradingHours> trading_hours,
         Map<String, Object> profile_data
     ) {
@@ -164,10 +176,10 @@ final class ProtocolModels {
 
     record RiskCheckResponse(
         boolean approved,
-        double required_margin,
-        double available_margin,
-        double margin_after_trade,
-        double exposure_increase,
+        String required_margin,
+        String available_margin,
+        String margin_after_trade,
+        String exposure_increase,
         List<Object> warnings,
         Object rejection_reason
     ) {
@@ -175,12 +187,12 @@ final class ProtocolModels {
 
     record RiskLimitsResponse(
         String account_id,
-        int max_position_size,
+        String max_position_size,
         int max_open_orders,
-        double daily_loss_limit,
-        double daily_loss_used,
-        int margin_call_level_pct,
-        int stop_out_level_pct,
+        String daily_loss_limit,
+        String daily_loss_used,
+        String margin_call_level_pct,
+        String stop_out_level_pct,
         List<Object> restricted_instruments,
         boolean kill_switch_active
     ) {
@@ -191,8 +203,8 @@ final class ProtocolModels {
     record FxRolloverResponse(
         String instrument_id,
         String broker_symbol,
-        double rollover_long,
-        double rollover_short,
+        String rollover_long,
+        String rollover_short,
         String rollover_currency,
         String rollover_per,
         int lot_size,
@@ -204,9 +216,9 @@ final class ProtocolModels {
 
     record ExposureEntry(
         String currency,
-        long net_units,
+        String net_units,
         String net_direction,
-        double value_in_base,
+        String value_in_base,
         List<String> contributing_positions
     ) {
     }
@@ -215,7 +227,7 @@ final class ProtocolModels {
         String account_id,
         String base_currency,
         List<ExposureEntry> exposures,
-        double total_gross_exposure,
+        String total_gross_exposure,
         String as_of
     ) {
     }
@@ -223,8 +235,8 @@ final class ProtocolModels {
     record FxConversionResponse(
         String from_currency,
         String to_currency,
-        double rate,
-        double converted_amount,
+        String rate,
+        String converted_amount,
         String timestamp
     ) {
     }
@@ -233,9 +245,9 @@ final class ProtocolModels {
         String order_id,
         String position_id,
         String status,
-        double fill_price,
-        double fill_quantity,
-        double remaining_quantity,
+        String fill_price,
+        String fill_quantity,
+        String remaining_quantity,
         String closed_at
     ) {
     }
@@ -253,14 +265,14 @@ final class ProtocolModels {
     record CryptoFundingRateResponse(
         String instrument_id,
         String broker_symbol,
-        double current_rate,
-        double current_rate_annualised,
-        double predicted_rate,
+        String current_rate,
+        String current_rate_annualised,
+        String predicted_rate,
         int funding_interval_hours,
         String next_funding_time,
         long countdown_seconds,
-        double index_price,
-        double mark_price,
+        String index_price,
+        String mark_price,
         String timestamp
     ) {
     }
@@ -268,12 +280,12 @@ final class ProtocolModels {
     record CryptoLiquidationEstimateResponse(
         String instrument_id,
         String side,
-        double entry_price,
-        double liquidation_price,
-        double margin_required,
-        double maintenance_margin,
+        String entry_price,
+        String liquidation_price,
+        String margin_required,
+        String maintenance_margin,
         String margin_currency,
-        double distance_pct,
+        String distance_pct,
         List<Object> warnings
     ) {
     }
@@ -283,7 +295,7 @@ final class ProtocolModels {
         String from_wallet,
         String to_wallet,
         String currency,
-        double amount,
+        String amount,
         String status,
         Object rejection_reason,
         String completed_at

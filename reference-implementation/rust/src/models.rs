@@ -321,22 +321,22 @@ pub struct AccountSummaryResponse {
     pub account_id: String,
     pub account_base_currency: String,
     pub response_currency: String,
-    pub balance: f64,
-    pub equity: f64,
-    pub used_margin: f64,
-    pub free_margin: f64,
-    pub margin_level_pct: f64,
-    pub unrealised_pnl: f64,
-    pub realised_pnl_today: f64,
+    pub balance: String,
+    pub equity: String,
+    pub used_margin: String,
+    pub free_margin: String,
+    pub margin_level_pct: String,
+    pub unrealised_pnl: String,
+    pub realised_pnl_today: String,
     pub as_of: String,
 }
 
 #[derive(Debug, Serialize)]
 pub struct PositionProfileData {
-    pub rollover_long_daily: f64,
-    pub rollover_short_daily: f64,
-    pub accrued_rollover: f64,
-    pub pip_value: f64,
+    pub rollover_long_daily: String,
+    pub rollover_short_daily: String,
+    pub accrued_rollover: String,
+    pub pip_value: String,
     pub pip_value_currency: String,
 }
 
@@ -346,25 +346,25 @@ pub struct Position {
     pub instrument_id: String,
     pub broker_symbol: String,
     pub side: String,
-    pub quantity: i64,
+    pub quantity: String,
     pub quantity_unit: String,
     pub broker_quantity: String,
     pub broker_quantity_unit: String,
-    pub open_price: f64,
-    pub current_price: f64,
-    pub unrealised_pnl: f64,
+    pub open_price: String,
+    pub current_price: String,
+    pub unrealised_pnl: String,
     pub unrealised_pnl_currency: String,
-    pub used_margin: f64,
+    pub used_margin: String,
     pub open_time: String,
-    pub stop_loss: f64,
-    pub take_profit: f64,
+    pub stop_loss: String,
+    pub take_profit: String,
     pub profile_data: PositionProfileData,
 }
 
 #[derive(Debug, Serialize)]
 pub struct AccountPositionsResponse {
     pub positions: Vec<Position>,
-    pub total_unrealised_pnl: f64,
+    pub total_unrealised_pnl: String,
     pub as_of: String,
 }
 
@@ -386,9 +386,9 @@ pub struct OrderPlaceResponse {
     pub order_id: String,
     pub client_order_id: Option<String>,
     pub status: String,
-    pub fill_price: Option<f64>,
-    pub fill_quantity: f64,
-    pub remaining_quantity: f64,
+    pub fill_price: Option<String>,
+    pub fill_quantity: String,
+    pub remaining_quantity: String,
     pub position_id: Option<String>,
     pub rejection_reason: Option<String>,
     pub created_at: String,
@@ -416,9 +416,9 @@ pub struct PositionCloseResponse {
     pub order_id: String,
     pub position_id: String,
     pub status: String,
-    pub fill_price: f64,
-    pub fill_quantity: f64,
-    pub remaining_quantity: f64,
+    pub fill_price: String,
+    pub fill_quantity: String,
+    pub remaining_quantity: String,
     pub closed_at: String,
 }
 
@@ -426,10 +426,10 @@ pub struct PositionCloseResponse {
 pub struct MarketQuoteResponse {
     pub instrument_id: String,
     pub broker_symbol: String,
-    pub bid: f64,
-    pub ask: f64,
-    pub mid: f64,
-    pub spread: f64,
+    pub bid: String,
+    pub ask: String,
+    pub mid: String,
+    pub spread: String,
     pub timestamp: String,
     pub is_tradeable: bool,
     pub market_status: String,
@@ -472,17 +472,17 @@ pub struct MarketDetailsResponse {
     pub profile: String,
     pub base_currency: String,
     pub quote_currency: String,
-    pub pip_size: f64,
+    pub pip_size: String,
     pub lot_size: i64,
     pub quantity_unit: String,
     pub broker_quantity_unit: String,
-    pub min_quantity: i64,
-    pub max_quantity: i64,
-    pub quantity_step: i64,
-    pub margin_rate_pct: f64,
-    pub commission_per_lot: f64,
+    pub min_quantity: String,
+    pub max_quantity: String,
+    pub quantity_step: String,
+    pub margin_rate_pct: String,
+    pub commission_per_lot: String,
     pub spread_type: String,
-    pub typical_spread_pips: f64,
+    pub typical_spread_pips: String,
     pub trading_hours: Vec<TradingHours>,
     pub profile_data: serde_json::Value,
 }
@@ -490,10 +490,10 @@ pub struct MarketDetailsResponse {
 #[derive(Debug, Serialize)]
 pub struct RiskCheckResponse {
     pub approved: bool,
-    pub required_margin: f64,
-    pub available_margin: f64,
-    pub margin_after_trade: f64,
-    pub exposure_increase: f64,
+    pub required_margin: String,
+    pub available_margin: String,
+    pub margin_after_trade: String,
+    pub exposure_increase: String,
     pub warnings: Vec<serde_json::Value>,
     pub rejection_reason: Option<String>,
 }
@@ -513,8 +513,8 @@ pub struct FxRolloverInput {
 pub struct FxRolloverResponse {
     pub instrument_id: String,
     pub broker_symbol: String,
-    pub rollover_long: f64,
-    pub rollover_short: f64,
+    pub rollover_long: String,
+    pub rollover_short: String,
     pub rollover_currency: String,
     pub rollover_per: String,
     pub lot_size: i64,
@@ -534,9 +534,9 @@ pub struct FxExposureInput {
 #[derive(Debug, Serialize)]
 pub struct ExposureEntry {
     pub currency: String,
-    pub net_units: i64,
+    pub net_units: String,
     pub net_direction: String,
-    pub value_in_base: f64,
+    pub value_in_base: String,
     pub contributing_positions: Vec<String>,
 }
 
@@ -545,7 +545,7 @@ pub struct FxExposureResponse {
     pub account_id: String,
     pub base_currency: String,
     pub exposures: Vec<ExposureEntry>,
-    pub total_gross_exposure: f64,
+    pub total_gross_exposure: String,
     pub as_of: String,
 }
 
@@ -563,20 +563,20 @@ pub struct FxConversionInput {
 pub struct FxConversionResponse {
     pub from_currency: String,
     pub to_currency: String,
-    pub rate: f64,
-    pub converted_amount: f64,
+    pub rate: String,
+    pub converted_amount: String,
     pub timestamp: String,
 }
 
 #[derive(Debug, Serialize)]
 pub struct RiskLimitsResponse {
     pub account_id: String,
-    pub max_position_size: i64,
+    pub max_position_size: String,
     pub max_open_orders: i64,
-    pub daily_loss_limit: f64,
-    pub daily_loss_used: f64,
-    pub margin_call_level_pct: i64,
-    pub stop_out_level_pct: i64,
+    pub daily_loss_limit: String,
+    pub daily_loss_used: String,
+    pub margin_call_level_pct: String,
+    pub stop_out_level_pct: String,
     pub restricted_instruments: Vec<serde_json::Value>,
     pub kill_switch_active: bool,
 }
@@ -639,14 +639,14 @@ pub struct CryptoFundingRateInput {
 pub struct CryptoFundingRateResponse {
     pub instrument_id: String,
     pub broker_symbol: String,
-    pub current_rate: f64,
-    pub current_rate_annualised: f64,
-    pub predicted_rate: f64,
+    pub current_rate: String,
+    pub current_rate_annualised: String,
+    pub predicted_rate: String,
     pub funding_interval_hours: i32,
     pub next_funding_time: String,
     pub countdown_seconds: i64,
-    pub index_price: f64,
-    pub mark_price: f64,
+    pub index_price: String,
+    pub mark_price: String,
     pub timestamp: String,
 }
 
@@ -672,12 +672,12 @@ pub struct CryptoLiquidationEstimateInput {
 pub struct CryptoLiquidationEstimateResponse {
     pub instrument_id: String,
     pub side: String,
-    pub entry_price: f64,
-    pub liquidation_price: f64,
-    pub margin_required: f64,
-    pub maintenance_margin: f64,
+    pub entry_price: String,
+    pub liquidation_price: String,
+    pub margin_required: String,
+    pub maintenance_margin: String,
     pub margin_currency: String,
-    pub distance_pct: f64,
+    pub distance_pct: String,
     pub warnings: Vec<serde_json::Value>,
 }
 
@@ -701,7 +701,7 @@ pub struct CryptoTransferResponse {
     pub from_wallet: String,
     pub to_wallet: String,
     pub currency: String,
-    pub amount: f64,
+    pub amount: String,
     pub status: String,
     pub rejection_reason: Option<String>,
     pub completed_at: String,

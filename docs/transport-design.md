@@ -1,6 +1,6 @@
 # APEX Protocol — Transport Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -91,7 +91,7 @@ id: 2
 data: {"jsonrpc":"2.0","method":"notifications/resources/updated","params":{"uri":"apex://market/quote/APEX:FX:EURUSD"}}
 
 id: 3
-data: {"jsonrpc":"2.0","method":"notifications/apex.order.filled","params":{"order_id":"ORD_789","fill_price":1.0847,"fill_quantity":100000,"timestamp":"2026-03-29T14:32:07.123Z"}}
+data: {"jsonrpc":"2.0","method":"notifications/apex.order.filled","params":{"order_id":"ORD_789","fill_price":"1.0847","fill_quantity":"100000","timestamp":"2026-03-29T14:32:07.123Z"}}
 
 id: 4
 data: {"jsonrpc":"2.0","method":"notifications/resources/updated","params":{"uri":"apex://account/positions/ACC_12345"}}

@@ -1,6 +1,6 @@
 # APEX Protocol — Alpha Stability And Compatibility
 
-**Version:** `0.1.0-alpha`  
+**Version:** `0.2.0-alpha`  
 **Status:** Draft  
 **Last Updated:** 2026-03-27
 
@@ -115,7 +115,7 @@ For normative order/fill events:
 Normative schemas in [`schemas/`](./schemas/) follow these rules during alpha:
 
 - required fields may only be added if the capability/profile claim that depends on them is also tightened in the same change
-- existing required fields must keep meaning, type, and units
+- existing required fields must keep meaning, type, and units — including wire encoding (all monetary/price/rate/P&L/margin/quantity fields are string-encoded decimals matching `^-?[0-9]+(\.[0-9]+)?$`, never JSON `number`; see the migration note in [`../../docs/version-stability-design.md`](../../docs/version-stability-design.md))
 - optional fields may be added freely
 - incompatible schema changes must use a new schema file and an explicit migration note
 
@@ -156,7 +156,7 @@ Implementations should advertise clearly which class of surface they rely on:
     "autonomous": false
   },
   "stability": {
-    "core_version": "0.1.0-alpha",
+    "core_version": "0.2.0-alpha",
     "experimental_namespaces": ["vendor.example.experimental"]
   }
 }

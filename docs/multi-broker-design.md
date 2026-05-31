@@ -1,6 +1,6 @@
 # APEX Protocol — Multi-Broker and Multi-Session Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -96,7 +96,7 @@ Canonical quantities work the same way. When the agent places an order for 100,0
   "instrument_id": "APEX:FX:EURUSD",
   "side": "buy",
   "order_type": "market",
-  "quantity": 100000,
+  "quantity": "100000",
   "quantity_unit": "base_units"
 }
 ```

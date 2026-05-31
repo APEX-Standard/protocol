@@ -1,6 +1,6 @@
 # APEX Protocol — Feature Resource and Agent-Native Market State Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -32,10 +32,10 @@ The feature resource organizes derived state into seven groups. Each group answe
 
 ```json
 "quote": {
-  "bid": 1.08740,
-  "ask": 1.08760,
-  "mid": 1.08750,
-  "spread": 0.00020
+  "bid": "1.08740",
+  "ask": "1.08760",
+  "mid": "1.08750",
+  "spread": "0.00020"
 }
 ```
 
@@ -222,7 +222,7 @@ apex://agent/decision-context/APEX:FX:EURUSD
   },
   "constraints": {
     "kill_switch_active": false,
-    "max_position_size": 5000000,
+    "max_position_size": "5000000",
     "max_open_orders": 50
   }
 }

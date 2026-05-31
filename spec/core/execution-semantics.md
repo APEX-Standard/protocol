@@ -1,6 +1,6 @@
 # APEX Protocol — Execution And Account Semantics
 
-**Version:** `0.1.0-alpha`  
+**Version:** `0.2.0-alpha`  
 **Status:** Draft  
 **Last Updated:** 2026-03-27
 

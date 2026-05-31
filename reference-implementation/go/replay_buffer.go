@@ -11,10 +11,10 @@ const maxBufferSize = 10000
 // requiredMethods lists JSON-RPC methods that must be replayed in full
 // (not elided into gap_fill summaries) during reconnect replay.
 var requiredMethods = map[string]bool{
-	"notifications/apex.order.filled":              true,
-	"notifications/apex.order.partially_filled":    true,
-	"notifications/apex.order.rejected":            true,
-	"notifications/apex.risk.kill_switch_engaged":  true,
+	"notifications/apex.order.filled":             true,
+	"notifications/apex.order.partially_filled":   true,
+	"notifications/apex.order.rejected":           true,
+	"notifications/apex.risk.kill_switch_engaged": true,
 }
 
 // StoredEvent represents a single event stored in the replay buffer.
@@ -26,9 +26,9 @@ type StoredEvent struct {
 
 // ReplayBuffer is a fixed-size ring buffer that stores SSE events for replay.
 type ReplayBuffer struct {
-	mu                   sync.Mutex
-	events               []StoredEvent
-	nextID               int
+	mu                    sync.Mutex
+	events                []StoredEvent
+	nextID                int
 	acknowledgedThroughID int
 }
 

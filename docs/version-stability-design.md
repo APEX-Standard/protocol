@@ -1,6 +1,6 @@
 # APEX Protocol — Version Negotiation and Stability Model
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -204,6 +204,35 @@ Changes carry one of three labels:
 
 ---
 
+## Migration Note — `0.1.0-alpha` → `0.2.0-alpha`: String-Decimal Encoding
+
+**Label:** `incompatible` (breaking wire change, permitted pre-`1.0.0`).
+
+**What changed.** Every monetary, price, rate, P&L, margin, and quantity field changed from a JSON `number` (IEEE-754 double) to a **string-encoded decimal** — a JSON `string` matching `^-?[0-9]+(\.[0-9]+)?$` (optional sign, no exponent, no thousands separators). Precision remains broker/instrument-defined; the string carries the exact value the broker computes.
+
+**Why.** IEEE-754 doubles cannot exactly represent decimal prices (`1.08745` is not a double). A trading and audit protocol must carry exact, reproducible decimals. FIX — APEX's stated analogy — carries prices as ASCII string decimals on the wire for exactly this reason. Making the change at `0.2.0-alpha`, before broker implementations harden around `number`, is cheap; deferring it past `1.0.0` would be effectively impossible.
+
+**Scope.** Affected: prices (`bid`, `ask`, `mid`, `spread`, `open`/`high`/`low`/`close`, `open_price`, `current_price`, `limit_price`, `stop_price`, `fill_price`, `average_fill_price`), money (`balance`, `equity`, `*_margin`, `unrealised_pnl`, `realised_pnl_today`, `total_unrealised_pnl`, `commission`, `daily_loss_*`), financial rates/percentages (`margin_level_pct`, `margin_call_level_pct`, `stop_out_level_pct`, `margin_rate_pct`, funding/rollover/financing rates), and quantities (`quantity`, `filled_quantity`, `remaining_quantity`, `fill_quantity`, `max_position_size`, `min_quantity`, `max_quantity`, `quantity_step`). **Unchanged** (still JSON `number`/`integer`): genuine integer counts (`sequence`, `stale_after_ms`, `max_open_orders`, `limit`, `leverage`, `lot_size`, `contract_size`), booleans, enums, IDs, ISO-8601 timestamps, and non-monetary analytics (`volume`, `returns`, `volatility`, `confidence`, `liquidity_score`, `expected_slippage_bps`, order-book/flow signals).
+
+**Before / after.**
+
+```json
+// 0.1.0-alpha
+{ "bid": 1.08745, "balance": 10000.00, "quantity": 100000, "fill_price": 1.0875 }
+
+// 0.2.0-alpha
+{ "bid": "1.08745", "balance": "10000.00", "quantity": "100000", "fill_price": "1.0875" }
+```
+
+**How to migrate.**
+- *Producers (brokers):* serialize the affected fields as quoted decimal strings — ideally from an exact decimal type, never by formatting a binary float that has already lost precision.
+- *Consumers (agents):* parse the affected fields from strings into an exact decimal type (e.g. `BigDecimal`, `decimal.Decimal`, `rust_decimal`), not into a binary float.
+- Negotiate via `apex_version` in the `initialize` handshake: an agent built for `0.1.0-alpha` must treat `0.2.0-alpha` as potentially breaking (per the version table above) and upgrade its parsing before proceeding.
+
+This encoding is now part of the type guarantee in **Rule 2** above: from `0.2.0-alpha` onward, a string-decimal field stays a string-decimal field.
+
+---
+
 ## Deprecation Policy
 
 Alpha does not guarantee long-lived deprecation windows. The protocol is still finding its shape. But "alpha" is not a license to break things without warning. The following rules apply:
@@ -257,7 +286,7 @@ The `apex.session.capabilities` response includes two relevant sections:
     "autonomous": false
   },
   "stability": {
-    "core_version": "0.1.0-alpha",
+    "core_version": "0.2.0-alpha",
     "experimental_namespaces": ["vendor.example.experimental"]
   }
 }

@@ -2,6 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://apexstandard.org/spec/core/schemas/orders.resource.schema.json",
   "title": "APEX Orders Resource",
+  "$defs": {
+    "decimal": { "type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$" },
+    "decimal_nonneg": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$" }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -40,14 +44,14 @@
           "broker_symbol": { "type": "string", "minLength": 1 },
           "side": { "type": "string", "enum": ["buy", "sell"] },
           "order_type": { "type": "string", "enum": ["market", "limit", "stop", "stop_limit"] },
-          "quantity": { "type": "number", "exclusiveMinimum": 0 },
+          "quantity": { "$ref": "#/$defs/decimal_nonneg" },
           "quantity_unit": { "type": "string", "enum": ["base_units", "shares", "contracts"] },
-          "limit_price": { "type": ["number", "null"] },
-          "stop_price": { "type": ["number", "null"] },
+          "limit_price": { "anyOf": [{ "$ref": "#/$defs/decimal" }, { "type": "null" }] },
+          "stop_price": { "anyOf": [{ "$ref": "#/$defs/decimal" }, { "type": "null" }] },
           "time_in_force": { "type": "string", "enum": ["GTC", "IOC", "FOK", "DAY"] },
           "status": { "type": "string", "enum": ["accepted", "working", "partially_filled", "filled", "cancelled", "rejected", "expired"] },
-          "filled_quantity": { "type": "number", "minimum": 0 },
-          "remaining_quantity": { "type": "number", "minimum": 0 },
+          "filled_quantity": { "$ref": "#/$defs/decimal_nonneg" },
+          "remaining_quantity": { "$ref": "#/$defs/decimal_nonneg" },
           "created_at": { "type": "string", "format": "date-time" },
           "updated_at": { "type": "string", "format": "date-time" }
         },

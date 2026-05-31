@@ -1,6 +1,6 @@
 # APEX Protocol — Autonomous Safety Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -332,7 +332,7 @@ Modes should be set in runtime configuration. They should not be changeable by t
     "instrument_id": "APEX:FX:EURUSD",
     "side": "buy",
     "order_type": "market",
-    "quantity": 500000
+    "quantity": "500000"
   }
 }
 ```
@@ -341,10 +341,10 @@ Modes should be set in runtime configuration. They should not be changeable by t
 ```json
 {
   "approved": true,
-  "required_margin": 2500.00,
-  "available_margin": 9750.00,
-  "margin_after_trade": 7250.00,
-  "exposure_increase": 500000,
+  "required_margin": "2500.00",
+  "available_margin": "9750.00",
+  "margin_after_trade": "7250.00",
+  "exposure_increase": "500000",
   "warnings": [],
   "rejection_reason": null
 }
@@ -398,7 +398,7 @@ Per decision, the runtime should record:
 | `input_uris` | Resource URIs used as decision input | `["apex://market/quote/APEX:FX:EURUSD", "apex://account/risk/ACC-001"]` |
 | `input_sequences` | Sequence numbers for each input resource | `{"quote": 1847, "risk": 312}` |
 | `input_freshness` | Freshness timestamps observed | `{"quote_as_of": 1711234567890, "risk_as_of": 1711234567500}` |
-| `intent` | The model's output intent | `{"action": "buy", "instrument": "APEX:FX:EURUSD", "quantity": 100000}` |
+| `intent` | The model's output intent | `{"action": "buy", "instrument": "APEX:FX:EURUSD", "quantity": "100000"}` |
 | `validation_result` | Runtime validation outcome | `{"passed": true}` or `{"passed": false, "reason": "quote_stale"}` |
 | `broker_response` | Resulting tool call and broker response | `{"tool": "apex.order.place", "order_id": "ORD-789", "status": "filled"}` |
 | `refusal_reason` | Why the runtime refused (if applicable) | `"kill_switch_active"` or `null` |

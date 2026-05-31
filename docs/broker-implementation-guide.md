@@ -1,7 +1,7 @@
 # APEX Protocol — Broker Implementation Guide
 
 **Audience:** broker teams and gateway implementers  
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 

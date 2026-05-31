@@ -41,16 +41,16 @@ func registerFxToolsWithState(s *server.MCPServer, st *referenceState) {
 			}
 
 			return jsonResult(map[string]any{
-				"instrument_id":      referenceInstrumentID,
-				"broker_symbol":      referenceBrokerSymbol,
-				"rollover_long":      -0.5,
-				"rollover_short":     0.3,
-				"rollover_currency":  "USD",
-				"rollover_per":       "lot",
-				"lot_size":           100000,
+				"instrument_id":       referenceInstrumentID,
+				"broker_symbol":       referenceBrokerSymbol,
+				"rollover_long":       dec(-0.5),
+				"rollover_short":      dec(0.3),
+				"rollover_currency":   "USD",
+				"rollover_per":        "lot",
+				"lot_size":            100000,
 				"triple_rollover_day": "Wednesday",
-				"next_rollover_time": nextRolloverTime(),
-				"as_of":             nowISO(),
+				"next_rollover_time":  nextRolloverTime(),
+				"as_of":               nowISO(),
 			})
 		},
 	)
@@ -79,15 +79,15 @@ func registerFxToolsWithState(s *server.MCPServer, st *referenceState) {
 			positions := append([]position(nil), st.positions...)
 			st.mu.Unlock()
 
-			eurNetUnits := 0
+			eurNetUnits := 0.0
 			var contributingPositions []string
 
 			for _, pos := range positions {
 				if pos.InstrumentID == referenceInstrumentID {
 					if pos.Side == "buy" {
-						eurNetUnits += pos.Quantity
+						eurNetUnits += pos.qty
 					} else {
-						eurNetUnits -= pos.Quantity
+						eurNetUnits -= pos.qty
 					}
 					contributingPositions = append(contributingPositions, pos.PositionID)
 				}
@@ -100,9 +100,9 @@ func registerFxToolsWithState(s *server.MCPServer, st *referenceState) {
 			rate := 1.0875 // reference mid price
 			var valueInBase float64
 			if baseCurrency == "EUR" {
-				valueInBase = float64(eurNetUnits)
+				valueInBase = eurNetUnits
 			} else {
-				valueInBase = float64(eurNetUnits) * rate
+				valueInBase = eurNetUnits * rate
 			}
 
 			netDirection := "flat"
@@ -117,15 +117,15 @@ func registerFxToolsWithState(s *server.MCPServer, st *referenceState) {
 				"base_currency": baseCurrency,
 				"exposures": []map[string]any{
 					{
-						"currency":                "EUR",
-						"net_units":               eurNetUnits,
-						"net_direction":            netDirection,
-						"value_in_base":           valueInBase,
-						"contributing_positions":  contributingPositions,
+						"currency":               "EUR",
+						"net_units":              dec(eurNetUnits),
+						"net_direction":          netDirection,
+						"value_in_base":          dec(valueInBase),
+						"contributing_positions": contributingPositions,
 					},
 				},
-				"total_gross_exposure": math.Abs(valueInBase),
-				"as_of":               nowISO(),
+				"total_gross_exposure": dec(math.Abs(valueInBase)),
+				"as_of":                nowISO(),
 			})
 		},
 	)
@@ -165,11 +165,11 @@ func registerFxToolsWithState(s *server.MCPServer, st *referenceState) {
 			}
 
 			return jsonResult(map[string]any{
-				"from_currency":   fromCurrency,
-				"to_currency":     toCurrency,
-				"rate":            math.Round(rate*10000000) / 10000000,
-				"converted_amount": math.Round(amount*rate*100) / 100,
-				"timestamp":       nowISO(),
+				"from_currency":    fromCurrency,
+				"to_currency":      toCurrency,
+				"rate":             dec(math.Round(rate*10000000) / 10000000),
+				"converted_amount": dec(math.Round(amount*rate*100) / 100),
+				"timestamp":        nowISO(),
 			})
 		},
 	)

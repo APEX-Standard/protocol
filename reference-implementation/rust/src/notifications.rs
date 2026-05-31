@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 
-use crate::helpers::now_iso;
+use crate::helpers::{dec, now_iso};
 use crate::state::ACCOUNT_ID;
 
 const INSTRUMENT_ID: &str = "APEX:FX:EURUSD";
@@ -49,9 +49,9 @@ pub fn order_filled(
             payload: json!({
                 "order_id": order_id,
                 "side": side,
-                "fill_price": fill_price,
-                "fill_quantity": fill_quantity,
-                "commission": -0.5,
+                "fill_price": dec(fill_price),
+                "fill_quantity": dec(fill_quantity),
+                "commission": dec(-0.5),
                 "position_id": "pos_001",
             }),
         },
@@ -80,9 +80,9 @@ pub fn order_partially_filled(p: PartialFillParams<'_>) -> Value {
             payload: json!({
                 "order_id": p.order_id,
                 "side": p.side,
-                "fill_price": p.fill_price,
-                "fill_quantity": p.fill_quantity,
-                "remaining_quantity": p.remaining_quantity,
+                "fill_price": dec(p.fill_price),
+                "fill_quantity": dec(p.fill_quantity),
+                "remaining_quantity": dec(p.remaining_quantity),
             }),
         },
     )
@@ -129,10 +129,10 @@ pub fn candle_closed(p: CandleClosedParams<'_>) -> Value {
             payload: json!({
                 "instrument_id": p.instrument_id,
                 "timeframe": p.timeframe,
-                "open": p.open,
-                "high": p.high,
-                "low": p.low,
-                "close": p.close,
+                "open": dec(p.open),
+                "high": dec(p.high),
+                "low": dec(p.low),
+                "close": dec(p.close),
                 "volume": p.volume,
                 "complete": true,
             }),

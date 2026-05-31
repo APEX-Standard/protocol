@@ -98,17 +98,17 @@ try {
   //     The tick engine bumps sequence numbers on each tick; price values or
   //     the timestamp should differ between reads.
   const quote1 = await readResource(server.baseUrl, sessionId, QUOTE_URI);
-  assert.equal(typeof quote1.bid, "number", "quote1.bid must be a number");
-  assert.equal(typeof quote1.ask, "number", "quote1.ask must be a number");
-  assert.equal(typeof quote1.mid, "number", "quote1.mid must be a number");
+  assert.equal(typeof quote1.bid, "string", "quote1.bid must be a string-encoded decimal");
+  assert.equal(typeof quote1.ask, "string", "quote1.ask must be a string-encoded decimal");
+  assert.equal(typeof quote1.mid, "string", "quote1.mid must be a string-encoded decimal");
   printCheck(`quote read #1: bid=${quote1.bid} ask=${quote1.ask} mid=${quote1.mid} seq=${quote1.sequence}`);
 
   await delay(2500);
 
   const quote2 = await readResource(server.baseUrl, sessionId, QUOTE_URI);
-  assert.equal(typeof quote2.bid, "number", "quote2.bid must be a number");
-  assert.equal(typeof quote2.ask, "number", "quote2.ask must be a number");
-  assert.equal(typeof quote2.mid, "number", "quote2.mid must be a number");
+  assert.equal(typeof quote2.bid, "string", "quote2.bid must be a string-encoded decimal");
+  assert.equal(typeof quote2.ask, "string", "quote2.ask must be a string-encoded decimal");
+  assert.equal(typeof quote2.mid, "string", "quote2.mid must be a string-encoded decimal");
   printCheck(`quote read #2: bid=${quote2.bid} ask=${quote2.ask} mid=${quote2.mid} seq=${quote2.sequence}`);
 
   const quoteChanged =
@@ -168,10 +168,10 @@ try {
   // Verify the payload contains OHLCV data
   const candlePayload = candleNotif.payload;
   assert.equal(candlePayload.timeframe, "M1", "Expected payload.timeframe = M1");
-  assert.equal(typeof candlePayload.open, "number", "payload.open must be a number");
-  assert.equal(typeof candlePayload.high, "number", "payload.high must be a number");
-  assert.equal(typeof candlePayload.low, "number", "payload.low must be a number");
-  assert.equal(typeof candlePayload.close, "number", "payload.close must be a number");
+  assert.equal(typeof candlePayload.open, "string", "payload.open must be a string-encoded decimal");
+  assert.equal(typeof candlePayload.high, "string", "payload.high must be a string-encoded decimal");
+  assert.equal(typeof candlePayload.low, "string", "payload.low must be a string-encoded decimal");
+  assert.equal(typeof candlePayload.close, "string", "payload.close must be a string-encoded decimal");
   assert.equal(typeof candlePayload.volume, "number", "payload.volume must be a number");
   printCheck(
     `candle_closed payload: O=${candlePayload.open} H=${candlePayload.high} L=${candlePayload.low} C=${candlePayload.close} V=${candlePayload.volume}`,
