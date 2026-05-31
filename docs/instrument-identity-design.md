@@ -1,6 +1,6 @@
 # APEX Protocol — Instrument Identity and Registry Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -148,7 +148,7 @@ Each instrument in the registry has the following structure:
   "canonical": {
     "base_currency": "EUR",
     "quote_currency": "USD",
-    "pip_size": 0.0001,
+    "pip_size": "0.0001",
     "pip_digits": 4,
     "standard_lot_size": 100000,
     "lot_size_currency": "EUR"
@@ -159,22 +159,22 @@ Each instrument in the registry has the following structure:
       "broker_id": "fxcm",
       "broker_symbol": "EUR/USD",
       "broker_display_name": "EUR/USD",
-      "min_quantity": 1000,
-      "quantity_step": 1000,
+      "min_quantity": "1000",
+      "quantity_step": "1000",
       "canonical_quantity_unit": "base_units",
       "broker_quantity_unit": "units",
-      "margin_rate_pct": 0.5,
+      "margin_rate_pct": "0.5",
       "as_of": "2026-01-01"
     },
     {
       "broker_id": "ig",
       "broker_symbol": "EURUSD",
       "broker_display_name": "EUR/USD",
-      "min_quantity": 0.01,
-      "quantity_step": 0.01,
+      "min_quantity": "0.01",
+      "quantity_step": "0.01",
       "canonical_quantity_unit": "base_units",
       "broker_quantity_unit": "lots",
-      "margin_rate_pct": 0.5,
+      "margin_rate_pct": "0.5",
       "as_of": "2026-01-01"
     }
   ],

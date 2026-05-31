@@ -1,6 +1,6 @@
 # APEX Alpha Reference Parity Matrix
 
-**Version:** `0.1.0-alpha`  
+**Version:** `0.2.0-alpha`  
 **Last Updated:** 2026-03-27
 
 This document records the current parity status of the bundled reference implementations:
@@ -11,6 +11,8 @@ This document records the current parity status of the bundled reference impleme
 - Java
 
 The matrix reflects the **current alpha protocol surface** and the **current executable conformance harness**. It does not claim parity for future or unimplemented protocol areas.
+
+> **Wire encoding (0.2.0-alpha):** All monetary, price, rate, P&L, margin, and quantity fields are string-encoded decimals (`^-?[0-9]+(\.[0-9]+)?$`), not JSON numbers. The harness asserts this (`assertDecimalString` in `scripts/common.mjs`, plus JSON-Schema validation against `spec/core/schemas/`), and all four reference implementations emit and pass it. See [RFC-0001](../governance/rfcs/RFC-0001-string-decimal-encoding.md).
 
 ---
 

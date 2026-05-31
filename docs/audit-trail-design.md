@@ -1,6 +1,6 @@
 # APEX Protocol — Audit Trail Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -100,7 +100,7 @@ An audit record is one complete decision cycle. It begins when the runtime assem
   "intent": {
     "action": "buy",
     "instrument": "APEX:FX:EURUSD",
-    "quantity": 100000,
+    "quantity": "100000",
     "order_type": "market",
     "model_intent_at": 1711720327050
   },
@@ -123,8 +123,8 @@ An audit record is one complete decision cycle. It begins when the runtime assem
     "broker_response": {
       "order_id": "ORD-789",
       "status": "filled",
-      "fill_price": 1.0847,
-      "fill_quantity": 100000
+      "fill_price": "1.0847",
+      "fill_quantity": "100000"
     },
     "broker_response_at": 1711720327240
   }

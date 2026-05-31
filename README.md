@@ -35,10 +35,10 @@ protocol/
 
 | Layer | Scope | Status |
 |-------|-------|--------|
-| Layer 1 — Core | Session, account, orders, market data, risk | `v0.1-alpha` |
-| Layer 2 — FX | Spot FX, CFD FX, rollovers, currency exposure | `v0.1-alpha` |
-| Layer 2 — CFD | Equities, indices, corporate actions | `v0.1-alpha` |
-| Layer 2 — Crypto | Spot, perpetuals, funding rates, margin modes | `v0.1-alpha` |
+| Layer 1 — Core | Session, account, orders, market data, risk | `v0.2-alpha` |
+| Layer 2 — FX | Spot FX, CFD FX, rollovers, currency exposure | `v0.2-alpha` |
+| Layer 2 — CFD | Equities, indices, corporate actions | `v0.2-alpha` |
+| Layer 2 — Crypto | Spot, perpetuals, funding rates, margin modes | `v0.2-alpha` |
 | Layer 2 — Derivatives | Listed options, futures, greeks | `planned` |
 | Layer 2 — Fixed Income | Bonds, yield, duration | `planned` |
 
@@ -95,7 +95,7 @@ Examples: `APEX:FX:EURUSD`, `APEX:CFD:IDX:SPX500`, `APEX:CRYPTO:SPOT:BTCUSDT`
 
 APEX Protocol uses semantic versioning: `MAJOR.MINOR.PATCH`
 
-Current version: **`0.1.0-alpha`**
+Current version: **`0.2.0-alpha`**
 
 ---
 

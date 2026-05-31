@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import type { ApexErrorCategory } from "./helpers.js";
-import { nowIso } from "./helpers.js";
+import { dec, nowIso } from "./helpers.js";
 import type { ApexNotification } from "./notifications.js";
 import { killSwitchEngagedNotification } from "./notifications.js";
 
@@ -123,14 +123,19 @@ export class ReferenceTradingState {
     this.liveAsk = ask;
   }
 
+  /** Numeric mid price for internal arithmetic (wire emission uses dec()). */
+  getMid(): number {
+    return this.liveMid;
+  }
+
   getQuote() {
     return this.withMeta(this.uris.quote, {
       instrument_id: this.instrumentId,
       broker_symbol: this.brokerSymbol,
-      bid: this.liveBid,
-      ask: this.liveAsk,
-      mid: this.liveMid,
-      spread: Math.round((this.liveAsk - this.liveBid) * 100000) / 100000,
+      bid: dec(this.liveBid),
+      ask: dec(this.liveAsk),
+      mid: dec(this.liveMid),
+      spread: dec(Math.round((this.liveAsk - this.liveBid) * 100000) / 100000),
       timestamp: this.quoteStale ? new Date(Date.now() - 5_000).toISOString() : nowIso(),
       is_tradeable: true,
       market_status: "open",
@@ -152,10 +157,10 @@ export class ReferenceTradingState {
 
     const candle = {
       time: new Date(Date.now() - 60 * 1000).toISOString(),
-      open: base - 0.0006,
-      high: base + 0.0008,
-      low: base - 0.0010,
-      close: base,
+      open: dec(base - 0.0006),
+      high: dec(base + 0.0008),
+      low: dec(base - 0.0010),
+      close: dec(base),
       volume: 125000,
       complete: true,
     };
@@ -174,10 +179,10 @@ export class ReferenceTradingState {
       instrument_id: this.instrumentId,
       as_of: nowIso(),
       quote: {
-        bid: 1.0874,
-        ask: 1.0876,
-        mid: 1.0875,
-        spread: 0.0002,
+        bid: dec(1.0874),
+        ask: dec(1.0876),
+        mid: dec(1.0875),
+        spread: dec(0.0002),
       },
       returns: {
         r_1s: 0.00002,
@@ -214,13 +219,13 @@ export class ReferenceTradingState {
       account_id: this.accountId,
       account_base_currency: "USD",
       response_currency: "USD",
-      balance: 10000.0,
-      equity: 10250.0,
-      used_margin: 500.0,
-      free_margin: 9750.0,
-      margin_level_pct: 2050.0,
-      unrealised_pnl: 250.0,
-      realised_pnl_today: 0.0,
+      balance: dec(10000.0),
+      equity: dec(10250.0),
+      used_margin: dec(500.0),
+      free_margin: dec(9750.0),
+      margin_level_pct: dec(2050.0),
+      unrealised_pnl: dec(250.0),
+      realised_pnl_today: dec(0.0),
       as_of: this.riskStale ? new Date(Date.now() - 5_000).toISOString() : nowIso(),
     }, 2_000);
   }
@@ -229,24 +234,66 @@ export class ReferenceTradingState {
     return this.withMeta(this.uris.positions, {
       account_id: this.accountId,
       as_of: nowIso(),
-      positions: this.positions,
-      total_unrealised_pnl: this.positions.reduce((sum, position) => sum + position.unrealised_pnl, 0),
+      positions: this.positions.map((p) => ({
+        ...p,
+        quantity: dec(p.quantity),
+        open_price: dec(p.open_price),
+        current_price: dec(p.current_price),
+        unrealised_pnl: dec(p.unrealised_pnl),
+        used_margin: dec(p.used_margin),
+        stop_loss: p.stop_loss === undefined ? undefined : dec(p.stop_loss),
+        take_profit: p.take_profit === undefined ? undefined : dec(p.take_profit),
+        profile_data: {
+          ...p.profile_data,
+          rollover_long_daily: dec(p.profile_data.rollover_long_daily),
+          rollover_short_daily: dec(p.profile_data.rollover_short_daily),
+          accrued_rollover: dec(p.profile_data.accrued_rollover),
+          pip_value: dec(p.profile_data.pip_value),
+        },
+      })),
+      total_unrealised_pnl: dec(this.positions.reduce((sum, position) => sum + position.unrealised_pnl, 0)),
     }, 2_000);
+  }
+
+  /** Raw numeric positions for internal arithmetic (wire emission uses dec()). */
+  getRawPositions() {
+    return this.positions;
   }
 
   getOrders() {
     return this.withMeta(this.uris.orders, {
       account_id: this.accountId,
       as_of: nowIso(),
-      orders: this.orders,
+      orders: this.orders.map((o) => ({
+        ...o,
+        quantity: dec(o.quantity),
+        limit_price: o.limit_price === null ? null : dec(o.limit_price),
+        stop_price: o.stop_price === null ? null : dec(o.stop_price),
+        filled_quantity: dec(o.filled_quantity),
+        remaining_quantity: dec(o.remaining_quantity),
+        average_fill_price:
+          o.average_fill_price === null || o.average_fill_price === undefined
+            ? o.average_fill_price
+            : dec(o.average_fill_price),
+      })),
     }, 2_000);
+  }
+
+  /** Raw numeric orders for internal lookups (wire emission uses dec()). */
+  getRawOrders() {
+    return this.orders;
   }
 
   getFills() {
     return this.withMeta(this.uris.fills, {
       account_id: this.accountId,
       as_of: nowIso(),
-      fills: this.fillEvents,
+      fills: this.fillEvents.map((f) => ({
+        ...f,
+        fill_quantity: dec(f.fill_quantity as number),
+        fill_price: dec(f.fill_price as number),
+        commission: dec(f.commission as number),
+      })),
     }, 2_000);
   }
 
@@ -254,15 +301,15 @@ export class ReferenceTradingState {
     return this.withMeta(this.uris.risk, {
       account_id: this.accountId,
       as_of: this.riskStale ? new Date(Date.now() - 5_000).toISOString() : nowIso(),
-      available_margin: 9750.0,
+      available_margin: dec(9750.0),
       kill_switch_active: this.killSwitchActive,
-      max_position_size: 5000000,
+      max_position_size: dec(5000000),
       max_open_orders: 50,
-      daily_loss_limit: -1000.0,
-      daily_loss_used: -150.0,
+      daily_loss_limit: dec(-1000.0),
+      daily_loss_used: dec(-150.0),
       restricted_instruments: [],
-      margin_call_level_pct: 100,
-      stop_out_level_pct: 50,
+      margin_call_level_pct: dec(100),
+      stop_out_level_pct: dec(50),
     }, 2_000);
   }
 
@@ -283,7 +330,7 @@ export class ReferenceTradingState {
       },
       constraints: {
         kill_switch_active: this.killSwitchActive,
-        max_position_size: 5000000,
+        max_position_size: dec(5000000),
         max_open_orders: 50,
       },
     }, 5_000);

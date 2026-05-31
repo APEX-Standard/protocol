@@ -2,6 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://apexstandard.org/spec/core/schemas/order-event.schema.json",
   "title": "APEX Order Lifecycle Event Payload",
+  "$defs": {
+    "decimal": { "type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$" },
+    "decimal_nonneg": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$" }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -35,17 +39,14 @@
       "type": "string",
       "enum": ["market", "limit", "stop", "stop_limit"]
     },
-    "quantity": {
-      "type": "number",
-      "exclusiveMinimum": 0
-    },
+    "quantity": { "$ref": "#/$defs/decimal_nonneg" },
     "status": {
       "type": "string",
       "enum": ["accepted", "working", "partially_filled", "filled", "cancelled", "rejected", "expired"]
     },
-    "filled_quantity": { "type": "number", "minimum": 0 },
-    "remaining_quantity": { "type": "number", "minimum": 0 },
-    "average_fill_price": { "type": ["number", "null"] },
+    "filled_quantity": { "$ref": "#/$defs/decimal_nonneg" },
+    "remaining_quantity": { "$ref": "#/$defs/decimal_nonneg" },
+    "average_fill_price": { "anyOf": [{ "$ref": "#/$defs/decimal" }, { "type": "null" }] },
     "reason": { "type": ["string", "null"] },
     "updated_at": {
       "type": "string",

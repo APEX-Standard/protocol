@@ -6,7 +6,7 @@
 
 use serde_json::{json, Value};
 
-use crate::helpers::{apex_error, hours_from_now, next_funding_time, next_rollover_time, now_iso};
+use crate::helpers::{apex_error, dec, hours_from_now, next_funding_time, next_rollover_time, now_iso};
 use crate::models::*;
 use crate::state::{ReferenceTradingState, ACCOUNT_ID, BROKER_SYMBOL, INSTRUMENT_ID};
 
@@ -287,9 +287,12 @@ pub fn handle_position_close(
         order_id: order_payload["order_id"].as_str().unwrap_or("").to_owned(),
         position_id: position_id.to_owned(),
         status: status.to_owned(),
-        fill_price: order_payload["fill_price"].as_f64().unwrap_or(1.08755),
-        fill_quantity: close_quantity,
-        remaining_quantity: if remaining > 0.0 { remaining } else { 0.0 },
+        fill_price: dec(order_payload["fill_price"]
+            .as_str()
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(1.08755)),
+        fill_quantity: dec(close_quantity),
+        remaining_quantity: dec(if remaining > 0.0 { remaining } else { 0.0 }),
         closed_at: now_iso(),
     })
     .expect("serialize");
@@ -396,17 +399,17 @@ pub fn handle_market_details(instrument_id: &str) -> Value {
         profile: "fx".to_owned(),
         base_currency: "EUR".to_owned(),
         quote_currency: "USD".to_owned(),
-        pip_size: 0.0001,
+        pip_size: dec(0.0001),
         lot_size: 100000,
         quantity_unit: "base_units".to_owned(),
         broker_quantity_unit: "lots".to_owned(),
-        min_quantity: 1000,
-        max_quantity: 50000000,
-        quantity_step: 1000,
-        margin_rate_pct: 0.5,
-        commission_per_lot: 0.0,
+        min_quantity: dec(1000.0),
+        max_quantity: dec(50000000.0),
+        quantity_step: dec(1000.0),
+        margin_rate_pct: dec(0.5),
+        commission_per_lot: dec(0.0),
         spread_type: "variable".to_owned(),
-        typical_spread_pips: 0.8,
+        typical_spread_pips: dec(0.8),
         trading_hours: vec![TradingHours {
             day: "monday".to_owned(),
             open: "00:00".to_owned(),
@@ -428,10 +431,10 @@ pub fn handle_risk_check(quantity: f64) -> Value {
 
     serde_json::to_value(RiskCheckResponse {
         approved: true,
-        required_margin,
-        available_margin,
-        margin_after_trade: available_margin - required_margin,
-        exposure_increase: quantity,
+        required_margin: dec(required_margin),
+        available_margin: dec(available_margin),
+        margin_after_trade: dec(available_margin - required_margin),
+        exposure_increase: dec(quantity),
         warnings: vec![],
         rejection_reason: None,
     })
@@ -441,12 +444,12 @@ pub fn handle_risk_check(quantity: f64) -> Value {
 pub fn handle_risk_limits(state: &ReferenceTradingState, account_id: &str) -> Value {
     serde_json::to_value(RiskLimitsResponse {
         account_id: account_id.to_owned(),
-        max_position_size: 5000000,
+        max_position_size: dec(5000000.0),
         max_open_orders: 50,
-        daily_loss_limit: -1000.0,
-        daily_loss_used: -150.0,
-        margin_call_level_pct: 100,
-        stop_out_level_pct: 50,
+        daily_loss_limit: dec(-1000.0),
+        daily_loss_used: dec(-150.0),
+        margin_call_level_pct: dec(100.0),
+        stop_out_level_pct: dec(50.0),
         restricted_instruments: vec![],
         kill_switch_active: state
             .read_resource_payload(&crate::state::risk_uri())
@@ -474,8 +477,8 @@ pub fn handle_fx_rollover(instrument_id: &str) -> Value {
     serde_json::to_value(FxRolloverResponse {
         instrument_id: INSTRUMENT_ID.to_owned(),
         broker_symbol: BROKER_SYMBOL.to_owned(),
-        rollover_long: -0.5,
-        rollover_short: 0.3,
+        rollover_long: dec(-0.5),
+        rollover_short: dec(0.3),
         rollover_currency: "USD".to_owned(),
         rollover_per: "lot".to_owned(),
         lot_size: 100000,
@@ -512,7 +515,10 @@ pub fn handle_fx_exposure(
 
     for pos in &positions {
         if pos["instrument_id"].as_str() == Some(INSTRUMENT_ID) {
-            let qty = pos["quantity"].as_i64().unwrap_or(0);
+            let qty = pos["quantity"]
+                .as_str()
+                .and_then(|v| v.parse::<i64>().ok())
+                .unwrap_or(0);
             let side = pos["side"].as_str().unwrap_or("");
             if side == "buy" {
                 eur_net_units += qty;
@@ -545,12 +551,12 @@ pub fn handle_fx_exposure(
         base_currency: base_currency.to_owned(),
         exposures: vec![ExposureEntry {
             currency: "EUR".to_owned(),
-            net_units: eur_net_units,
+            net_units: dec(eur_net_units as f64),
             net_direction: net_direction.to_owned(),
-            value_in_base,
+            value_in_base: dec(value_in_base),
             contributing_positions,
         }],
-        total_gross_exposure: value_in_base.abs(),
+        total_gross_exposure: dec(value_in_base.abs()),
         as_of: now_iso(),
     })
     .expect("serialize")
@@ -582,8 +588,8 @@ pub fn handle_fx_conversion(from_currency: &str, to_currency: &str, amount: f64)
         Some(rate) => serde_json::to_value(FxConversionResponse {
             from_currency: from_currency.to_owned(),
             to_currency: to_currency.to_owned(),
-            rate: (rate * 10_000_000.0).round() / 10_000_000.0,
-            converted_amount: (amount * rate * 100.0).round() / 100.0,
+            rate: dec((rate * 10_000_000.0).round() / 10_000_000.0),
+            converted_amount: dec((amount * rate * 100.0).round() / 100.0),
             timestamp: now_iso(),
         })
         .expect("serialize"),
@@ -658,14 +664,14 @@ pub fn handle_crypto_funding_rate(instrument_id: &str) -> Value {
     serde_json::to_value(CryptoFundingRateResponse {
         instrument_id: PERP_INSTRUMENT_ID.to_owned(),
         broker_symbol: PERP_BROKER_SYMBOL.to_owned(),
-        current_rate: 0.0001,
-        current_rate_annualised: 0.1095,
-        predicted_rate: 0.00012,
+        current_rate: dec(0.0001),
+        current_rate_annualised: dec(0.1095),
+        predicted_rate: dec(0.00012),
         funding_interval_hours: 8,
         next_funding_time: funding_time,
         countdown_seconds: countdown,
-        index_price: 50000.00,
-        mark_price: 50050.00,
+        index_price: dec(50000.00),
+        mark_price: dec(50050.00),
         timestamp: now_iso(),
     })
     .expect("serialize")
@@ -704,12 +710,12 @@ pub fn handle_crypto_liquidation_estimate(
     serde_json::to_value(CryptoLiquidationEstimateResponse {
         instrument_id: PERP_INSTRUMENT_ID.to_owned(),
         side: side.to_owned(),
-        entry_price,
-        liquidation_price,
-        margin_required: (margin_required * 100.0).round() / 100.0,
-        maintenance_margin: (maintenance_margin * 100.0).round() / 100.0,
+        entry_price: dec(entry_price),
+        liquidation_price: dec(liquidation_price),
+        margin_required: dec((margin_required * 100.0).round() / 100.0),
+        maintenance_margin: dec((maintenance_margin * 100.0).round() / 100.0),
         margin_currency: "USDT".to_owned(),
-        distance_pct,
+        distance_pct: dec(distance_pct),
         warnings: vec![],
     })
     .expect("serialize")
@@ -751,7 +757,7 @@ pub fn handle_crypto_transfer(
         from_wallet: from_wallet.to_owned(),
         to_wallet: to_wallet.to_owned(),
         currency: currency.to_owned(),
-        amount,
+        amount: dec(amount),
         status: "completed".to_owned(),
         rejection_reason: None,
         completed_at: now_iso(),

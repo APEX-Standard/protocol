@@ -1,6 +1,6 @@
 # APEX Protocol — Layer 1: Core Specification
 
-**Version:** `0.1.0-alpha`  
+**Version:** `0.2.0-alpha`  
 **Status:** Draft — open for comment  
 **Last Updated:** 2026-03-27
 
@@ -63,7 +63,7 @@ During the MCP `initialize` handshake, the server should include the APEX protoc
   "serverInfo": {
     "name": "broker-name",
     "version": "1.0.0",
-    "apex_version": "0.1.0-alpha"
+    "apex_version": "0.2.0-alpha"
   }
 }
 ```
@@ -114,13 +114,13 @@ Query the full capability manifest of a connected broker. Returns all supported 
 **Output:**
 ```json
 {
-  "apex_version": "0.1.0",
+  "apex_version": "0.2.0",
   "broker_id": "string",
   "core_tools": ["apex.session.*", "apex.account.*", "apex.order.*", "apex.market.*", "apex.risk.*"],
   "profiles": {
-    "fx": "0.1.0",
-    "cfd": "0.1.0",
-    "crypto": "0.1.0"
+    "fx": "0.2.0",
+    "cfd": "0.2.0",
+    "crypto": "0.2.0"
   },
   "vendor_extensions": {
     "namespace": "fxcm",
@@ -195,13 +195,13 @@ Current account state — balances, margin utilisation, equity.
   "account_id": "string",
   "account_base_currency": "USD",
   "response_currency": "USD",
-  "balance": 10000.00,
-  "equity": 10250.00,
-  "used_margin": 500.00,
-  "free_margin": 9750.00,
-  "margin_level_pct": 2050.00,
-  "unrealised_pnl": 250.00,
-  "realised_pnl_today": 0.00,
+  "balance": "10000.00",
+  "equity": "10250.00",
+  "used_margin": "500.00",
+  "free_margin": "9750.00",
+  "margin_level_pct": "2050.00",
+  "unrealised_pnl": "250.00",
+  "realised_pnl_today": "0.00",
   "as_of": "ISO8601"
 }
 ```
@@ -230,22 +230,22 @@ All open positions with live P&L.
       "instrument_id": "APEX:FX:EURUSD",
       "broker_symbol": "EURUSD",
       "side": "buy|sell",
-      "quantity": 100000,
+      "quantity": "100000",
       "quantity_unit": "base_units|shares|contracts",
       "broker_quantity": "1.0",
       "broker_quantity_unit": "lots",
-      "open_price": 1.0850,
-      "current_price": 1.0875,
-      "unrealised_pnl": 250.00,
+      "open_price": "1.0850",
+      "current_price": "1.0875",
+      "unrealised_pnl": "250.00",
       "unrealised_pnl_currency": "USD",
-      "used_margin": 500.00,
+      "used_margin": "500.00",
       "open_time": "ISO8601",
-      "stop_loss": 1.0800,
-      "take_profit": 1.1000,
+      "stop_loss": "1.0800",
+      "take_profit": "1.1000",
       "profile_data": {}   // Profile-specific fields appended here
     }
   ],
-  "total_unrealised_pnl": 250.00,
+  "total_unrealised_pnl": "250.00",
   "as_of": "ISO8601"
 }
 ```
@@ -276,14 +276,14 @@ Known orders and their current lifecycle state.
       "broker_symbol": "EURUSD",
       "side": "buy|sell",
       "order_type": "limit",
-      "quantity": 100000,
+      "quantity": "100000",
       "quantity_unit": "base_units|shares|contracts",
-      "limit_price": 1.0800,
+      "limit_price": "1.0800",
       "stop_price": null,
       "time_in_force": "GTC",
       "status": "working|partially_filled|filled|cancelled|rejected|expired",
-      "filled_quantity": 0,
-      "remaining_quantity": 100000,
+      "filled_quantity": "0",
+      "remaining_quantity": "100000",
       "created_at": "ISO8601",
       "updated_at": "ISO8601"
     }
@@ -319,12 +319,12 @@ Closed trades and funding events.
       "event_subtype": "fill|rollover|funding_fee|commission|deposit|withdrawal|dividend_adjustment|split|other",
       "instrument_id": "APEX:FX:EURUSD",
       "side": "buy|sell",
-      "quantity": 100000,
-      "open_price": 1.0850,
-      "close_price": 1.0900,
-      "pnl": 500.00,
+      "quantity": "100000",
+      "open_price": "1.0850",
+      "close_price": "1.0900",
+      "pnl": "500.00",
       "pnl_currency": "USD",
-      "commission": -7.00,
+      "commission": "-7.00",
       "open_time": "ISO8601",
       "close_time": "ISO8601"
     }
@@ -364,7 +364,7 @@ Unified order entry. The canonical order object — composable by asset class pr
     "broker_symbol": "EURUSD",
     "side": "buy|sell",
     "order_type": "market|limit|stop|stop_limit",
-    "quantity": 100000,
+    "quantity": "100000",
     "quantity_unit": "base_units|shares|contracts",
     "time_in_force": "GTC|IOC|FOK|DAY",
 
@@ -373,11 +373,11 @@ Unified order entry. The canonical order object — composable by asset class pr
 
     "stop_loss": {
       "type": "price|pips|percent",
-      "value": 1.0800
+      "value": "1.0800"
     },
     "take_profit": {
       "type": "price|pips|percent",
-      "value": 1.1200
+      "value": "1.1200"
     },
     "trailing_stop": {
       "type": "pips|percent",
@@ -400,9 +400,9 @@ Unified order entry. The canonical order object — composable by asset class pr
   "order_id": "string",
   "client_order_id": "string",
   "status": "accepted|working|rejected|filled|partially_filled",
-  "fill_price": 1.0875,
-  "fill_quantity": 100000,
-  "remaining_quantity": 0,
+  "fill_price": "1.0875",
+  "fill_quantity": "100000",
+  "remaining_quantity": "0",
   "position_id": "string",   // Present when the order immediately results in an open position
   "rejection_reason": null,
   "created_at": "ISO8601"
@@ -436,8 +436,8 @@ Amend a working order or an open position's protection settings.
     "limit_price": null,
     "stop_price": null,
     "quantity": null,
-    "stop_loss": { "type": "price", "value": 1.0810 },
-    "take_profit": { "type": "price", "value": 1.1100 },
+    "stop_loss": { "type": "price", "value": "1.0810" },
+    "take_profit": { "type": "price", "value": "1.1100" },
     "trailing_stop": null
   }
 }
@@ -509,7 +509,7 @@ Close an open position fully or partially. This is a convenience tool equivalent
 |-------|------|----------|-------------|
 | `account_id` | string | yes | Account ID |
 | `position_id` | string | yes | Position to close |
-| `quantity` | number | no | Partial close quantity. If omitted, close the full position. |
+| `quantity` | string (decimal) | no | Partial close quantity. If omitted, close the full position. |
 
 **Output:**
 
@@ -518,9 +518,9 @@ Close an open position fully or partially. This is a convenience tool equivalent
 | `order_id` | string | The order ID of the closing order |
 | `position_id` | string | The position that was closed |
 | `status` | string | `filled`, `partially_filled`, or `rejected` |
-| `fill_price` | number | Execution price |
-| `fill_quantity` | number | Quantity closed |
-| `remaining_quantity` | number | Remaining position quantity (0 if fully closed) |
+| `fill_price` | string (decimal) | Execution price |
+| `fill_quantity` | string (decimal) | Quantity closed |
+| `remaining_quantity` | string (decimal) | Remaining position quantity (0 if fully closed) |
 | `rejection_reason` | string | Reason if rejected |
 | `closed_at` | string | ISO 8601 timestamp |
 
@@ -545,10 +545,10 @@ Current bid/ask/mid for an instrument.
 {
   "instrument_id": "APEX:FX:EURUSD",
   "broker_symbol": "EURUSD",
-  "bid": 1.08740,
-  "ask": 1.08760,
-  "mid": 1.08750,
-  "spread": 0.00020,
+  "bid": "1.08740",
+  "ask": "1.08760",
+  "mid": "1.08750",
+  "spread": "0.00020",
   "timestamp": "ISO8601",
   "is_tradeable": true,
   "market_status": "open|closed|pre_market|post_market"
@@ -580,10 +580,10 @@ OHLCV candle data.
   "candles": [
     {
       "time": "ISO8601",
-      "open": 1.0850,
-      "high": 1.0890,
-      "low": 1.0840,
-      "close": 1.0875,
+      "open": "1.0850",
+      "high": "1.0890",
+      "low": "1.0840",
+      "close": "1.0875",
       "volume": 125000,
       "complete": true
     }
@@ -643,17 +643,17 @@ Full contract specification for an instrument.
   "profile": "fx",
   "base_currency": "EUR",
   "quote_currency": "USD",
-  "pip_size": 0.0001,
+  "pip_size": "0.0001",
   "lot_size": 100000,
   "quantity_unit": "base_units",
   "broker_quantity_unit": "lots",
-  "min_quantity": 1000,
-  "max_quantity": 50000000,
-  "quantity_step": 1000,
-  "margin_rate_pct": 0.5,
-  "commission_per_lot": 0.0,
+  "min_quantity": "1000",
+  "max_quantity": "50000000",
+  "quantity_step": "1000",
+  "margin_rate_pct": "0.5",
+  "commission_per_lot": "0.0",
   "spread_type": "variable|fixed",
-  "typical_spread_pips": 0.8,
+  "typical_spread_pips": "0.8",
   "trading_hours": [
     { "day": "monday", "open": "00:00", "close": "23:59", "timezone": "UTC" }
   ],
@@ -677,7 +677,7 @@ Pre-trade margin and exposure check. Agents should call this before placing larg
     "instrument_id": "APEX:FX:EURUSD",
     "side": "buy",
     "order_type": "market",
-    "quantity": 500000
+    "quantity": "500000"
   }
 }
 ```
@@ -686,10 +686,10 @@ Pre-trade margin and exposure check. Agents should call this before placing larg
 ```json
 {
   "approved": true,
-  "required_margin": 2500.00,
-  "available_margin": 9750.00,
-  "margin_after_trade": 7250.00,
-  "exposure_increase": 500000,
+  "required_margin": "2500.00",
+  "available_margin": "9750.00",
+  "margin_after_trade": "7250.00",
+  "exposure_increase": "500000",
   "warnings": [],
   "rejection_reason": null
 }
@@ -707,12 +707,12 @@ Current account-level risk limits and utilisation.
 ```json
 {
   "account_id": "string",
-  "max_position_size": 5000000,
+  "max_position_size": "5000000",
   "max_open_orders": 50,
-  "daily_loss_limit": -1000.00,
-  "daily_loss_used": -150.00,
-  "margin_call_level_pct": 100,
-  "stop_out_level_pct": 50,
+  "daily_loss_limit": "-1000.00",
+  "daily_loss_used": "-150.00",
+  "margin_call_level_pct": "100",
+  "stop_out_level_pct": "50",
   "restricted_instruments": [],
   "kill_switch_active": false
 }
@@ -856,10 +856,10 @@ apex://market/quote/APEX:FX:EURUSD
 {
   "instrument_id": "APEX:FX:EURUSD",
   "broker_symbol": "EURUSD",
-  "bid": 1.08740,
-  "ask": 1.08760,
-  "mid": 1.08750,
-  "spread": 0.00020,
+  "bid": "1.08740",
+  "ask": "1.08760",
+  "mid": "1.08750",
+  "spread": "0.00020",
   "timestamp": "ISO8601",
   "is_tradeable": true,
   "market_status": "open|closed|pre_market|post_market",
@@ -896,10 +896,10 @@ apex://market/candles/APEX:FX:EURUSD?timeframe=M1&limit=200
   "candles": [
     {
       "time": "ISO8601",
-      "open": 1.0850,
-      "high": 1.0890,
-      "low": 1.0840,
-      "close": 1.0875,
+      "open": "1.0850",
+      "high": "1.0890",
+      "low": "1.0840",
+      "close": "1.0875",
       "volume": 125000,
       "complete": true
     }
@@ -938,10 +938,10 @@ apex://market/features/APEX:FX:EURUSD
   "sequence": 1,
   "stale_after_ms": 2000,
   "quote": {
-    "bid": 1.08740,
-    "ask": 1.08760,
-    "mid": 1.08750,
-    "spread": 0.00020
+    "bid": "1.08740",
+    "ask": "1.08760",
+    "mid": "1.08750",
+    "spread": "0.00020"
   },
   "returns": {
     "r_1s": 0.00002,
@@ -1051,7 +1051,7 @@ apex://agent/decision-context/APEX:FX:EURUSD
   },
   "constraints": {
     "kill_switch_active": false,
-    "max_position_size": 5000000,
+    "max_position_size": "5000000",
     "max_open_orders": 50
   }
 }
@@ -1156,9 +1156,9 @@ Each mandatory notification must include a `params` object following the event e
     "payload": {
       "order_id": "ord_abc123",
       "side": "buy",
-      "fill_price": 1.08755,
-      "fill_quantity": 100000,
-      "commission": -0.5,
+      "fill_price": "1.08755",
+      "fill_quantity": "100000",
+      "commission": "-0.5",
       "position_id": "pos_001"
     }
   }
@@ -1180,9 +1180,9 @@ Each mandatory notification must include a `params` object following the event e
     "payload": {
       "order_id": "ord_abc123",
       "side": "buy",
-      "fill_price": 1.08760,
-      "fill_quantity": 50000,
-      "remaining_quantity": 50000
+      "fill_price": "1.08760",
+      "fill_quantity": "50000",
+      "remaining_quantity": "50000"
     }
   }
 }
@@ -1224,10 +1224,10 @@ Each mandatory notification must include a `params` object following the event e
     "payload": {
       "instrument_id": "APEX:FX:EURUSD",
       "timeframe": "M1",
-      "open": 1.08750,
-      "high": 1.08780,
-      "low": 1.08740,
-      "close": 1.08765,
+      "open": "1.08750",
+      "high": "1.08780",
+      "low": "1.08740",
+      "close": "1.08765",
       "volume": 1500000,
       "complete": true
     }
@@ -1317,9 +1317,9 @@ Every APEX notification follows this envelope structure. The envelope structure 
     "payload": {
       "order_id": "ord_abc123",
       "side": "buy",
-      "fill_price": 1.08755,
-      "fill_quantity": 100000,
-      "commission": -0.5,
+      "fill_price": "1.08755",
+      "fill_quantity": "100000",
+      "commission": "-0.5",
       "position_id": "pos_001"
     }
   }
@@ -1354,11 +1354,11 @@ For order lifecycle notifications, `payload` must include:
   "instrument_id": "APEX:FX:EURUSD",
   "side": "buy",
   "order_type": "market",
-  "quantity": 100000,
+  "quantity": "100000",
   "status": "accepted|working|partially_filled|filled|cancelled|rejected|expired",
-  "filled_quantity": 10000,
-  "remaining_quantity": 0,
-  "average_fill_price": 1.08755,
+  "filled_quantity": "10000",
+  "remaining_quantity": "0",
+  "average_fill_price": "1.08755",
   "reason": null,
   "updated_at": "ISO8601"
 }
@@ -1375,9 +1375,9 @@ For fill notifications, `payload` must include:
   "account_id": "string",
   "instrument_id": "APEX:FX:EURUSD",
   "side": "buy|sell",
-  "fill_quantity": 10000,
-  "fill_price": 1.08755,
-  "commission": -0.50,
+  "fill_quantity": "10000",
+  "fill_price": "1.08755",
+  "commission": "-0.50",
   "commission_currency": "USD",
   "liquidity_flag": "maker|taker|unknown",
   "position_id": "string|null",

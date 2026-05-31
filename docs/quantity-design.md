@@ -1,6 +1,6 @@
 # APEX Protocol — Quantity Normalization Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -65,7 +65,7 @@ Why contracts? Because index and commodity derivatives have no natural "share" o
 APEX carries two quantity representations:
 
 **Canonical track** — what the protocol uses:
-- `quantity` — the numeric size in canonical units
+- `quantity` — the size in canonical units, encoded as a string-decimal (`^-?[0-9]+(\.[0-9]+)?$`)
 - `quantity_unit` — one of `base_units`, `shares`, `contracts`
 
 **Display track** — what the broker shows humans:
@@ -99,7 +99,7 @@ The agent sends:
     "instrument_id": "APEX:FX:EURUSD",
     "side": "buy",
     "order_type": "market",
-    "quantity": 100000,
+    "quantity": "100000",
     "quantity_unit": "base_units"
   }
 }
@@ -111,9 +111,9 @@ Broker A knows from its instrument configuration that 1 standard lot = 100,000 b
 {
   "order_id": "ord_a_001",
   "status": "filled",
-  "fill_price": 1.0875,
-  "fill_quantity": 100000,
-  "remaining_quantity": 0
+  "fill_price": "1.0875",
+  "fill_quantity": "100000",
+  "remaining_quantity": "0"
 }
 ```
 
@@ -124,11 +124,11 @@ The position read model includes both tracks:
   "position_id": "pos_a_001",
   "instrument_id": "APEX:FX:EURUSD",
   "side": "buy",
-  "quantity": 100000,
+  "quantity": "100000",
   "quantity_unit": "base_units",
   "broker_quantity": "1.0",
   "broker_quantity_unit": "lots",
-  "open_price": 1.0875
+  "open_price": "1.0875"
 }
 ```
 
@@ -143,7 +143,7 @@ The agent sends the identical request:
     "instrument_id": "APEX:FX:EURUSD",
     "side": "buy",
     "order_type": "market",
-    "quantity": 100000,
+    "quantity": "100000",
     "quantity_unit": "base_units"
   }
 }
@@ -155,9 +155,9 @@ Broker B uses units natively. 100,000 base units = 100,000 units in the broker's
 {
   "order_id": "ord_b_001",
   "status": "filled",
-  "fill_price": 1.0875,
-  "fill_quantity": 100000,
-  "remaining_quantity": 0
+  "fill_price": "1.0875",
+  "fill_quantity": "100000",
+  "remaining_quantity": "0"
 }
 ```
 
@@ -168,11 +168,11 @@ The position includes the display track:
   "position_id": "pos_b_001",
   "instrument_id": "APEX:FX:EURUSD",
   "side": "buy",
-  "quantity": 100000,
+  "quantity": "100000",
   "quantity_unit": "base_units",
   "broker_quantity": "100000",
   "broker_quantity_unit": "units",
-  "open_price": 1.0875
+  "open_price": "1.0875"
 }
 ```
 
@@ -214,9 +214,9 @@ The APEX Instrument Registry carries the per-broker, per-instrument mapping that
   "broker_symbol": "EUR/USD",
   "canonical_quantity_unit": "base_units",
   "broker_quantity_unit": "units",
-  "min_quantity": 1000,
-  "quantity_step": 1000,
-  "margin_rate_pct": 0.5
+  "min_quantity": "1000",
+  "quantity_step": "1000",
+  "margin_rate_pct": "0.5"
 }
 ```
 
@@ -226,9 +226,9 @@ The APEX Instrument Registry carries the per-broker, per-instrument mapping that
   "broker_symbol": "EURUSD",
   "canonical_quantity_unit": "base_units",
   "broker_quantity_unit": "lots",
-  "min_quantity": 0.01,
-  "quantity_step": 0.01,
-  "margin_rate_pct": 0.5
+  "min_quantity": "0.01",
+  "quantity_step": "0.01",
+  "margin_rate_pct": "0.5"
 }
 ```
 
@@ -268,9 +268,9 @@ If the agent sends a quantity that violates these constraints, the broker reject
     "data": {
       "apex_code": "APEX_4012",
       "category": "validation",
-      "requested_quantity": 500,
-      "min_quantity": 1000,
-      "quantity_step": 1000,
+      "requested_quantity": "500",
+      "min_quantity": "1000",
+      "quantity_step": "1000",
       "quantity_unit": "base_units"
     }
   }

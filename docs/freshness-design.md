@@ -1,6 +1,6 @@
 # APEX Protocol — Freshness Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -104,8 +104,8 @@ Concrete scenario. The agent is subscribed to `apex://market/quote/APEX:FX:EURUS
 
 ```json
 {
-  "bid": 1.08750,
-  "ask": 1.08760,
+  "bid": "1.08750",
+  "ask": "1.08760",
   "timestamp": "2026-03-27T14:30:00.100Z",
   "as_of": "2026-03-27T14:30:00.050Z",
   "sequence": 4871,
@@ -125,8 +125,8 @@ The reference timestamp is `as_of`: `14:30:00.050`. The staleness deadline is `1
 
 ```json
 {
-  "bid": 1.08755,
-  "ask": 1.08765,
+  "bid": "1.08755",
+  "ask": "1.08765",
   "timestamp": "2026-03-27T14:30:01.200Z",
   "as_of": "2026-03-27T14:30:01.150Z",
   "sequence": 4872,

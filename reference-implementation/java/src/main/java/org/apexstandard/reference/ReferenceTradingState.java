@@ -52,25 +52,30 @@ final class ReferenceTradingState {
         this.resourceUpdateCallback = callback;
     }
 
+    /** Numeric position quantity retained for arithmetic (close, exposure). */
+    private static final double POSITION_QUANTITY = 100000.0;
+
     private final List<ProtocolModels.Position> positions = List.of(
         new ProtocolModels.Position(
             "pos_001",
             INSTRUMENT_ID,
             BROKER_SYMBOL,
             "buy",
-            100000,
+            ProtocolModels.dec(POSITION_QUANTITY),
             "base_units",
             "1.0",
             "lots",
-            1.0850,
-            1.0875,
-            250.00,
+            ProtocolModels.dec(1.0850),
+            ProtocolModels.dec(1.0875),
+            ProtocolModels.dec(250.00),
             "USD",
-            500.00,
+            ProtocolModels.dec(500.00),
             Instant.now().minus(1, ChronoUnit.HOURS).toString(),
-            1.0800,
-            1.1000,
-            new ProtocolModels.PositionProfileData(-2.50, 1.80, -7.50, 10.00, "USD")
+            ProtocolModels.dec(1.0800),
+            ProtocolModels.dec(1.1000),
+            new ProtocolModels.PositionProfileData(
+                ProtocolModels.dec(-2.50), ProtocolModels.dec(1.80),
+                ProtocolModels.dec(-7.50), ProtocolModels.dec(10.00), "USD")
         )
     );
 
@@ -126,19 +131,19 @@ final class ReferenceTradingState {
             ACCOUNT_ID,
             "USD",
             currency == null || currency.isBlank() ? "USD" : currency,
-            10000.00,
-            10250.00,
-            500.00,
-            9750.00,
-            2050.00,
-            250.00,
-            0.00,
+            ProtocolModels.dec(10000.00),
+            ProtocolModels.dec(10250.00),
+            ProtocolModels.dec(500.00),
+            ProtocolModels.dec(9750.00),
+            ProtocolModels.dec(2050.00),
+            ProtocolModels.dec(250.00),
+            ProtocolModels.dec(0.00),
             (riskStale ? Instant.now().minusSeconds(5) : Instant.now()).toString()
         );
     }
 
     synchronized ProtocolModels.AccountPositionsResponse positionsResponse() {
-        return new ProtocolModels.AccountPositionsResponse(positions, 250.00, Instant.now().toString());
+        return new ProtocolModels.AccountPositionsResponse(positions, ProtocolModels.dec(250.00), Instant.now().toString());
     }
 
     synchronized ProtocolModels.OrderListResponse ordersResponse() {
@@ -153,10 +158,10 @@ final class ReferenceTradingState {
         return new ProtocolModels.MarketQuoteResponse(
             instrumentId == null || instrumentId.isBlank() ? INSTRUMENT_ID : instrumentId,
             brokerSymbol == null || brokerSymbol.isBlank() ? BROKER_SYMBOL : brokerSymbol,
-            bid,
-            ask,
-            mid,
-            spread,
+            ProtocolModels.dec(bid),
+            ProtocolModels.dec(ask),
+            ProtocolModels.dec(mid),
+            ProtocolModels.dec(spread),
             (quoteStale ? Instant.now().minusSeconds(5) : Instant.now()).toString(),
             true,
             "open"
@@ -186,15 +191,17 @@ final class ReferenceTradingState {
         }
         orderRecord.put("side", side);
         orderRecord.put("order_type", orderType);
-        orderRecord.put("quantity", quantity);
+        orderRecord.put("quantity", ProtocolModels.dec(quantity));
         orderRecord.put("quantity_unit", ToolRegistry.argStr(order, "quantity_unit", "base_units"));
-        orderRecord.put("limit_price", order.get("limit_price"));
-        orderRecord.put("stop_price", order.get("stop_price"));
+        orderRecord.put("limit_price", order.containsKey("limit_price") && order.get("limit_price") != null
+            ? ProtocolModels.dec(ToolRegistry.argDouble(order, "limit_price", 0)) : null);
+        orderRecord.put("stop_price", order.containsKey("stop_price") && order.get("stop_price") != null
+            ? ProtocolModels.dec(ToolRegistry.argDouble(order, "stop_price", 0)) : null);
         orderRecord.put("time_in_force", ToolRegistry.argStr(order, "time_in_force", "GTC"));
         orderRecord.put("status", partialFill ? "partially_filled" : market ? "filled" : "working");
-        orderRecord.put("filled_quantity", market ? fillQuantity : 0.0);
-        orderRecord.put("remaining_quantity", market ? remainingQuantity : quantity);
-        orderRecord.put("average_fill_price", market ? 1.08755 : null);
+        orderRecord.put("filled_quantity", ProtocolModels.dec(market ? fillQuantity : 0.0));
+        orderRecord.put("remaining_quantity", ProtocolModels.dec(market ? remainingQuantity : quantity));
+        orderRecord.put("average_fill_price", market ? ProtocolModels.dec(1.08755) : null);
         orderRecord.put("reason", null);
         orderRecord.put("created_at", now);
         orderRecord.put("updated_at", now);
@@ -208,9 +215,9 @@ final class ReferenceTradingState {
             fill.put("account_id", ACCOUNT_ID);
             fill.put("instrument_id", orderRecord.get("instrument_id"));
             fill.put("side", orderRecord.get("side"));
-            fill.put("fill_quantity", fillQuantity);
-            fill.put("fill_price", 1.08755);
-            fill.put("commission", -0.5);
+            fill.put("fill_quantity", ProtocolModels.dec(fillQuantity));
+            fill.put("fill_price", ProtocolModels.dec(1.08755));
+            fill.put("commission", ProtocolModels.dec(-0.5));
             fill.put("commission_currency", "USD");
             fill.put("liquidity_flag", "taker");
             fill.put("position_id", "pos_001");
@@ -224,9 +231,9 @@ final class ReferenceTradingState {
             orderId,
             orderRecord.get("client_order_id"),
             partialFill ? "partially_filled" : market ? "filled" : "working",
-            market ? 1.08755 : null,
-            market ? fillQuantity : 0.0,
-            market ? remainingQuantity : quantity,
+            market ? ProtocolModels.dec(1.08755) : null,
+            ProtocolModels.dec(market ? fillQuantity : 0.0),
+            ProtocolModels.dec(market ? remainingQuantity : quantity),
             market ? "pos_001" : null,
             null,
             now
@@ -297,7 +304,7 @@ final class ReferenceTradingState {
         for (Map<String, Object> order : orders) {
             if (orderId.equals(order.get("order_id"))) {
                 order.put("status", "cancelled");
-                order.put("remaining_quantity", 0.0);
+                order.put("remaining_quantity", ProtocolModels.dec(0.0));
                 order.put("updated_at", Instant.now().toString());
             }
         }
@@ -319,11 +326,12 @@ final class ReferenceTradingState {
             return null;
         }
 
-        double closeQuantity = (requestedQuantity != null) ? requestedQuantity : pos.quantity();
-        if (closeQuantity > pos.quantity()) {
-            closeQuantity = pos.quantity();
+        double posQuantity = Double.parseDouble(pos.quantity());
+        double closeQuantity = (requestedQuantity != null) ? requestedQuantity : posQuantity;
+        if (closeQuantity > posQuantity) {
+            closeQuantity = posQuantity;
         }
-        double remainingQuantity = pos.quantity() - closeQuantity;
+        double remainingQuantity = posQuantity - closeQuantity;
         boolean fullClose = remainingQuantity <= 0;
 
         // The closing order is in the opposite direction
@@ -342,15 +350,15 @@ final class ReferenceTradingState {
         orderRecord.put("broker_symbol", pos.broker_symbol());
         orderRecord.put("side", closeSide);
         orderRecord.put("order_type", "market");
-        orderRecord.put("quantity", closeQuantity);
+        orderRecord.put("quantity", ProtocolModels.dec(closeQuantity));
         orderRecord.put("quantity_unit", pos.quantity_unit());
         orderRecord.put("limit_price", null);
         orderRecord.put("stop_price", null);
         orderRecord.put("time_in_force", "IOC");
         orderRecord.put("status", "filled");
-        orderRecord.put("filled_quantity", closeQuantity);
-        orderRecord.put("remaining_quantity", 0.0);
-        orderRecord.put("average_fill_price", fillPrice);
+        orderRecord.put("filled_quantity", ProtocolModels.dec(closeQuantity));
+        orderRecord.put("remaining_quantity", ProtocolModels.dec(0.0));
+        orderRecord.put("average_fill_price", ProtocolModels.dec(fillPrice));
         orderRecord.put("reason", "position_close");
         orderRecord.put("created_at", now);
         orderRecord.put("updated_at", now);
@@ -363,9 +371,9 @@ final class ReferenceTradingState {
         fill.put("account_id", ACCOUNT_ID);
         fill.put("instrument_id", pos.instrument_id());
         fill.put("side", closeSide);
-        fill.put("fill_quantity", closeQuantity);
-        fill.put("fill_price", fillPrice);
-        fill.put("commission", -0.5);
+        fill.put("fill_quantity", ProtocolModels.dec(closeQuantity));
+        fill.put("fill_price", ProtocolModels.dec(fillPrice));
+        fill.put("commission", ProtocolModels.dec(-0.5));
         fill.put("commission_currency", "USD");
         fill.put("liquidity_flag", "taker");
         fill.put("position_id", positionId);
@@ -378,9 +386,9 @@ final class ReferenceTradingState {
             orderId,
             positionId,
             fullClose ? "filled" : "partially_filled",
-            fillPrice,
-            closeQuantity,
-            remainingQuantity,
+            ProtocolModels.dec(fillPrice),
+            ProtocolModels.dec(closeQuantity),
+            ProtocolModels.dec(remainingQuantity),
             now
         );
     }
@@ -406,10 +414,10 @@ final class ReferenceTradingState {
                 yield envelope(uri, Map.of(
                     "instrument_id", INSTRUMENT_ID,
                     "broker_symbol", BROKER_SYMBOL,
-                    "bid", bid,
-                    "ask", ask,
-                    "mid", mid,
-                    "spread", spread,
+                    "bid", ProtocolModels.dec(bid),
+                    "ask", ProtocolModels.dec(ask),
+                    "mid", ProtocolModels.dec(mid),
+                    "spread", ProtocolModels.dec(spread),
                     "timestamp", (quoteStale ? Instant.now().minusSeconds(5) : Instant.now()).toString(),
                     "is_tradeable", true,
                     "market_status", "open"
@@ -421,7 +429,7 @@ final class ReferenceTradingState {
             case FEATURES_URI -> envelope(uri, Map.of(
                 "instrument_id", INSTRUMENT_ID,
                 "as_of", (riskStale ? Instant.now().minusSeconds(5) : Instant.now()).toString(),
-                "quote", Map.of("bid", liveBid, "ask", liveAsk, "mid", liveMid, "spread", Math.round((liveAsk - liveBid) * 100000.0) / 100000.0),
+                "quote", Map.of("bid", ProtocolModels.dec(liveBid), "ask", ProtocolModels.dec(liveAsk), "mid", ProtocolModels.dec(liveMid), "spread", ProtocolModels.dec(Math.round((liveAsk - liveBid) * 100000.0) / 100000.0)),
                 "returns", Map.of("r_1s", 0.00002, "r_5s", 0.00005, "r_1m", 0.0008),
                 "volatility", Map.of("rv_1m", 0.12, "rv_5m", 0.37, "rv_30m", 0.55),
                 "book", Map.of("top_level_imbalance", 0.21, "depth_imbalance", 0.18, "microprice", 1.08753),
@@ -434,23 +442,23 @@ final class ReferenceTradingState {
                 "account_id", ACCOUNT_ID,
                 "as_of", (riskStale ? Instant.now().minusSeconds(5) : Instant.now()).toString(),
                 "positions", positions,
-                "total_unrealised_pnl", 250.00
+                "total_unrealised_pnl", ProtocolModels.dec(250.00)
             ), 2000);
             case ORDERS_URI -> envelope(uri, Map.of("account_id", ACCOUNT_ID, "as_of", Instant.now().toString(), "orders", List.copyOf(orders)), 2000);
             case FILLS_URI -> envelope(uri, Map.of("account_id", ACCOUNT_ID, "as_of", Instant.now().toString(), "fills", List.copyOf(fills)), 2000);
             case RISK_URI -> envelope(uri, new LinkedHashMap<>(Map.of(
                 "account_id", ACCOUNT_ID,
                 "as_of", Instant.now().toString(),
-                "available_margin", 9750.0,
+                "available_margin", ProtocolModels.dec(9750.0),
                 "kill_switch_active", killSwitchActive,
-                "max_position_size", 5000000,
+                "max_position_size", ProtocolModels.dec(5000000),
                 "max_open_orders", 50,
-                "daily_loss_limit", -1000.0,
-                "daily_loss_used", -150.0,
+                "daily_loss_limit", ProtocolModels.dec(-1000.0),
+                "daily_loss_used", ProtocolModels.dec(-150.0),
                 "restricted_instruments", List.of()
             )) {{
-                put("margin_call_level_pct", 100);
-                put("stop_out_level_pct", 50);
+                put("margin_call_level_pct", ProtocolModels.dec(100));
+                put("stop_out_level_pct", ProtocolModels.dec(50));
             }}, 2000);
             case DECISION_CONTEXT_URI -> envelope(uri, new LinkedHashMap<>(Map.of(
                 "instrument_id", INSTRUMENT_ID,
@@ -466,7 +474,7 @@ final class ReferenceTradingState {
                     "orders_resource", ORDERS_URI,
                     "risk_resource", RISK_URI
                 ),
-                "constraints", Map.of("kill_switch_active", killSwitchActive, "max_position_size", 5000000, "max_open_orders", 50)
+                "constraints", Map.of("kill_switch_active", killSwitchActive, "max_position_size", ProtocolModels.dec(5000000), "max_open_orders", 50)
             )), 5000);
             default -> null;
         };
@@ -500,10 +508,10 @@ final class ReferenceTradingState {
             "as_of", Instant.now().toString(),
             "candles", List.of(Map.of(
                 "time", Instant.now().minus(1, ChronoUnit.MINUTES).toString(),
-                "open", close - 0.0006,
-                "high", close + 0.0008,
-                "low", close - 0.0010,
-                "close", close,
+                "open", ProtocolModels.dec(close - 0.0006),
+                "high", ProtocolModels.dec(close + 0.0008),
+                "low", ProtocolModels.dec(close - 0.0010),
+                "close", ProtocolModels.dec(close),
                 "volume", 125000,
                 "complete", true
             ))

@@ -1,6 +1,6 @@
 # APEX Protocol — Decision Context Resource Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -63,7 +63,7 @@ The decision context does not inline market data, candle series, account balance
   },
   "constraints": {
     "kill_switch_active": false,
-    "max_position_size": 5000000,
+    "max_position_size": "5000000",
     "max_open_orders": 50
   }
 }
@@ -90,7 +90,7 @@ The `constraints` block is the exception to the reference-only model. It is inli
 ```json
 "constraints": {
   "kill_switch_active": false,
-  "max_position_size": 5000000,
+  "max_position_size": "5000000",
   "max_open_orders": 50
 }
 ```

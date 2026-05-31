@@ -1,6 +1,6 @@
 # APEX Protocol — Account and Position Model Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -68,13 +68,13 @@ An agent connects to an FX broker. The account summary reads:
 
 ```json
 {
-  "balance": 10000.00,
-  "equity": 10250.00,
-  "used_margin": 500.00,
-  "free_margin": 9750.00,
-  "margin_level_pct": 2050.00,
-  "unrealised_pnl": 250.00,
-  "realised_pnl_today": 0.00
+  "balance": "10000.00",
+  "equity": "10250.00",
+  "used_margin": "500.00",
+  "free_margin": "9750.00",
+  "margin_level_pct": "2050.00",
+  "unrealised_pnl": "250.00",
+  "realised_pnl_today": "0.00"
 }
 ```
 
@@ -223,9 +223,9 @@ Once a position is open, the agent modifies its protection levels using `apex.or
   "target_type": "position",
   "target_id": "pos_001",
   "modifications": {
-    "stop_loss": { "type": "price", "value": 1.0820 },
-    "take_profit": { "type": "price", "value": 1.1050 },
-    "trailing_stop": { "type": "pips", "value": 30 }
+    "stop_loss": { "type": "price", "value": "1.0820" },
+    "take_profit": { "type": "price", "value": "1.1050" },
+    "trailing_stop": { "type": "pips", "value": "30" }
   }
 }
 ```
@@ -253,7 +253,7 @@ Omitting `quantity` means close the entire position.
 {
   "account_id": "ACC_12345",
   "position_id": "pos_001",
-  "quantity": 50000
+  "quantity": "50000"
 }
 ```
 
@@ -349,12 +349,12 @@ A closed EURUSD trade:
   "event_subtype": "fill",
   "instrument_id": "APEX:FX:EURUSD",
   "side": "buy",
-  "quantity": 100000,
-  "open_price": 1.0850,
-  "close_price": 1.0900,
-  "pnl": 500.00,
+  "quantity": "100000",
+  "open_price": "1.0850",
+  "close_price": "1.0900",
+  "pnl": "500.00",
   "pnl_currency": "USD",
-  "commission": -7.00,
+  "commission": "-7.00",
   "open_time": "2026-03-28T09:15:00Z",
   "close_time": "2026-03-28T14:22:00Z"
 }
@@ -368,7 +368,7 @@ A rollover event:
   "event_type": "funding",
   "event_subtype": "rollover",
   "instrument_id": "APEX:FX:EURUSD",
-  "pnl": -2.50,
+  "pnl": "-2.50",
   "pnl_currency": "USD",
   "close_time": "2026-03-28T22:00:00Z"
 }

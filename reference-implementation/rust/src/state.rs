@@ -3,7 +3,7 @@ use std::sync::Mutex;
 
 use serde_json::{json, Value};
 
-use crate::helpers::{apex_error, hours_ago, now_iso};
+use crate::helpers::{apex_error, dec, hours_ago, now_iso};
 
 pub const ACCOUNT_ID: &str = "ACC_12345";
 pub const INSTRUMENT_ID: &str = "APEX:FX:EURUSD";
@@ -106,13 +106,13 @@ impl ReferenceTradingState {
             "account_id": ACCOUNT_ID,
             "account_base_currency": "USD",
             "response_currency": currency.unwrap_or_else(|| "USD".to_owned()),
-            "balance": 10000.0,
-            "equity": 10250.0,
-            "used_margin": 500.0,
-            "free_margin": 9750.0,
-            "margin_level_pct": 2050.0,
-            "unrealised_pnl": 250.0,
-            "realised_pnl_today": 0.0,
+            "balance": dec(10000.0),
+            "equity": dec(10250.0),
+            "used_margin": dec(500.0),
+            "free_margin": dec(9750.0),
+            "margin_level_pct": dec(2050.0),
+            "unrealised_pnl": dec(250.0),
+            "realised_pnl_today": dec(0.0),
             "as_of": if self.inner.lock().expect("state mutex poisoned").risk_stale {
                 (chrono::Utc::now() - chrono::Duration::seconds(5))
                     .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
@@ -130,27 +130,27 @@ impl ReferenceTradingState {
                 "instrument_id": INSTRUMENT_ID,
                 "broker_symbol": BROKER_SYMBOL,
                 "side": "buy",
-                "quantity": 100000,
+                "quantity": dec(100000.0),
                 "quantity_unit": "base_units",
                 "broker_quantity": "1.0",
                 "broker_quantity_unit": "lots",
-                "open_price": 1.0850,
-                "current_price": 1.0875,
-                "unrealised_pnl": 250.0,
+                "open_price": dec(1.0850),
+                "current_price": dec(1.0875),
+                "unrealised_pnl": dec(250.0),
                 "unrealised_pnl_currency": "USD",
-                "used_margin": 500.0,
+                "used_margin": dec(500.0),
                 "open_time": hours_ago(1),
-                "stop_loss": 1.0800,
-                "take_profit": 1.1000,
+                "stop_loss": dec(1.0800),
+                "take_profit": dec(1.1000),
                 "profile_data": {
-                    "rollover_long_daily": -2.5,
-                    "rollover_short_daily": 1.8,
-                    "accrued_rollover": -7.5,
-                    "pip_value": 10.0,
+                    "rollover_long_daily": dec(-2.5),
+                    "rollover_short_daily": dec(1.8),
+                    "accrued_rollover": dec(-7.5),
+                    "pip_value": dec(10.0),
                     "pip_value_currency": "USD"
                 }
             }],
-            "total_unrealised_pnl": 250.0,
+            "total_unrealised_pnl": dec(250.0),
             "as_of": now_iso(),
         })
     }
@@ -174,10 +174,10 @@ impl ReferenceTradingState {
         json!({
             "instrument_id": instrument_id.unwrap_or_else(|| INSTRUMENT_ID.to_owned()),
             "broker_symbol": broker_symbol.unwrap_or_else(|| BROKER_SYMBOL.to_owned()),
-            "bid": inner.live_bid,
-            "ask": inner.live_ask,
-            "mid": inner.live_mid,
-            "spread": spread,
+            "bid": dec(inner.live_bid),
+            "ask": dec(inner.live_ask),
+            "mid": dec(inner.live_mid),
+            "spread": dec(spread),
             "timestamp": if inner.quote_stale {
                 (chrono::Utc::now() - chrono::Duration::seconds(5))
                     .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
@@ -241,10 +241,10 @@ impl ReferenceTradingState {
             "broker_symbol": order.get("broker_symbol").and_then(Value::as_str).unwrap_or(BROKER_SYMBOL),
             "side": side,
             "order_type": order_type,
-            "quantity": quantity,
+            "quantity": dec(quantity),
             "quantity_unit": order.get("quantity_unit").and_then(Value::as_str).unwrap_or("base_units"),
-            "limit_price": order.get("limit_price").cloned().unwrap_or(Value::Null),
-            "stop_price": order.get("stop_price").cloned().unwrap_or(Value::Null),
+            "limit_price": order.get("limit_price").and_then(Value::as_f64).map(dec),
+            "stop_price": order.get("stop_price").and_then(Value::as_f64).map(dec),
             "time_in_force": order.get("time_in_force").and_then(Value::as_str).unwrap_or("GTC"),
             "status": if is_partial_fill {
                 "partially_filled"
@@ -253,9 +253,9 @@ impl ReferenceTradingState {
             } else {
                 "working"
             },
-            "filled_quantity": if is_market { fill_quantity } else { 0.0 },
-            "remaining_quantity": if is_market { remaining_quantity } else { quantity },
-            "average_fill_price": if is_market { json!(1.08755) } else { Value::Null },
+            "filled_quantity": dec(if is_market { fill_quantity } else { 0.0 }),
+            "remaining_quantity": dec(if is_market { remaining_quantity } else { quantity }),
+            "average_fill_price": if is_market { json!(dec(1.08755)) } else { Value::Null },
             "reason": Value::Null,
             "created_at": now,
             "updated_at": now,
@@ -272,9 +272,9 @@ impl ReferenceTradingState {
                     "account_id": ACCOUNT_ID,
                     "instrument_id": order_record["instrument_id"],
                     "side": order_record["side"],
-                    "fill_quantity": fill_quantity,
-                    "fill_price": 1.08755,
-                    "commission": -0.5,
+                    "fill_quantity": dec(fill_quantity),
+                    "fill_price": dec(1.08755),
+                    "commission": dec(-0.5),
                     "commission_currency": "USD",
                     "liquidity_flag": "taker",
                     "position_id": "pos_001",
@@ -305,9 +305,9 @@ impl ReferenceTradingState {
                 } else {
                     "working"
                 },
-                "fill_price": if is_market { json!(1.08755) } else { Value::Null },
-                "fill_quantity": if is_market { fill_quantity } else { 0.0 },
-                "remaining_quantity": if is_market { remaining_quantity } else { quantity },
+                "fill_price": if is_market { json!(dec(1.08755)) } else { Value::Null },
+                "fill_quantity": dec(if is_market { fill_quantity } else { 0.0 }),
+                "remaining_quantity": dec(if is_market { remaining_quantity } else { quantity }),
                 "position_id": if is_market { json!("pos_001") } else { Value::Null },
                 "rejection_reason": Value::Null,
                 "created_at": now,
@@ -389,7 +389,10 @@ impl ReferenceTradingState {
                     .unwrap_or(INSTRUMENT_ID)
                     .to_owned();
                 let side = pos["side"].as_str().unwrap_or("buy").to_owned();
-                let quantity = pos["quantity"].as_f64().unwrap_or(0.0);
+                let quantity = pos["quantity"]
+                    .as_str()
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .unwrap_or(0.0);
                 return Some((instrument_id, side, quantity));
             }
         }
@@ -422,7 +425,7 @@ impl ReferenceTradingState {
         for order in &mut inner.orders {
             if order["order_id"] == order_id {
                 order["status"] = json!("cancelled");
-                order["remaining_quantity"] = json!(0.0);
+                order["remaining_quantity"] = json!(dec(0.0));
                 order["updated_at"] = json!(now_iso());
             }
         }
@@ -498,7 +501,7 @@ impl ReferenceTradingState {
             uri if uri == features_uri() => Some(self.envelope(uri, json!({
                 "instrument_id": INSTRUMENT_ID,
                 "as_of": now_iso(),
-                "quote": { "bid": 1.08740, "ask": 1.08760, "mid": 1.08750, "spread": 0.00020 },
+                "quote": { "bid": dec(1.08740), "ask": dec(1.08760), "mid": dec(1.08750), "spread": dec(0.00020) },
                 "returns": { "r_1s": 0.00002, "r_5s": 0.00005, "r_1m": 0.0008 },
                 "volatility": { "rv_1m": 0.12, "rv_5m": 0.37, "rv_30m": 0.55 },
                 "book": { "top_level_imbalance": 0.21, "depth_imbalance": 0.18, "microprice": 1.08753 },
@@ -529,15 +532,15 @@ impl ReferenceTradingState {
                 Some(self.envelope(uri, json!({
                     "account_id": ACCOUNT_ID,
                     "as_of": as_of,
-                    "available_margin": 9750.0,
+                    "available_margin": dec(9750.0),
                     "kill_switch_active": kill_switch,
-                    "max_position_size": 5000000,
+                    "max_position_size": dec(5000000.0),
                     "max_open_orders": 50,
-                    "daily_loss_limit": -1000.0,
-                    "daily_loss_used": -150.0,
+                    "daily_loss_limit": dec(-1000.0),
+                    "daily_loss_used": dec(-150.0),
                     "restricted_instruments": [],
-                    "margin_call_level_pct": 100,
-                    "stop_out_level_pct": 50
+                    "margin_call_level_pct": dec(100.0),
+                    "stop_out_level_pct": dec(50.0)
                 }), 2000))
             }
             uri if uri == decision_context_uri() => Some(self.envelope(uri, json!({
@@ -556,7 +559,7 @@ impl ReferenceTradingState {
                 },
                 "constraints": {
                     "kill_switch_active": self.inner.lock().expect("state mutex poisoned").kill_switch_active,
-                    "max_position_size": 5000000,
+                    "max_position_size": dec(5000000.0),
                     "max_open_orders": 50
                 }
             }), 5000)),
@@ -585,10 +588,10 @@ impl ReferenceTradingState {
                 "as_of": now_iso(),
                 "candles": [{
                     "time": now_iso(),
-                    "open": close - 0.0006,
-                    "high": close + 0.0008,
-                    "low": close - 0.0010,
-                    "close": close,
+                    "open": dec(close - 0.0006),
+                    "high": dec(close + 0.0008),
+                    "low": dec(close - 0.0010),
+                    "close": dec(close),
                     "volume": 125000,
                     "complete": true
                 }]

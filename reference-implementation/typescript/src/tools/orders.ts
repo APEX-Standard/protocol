@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-import { apexError, nowIso } from "../lib/helpers.js";
+import { apexError, dec, nowIso } from "../lib/helpers.js";
 import type { ApexNotification } from "../lib/notifications.js";
 import {
   orderFilledNotification,
@@ -140,7 +140,7 @@ export function registerOrderTools(
       );
 
       if (emitNotification && isMarketOrder) {
-        const placedOrder = state.getOrders().orders.find((o) => o.order_id === orderId);
+        const placedOrder = state.getRawOrders().find((o) => o.order_id === orderId);
         if (placedOrder) {
           const fillSeq = (state.getFills() as Record<string, unknown>).sequence as number ?? 1;
           if (status === "filled") {
@@ -156,9 +156,10 @@ export function registerOrderTools(
           order_id: orderId,
           client_order_id: order.client_order_id ?? null,
           status,
-          fill_price: isMarketOrder ? 1.08755 : null,
-          fill_quantity: fillQuantity,
-          remaining_quantity: remainingQuantity,
+          fill_price: isMarketOrder ? dec(1.08755) : null,
+          fill_quantity: isMarketOrder ? dec(fillQuantity) : null,
+          remaining_quantity: dec(remainingQuantity),
+          average_fill_price: isMarketOrder ? dec(1.08755) : null,
           position_id: isMarketOrder ? "pos_001" : null,
           rejection_reason: null,
           created_at: nowIso(),
@@ -293,7 +294,7 @@ export function registerOrderTools(
         };
       }
 
-      const positions = state.getPositions().positions;
+      const positions = state.getRawPositions();
       const position = positions.find((p) => p.position_id === position_id);
       if (!position) {
         return {
@@ -304,7 +305,7 @@ export function registerOrderTools(
 
       const closeQuantity = quantity ?? position.quantity;
       const closeSide: "buy" | "sell" = position.side === "buy" ? "sell" : "buy";
-      const fillPrice = state.getQuote().mid;
+      const fillPrice = state.getMid();
       const orderId = `ord_${crypto.randomUUID().slice(0, 8)}`;
       const remainingQuantity = position.quantity - closeQuantity;
 
@@ -355,7 +356,7 @@ export function registerOrderTools(
       );
 
       if (emitNotification) {
-        const placedOrder = state.getOrders().orders.find((o) => o.order_id === orderId);
+        const placedOrder = state.getRawOrders().find((o) => o.order_id === orderId);
         if (placedOrder) {
           const fillSeq = (state.getFills() as Record<string, unknown>).sequence as number ?? 1;
           emitNotification(orderFilledNotification(placedOrder, fillSeq));
@@ -367,9 +368,10 @@ export function registerOrderTools(
           order_id: orderId,
           position_id,
           status: "filled" as const,
-          fill_price: fillPrice,
-          fill_quantity: closeQuantity,
-          remaining_quantity: remainingQuantity,
+          fill_price: dec(fillPrice),
+          fill_quantity: dec(closeQuantity),
+          remaining_quantity: dec(remainingQuantity),
+          average_fill_price: dec(fillPrice),
           rejection_reason: null,
           closed_at: nowIso(),
         },

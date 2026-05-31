@@ -2,6 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://apexstandard.org/spec/core/schemas/fill-event.schema.json",
   "title": "APEX Fill Event Payload",
+  "$defs": {
+    "decimal": { "type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$" },
+    "decimal_nonneg": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$" }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -30,9 +34,9 @@
       "type": "string",
       "enum": ["buy", "sell"]
     },
-    "fill_quantity": { "type": "number", "exclusiveMinimum": 0 },
-    "fill_price": { "type": "number", "exclusiveMinimum": 0 },
-    "commission": { "type": "number" },
+    "fill_quantity": { "$ref": "#/$defs/decimal_nonneg" },
+    "fill_price": { "$ref": "#/$defs/decimal" },
+    "commission": { "$ref": "#/$defs/decimal" },
     "commission_currency": {
       "type": "string",
       "pattern": "^[A-Z]{3}$"

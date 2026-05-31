@@ -39,6 +39,16 @@ pub fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
+/// Render an `f64` as a string-encoded decimal for the APEX v0.2.0-alpha wire format.
+///
+/// Monetary / price / financial-rate / P&L / margin / quantity values are transmitted
+/// as JSON strings matching `^-?[0-9]+(\.[0-9]+)?$`. Rust's `{}` formatter produces the
+/// shortest round-tripping decimal with no scientific notation for these magnitudes
+/// (e.g. `dec(5000.0)` -> "5000", `dec(1.0875)` -> "1.0875", `dec(-7.5)` -> "-7.5").
+pub fn dec(v: f64) -> String {
+    format!("{}", v)
+}
+
 pub fn hours_ago(hours: i64) -> String {
     (chrono::Utc::now() - chrono::Duration::hours(hours))
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)

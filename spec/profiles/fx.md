@@ -1,6 +1,6 @@
 # APEX Protocol — Layer 2: FX Profile
 
-**Version:** `0.1.0-alpha`  
+**Version:** `0.2.0-alpha`  
 **Applies to:** Spot FX, CFD FX, Rolling Spot  
 **Depends on:** Core `0.1.0`
 
@@ -27,7 +27,7 @@ When `"profile": "fx"` is set on `apex.order.place`, the following fields are av
     "base_currency": "EUR",
     "quote_currency": "USD",
     "execution_type": "market|instant",
-    "slippage_tolerance_pips": 2,
+    "slippage_tolerance_pips": "2",
     "hedging_allowed": true,
     "netting_mode": "hedge|net"
   }
@@ -43,10 +43,10 @@ Positions returned from `apex.account.positions` include:
   "profile_data": {
     "base_currency": "EUR",
     "quote_currency": "USD",
-    "rollover_long_daily": -2.50,
-    "rollover_short_daily": 1.80,
-    "accrued_rollover": -7.50,
-    "pip_value": 10.00,
+    "rollover_long_daily": "-2.50",
+    "rollover_short_daily": "1.80",
+    "accrued_rollover": "-7.50",
+    "pip_value": "10.00",
     "pip_value_currency": "USD"
   }
 }
@@ -73,8 +73,8 @@ Query rollover (swap) rates for an FX instrument. Rates are expressed in account
 {
   "instrument_id": "APEX:FX:EURUSD",
   "broker_symbol": "EURUSD",
-  "rollover_long": -2.50,
-  "rollover_short": 1.80,
+  "rollover_long": "-2.50",
+  "rollover_short": "1.80",
   "rollover_currency": "USD",
   "rollover_per": "lot",
   "lot_size": 100000,
@@ -106,20 +106,20 @@ Net currency exposure across all open FX positions. Critical for agents managing
   "exposures": [
     {
       "currency": "EUR",
-      "net_units": 200000,
+      "net_units": "200000",
       "net_direction": "long",
-      "value_in_base": 217500.00,
+      "value_in_base": "217500.00",
       "contributing_positions": ["pos_001", "pos_002"]
     },
     {
       "currency": "GBP",
-      "net_units": -50000,
+      "net_units": "-50000",
       "net_direction": "short",
-      "value_in_base": -63200.00,
+      "value_in_base": "-63200.00",
       "contributing_positions": ["pos_003"]
     }
   ],
-  "total_gross_exposure": 280700.00,
+  "total_gross_exposure": "280700.00",
   "as_of": "ISO8601"
 }
 ```
@@ -135,7 +135,7 @@ Real-time cross-currency conversion rate. Used by agents to calculate P&L in a t
 {
   "from_currency": "EUR",
   "to_currency": "USD",
-  "amount": 10000.00
+  "amount": "10000.00"
 }
 ```
 
@@ -144,8 +144,8 @@ Real-time cross-currency conversion rate. Used by agents to calculate P&L in a t
 {
   "from_currency": "EUR",
   "to_currency": "USD",
-  "rate": 1.0875,
-  "converted_amount": 10875.00,
+  "rate": "1.0875",
+  "converted_amount": "10875.00",
   "timestamp": "ISO8601"
 }
 ```

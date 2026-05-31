@@ -6,7 +6,7 @@
  * candle closed, kill switch engaged, and replay failed.
  */
 
-import { nowIso } from "./helpers.js";
+import { dec, nowIso } from "./helpers.js";
 import type { ReferenceOrder } from "./resources.js";
 
 export const ACCOUNT_ID = "ACC_12345";
@@ -75,9 +75,9 @@ export function orderFilledNotification(
     payload: {
       order_id: order.order_id,
       side: order.side,
-      fill_price: order.average_fill_price ?? 0,
-      fill_quantity: order.filled_quantity,
-      commission: -0.5,
+      fill_price: dec(order.average_fill_price ?? 0),
+      fill_quantity: dec(order.filled_quantity),
+      commission: dec(-0.5),
       position_id: "pos_001",
     },
   });
@@ -99,9 +99,9 @@ export function orderPartiallyFilledNotification(
     payload: {
       order_id: order.order_id,
       side: order.side,
-      fill_price: order.average_fill_price ?? 0,
-      fill_quantity: order.filled_quantity,
-      remaining_quantity: order.remaining_quantity,
+      fill_price: dec(order.average_fill_price ?? 0),
+      fill_quantity: dec(order.filled_quantity),
+      remaining_quantity: dec(order.remaining_quantity),
     },
   });
 }
@@ -142,10 +142,10 @@ export function candleClosedNotification(
     payload: {
       instrument_id: instrumentId,
       timeframe,
-      open: candle.open,
-      high: candle.high,
-      low: candle.low,
-      close: candle.close,
+      open: dec(candle.open),
+      high: dec(candle.high),
+      low: dec(candle.low),
+      close: dec(candle.close),
       volume: candle.volume,
       complete: true,
     },

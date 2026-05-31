@@ -51,17 +51,17 @@ func registerCryptoToolsWithState(s *server.MCPServer, st *referenceState) {
 			fundingTime, countdown := nextFundingTime()
 
 			return jsonResult(map[string]any{
-				"instrument_id":         perpInstrumentID,
-				"broker_symbol":         perpBrokerSymbol,
-				"current_rate":          0.0001,
-				"current_rate_annualised": 0.1095,
-				"predicted_rate":        0.00012,
-				"funding_interval_hours": 8,
-				"next_funding_time":     fundingTime,
-				"countdown_seconds":     countdown,
-				"index_price":           50000.00,
-				"mark_price":            50050.00,
-				"timestamp":             nowISO(),
+				"instrument_id":           perpInstrumentID,
+				"broker_symbol":           perpBrokerSymbol,
+				"current_rate":            dec(0.0001),
+				"current_rate_annualised": dec(0.1095),
+				"predicted_rate":          dec(0.00012),
+				"funding_interval_hours":  8,
+				"next_funding_time":       fundingTime,
+				"countdown_seconds":       countdown,
+				"index_price":             dec(50000.00),
+				"mark_price":              dec(50050.00),
+				"timestamp":               nowISO(),
 			})
 		},
 	)
@@ -110,12 +110,12 @@ func registerCryptoToolsWithState(s *server.MCPServer, st *referenceState) {
 			return jsonResult(map[string]any{
 				"instrument_id":      perpInstrumentID,
 				"side":               side,
-				"entry_price":        entryPrice,
-				"liquidation_price":  liquidationPrice,
-				"margin_required":    math.Round(marginRequired*100) / 100,
-				"maintenance_margin": math.Round(maintenanceMargin*100) / 100,
+				"entry_price":        dec(entryPrice),
+				"liquidation_price":  dec(liquidationPrice),
+				"margin_required":    dec(math.Round(marginRequired*100) / 100),
+				"maintenance_margin": dec(math.Round(maintenanceMargin*100) / 100),
 				"margin_currency":    "USDT",
-				"distance_pct":       distancePct,
+				"distance_pct":       dec(distancePct),
 				"warnings":           []any{},
 			})
 		},
@@ -151,14 +151,14 @@ func registerCryptoToolsWithState(s *server.MCPServer, st *referenceState) {
 			}
 
 			return jsonResult(map[string]any{
-				"transfer_id":     uuid.NewString(),
-				"from_wallet":     fromWallet,
-				"to_wallet":       toWallet,
-				"currency":        currency,
-				"amount":          amount,
-				"status":          "completed",
+				"transfer_id":      uuid.NewString(),
+				"from_wallet":      fromWallet,
+				"to_wallet":        toWallet,
+				"currency":         currency,
+				"amount":           dec(amount),
+				"status":           "completed",
 				"rejection_reason": nil,
-				"completed_at":    nowISO(),
+				"completed_at":     nowISO(),
 			})
 		},
 	)

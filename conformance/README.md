@@ -1,6 +1,6 @@
 # APEX Protocol Conformance Test Suite
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 This directory contains the alpha conformance harness for broker implementations of the APEX Protocol.
 

@@ -48,8 +48,8 @@ func orderFilledNotification(order referenceOrder, fillSequence int) map[string]
 	if accountID == "" {
 		accountID = referenceAccountID
 	}
-	fillPrice := 0.0
-	if fp, ok := order.AverageFillPrice.(float64); ok {
+	fillPrice := "0"
+	if fp, ok := order.AverageFillPrice.(string); ok {
 		fillPrice = fp
 	}
 	return buildApexNotification("notifications/apex.order.filled", struct {
@@ -67,8 +67,8 @@ func orderFilledNotification(order referenceOrder, fillSequence int) map[string]
 			"order_id":      order.OrderID,
 			"side":          order.Side,
 			"fill_price":    fillPrice,
-			"fill_quantity":  order.FilledQuantity,
-			"commission":    -0.5,
+			"fill_quantity": order.FilledQuantity,
+			"commission":    dec(-0.5),
 			"position_id":   "pos_001",
 		},
 	})
@@ -80,8 +80,8 @@ func orderPartiallyFilledNotification(order referenceOrder, fillSequence int) ma
 	if accountID == "" {
 		accountID = referenceAccountID
 	}
-	fillPrice := 0.0
-	if fp, ok := order.AverageFillPrice.(float64); ok {
+	fillPrice := "0"
+	if fp, ok := order.AverageFillPrice.(string); ok {
 		fillPrice = fp
 	}
 	return buildApexNotification("notifications/apex.order.partially_filled", struct {
@@ -138,10 +138,10 @@ func candleClosedNotification(instrumentID, timeframe string, candle CandleState
 		Payload: map[string]any{
 			"instrument_id": instrumentID,
 			"timeframe":     timeframe,
-			"open":          candle.Open,
-			"high":          candle.High,
-			"low":           candle.Low,
-			"close":         candle.Close,
+			"open":          dec(candle.Open),
+			"high":          dec(candle.High),
+			"low":           dec(candle.Low),
+			"close":         dec(candle.Close),
 			"volume":        candle.Volume,
 			"complete":      true,
 		},
@@ -165,4 +165,3 @@ func killSwitchEngagedNotification(riskSequence int) map[string]any {
 		},
 	})
 }
-

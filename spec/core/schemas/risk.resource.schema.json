@@ -2,6 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://apexstandard.org/spec/core/schemas/risk.resource.schema.json",
   "title": "APEX Risk Resource",
+  "$defs": {
+    "decimal": { "type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$" },
+    "decimal_nonneg": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$" }
+  },
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -20,24 +24,18 @@
   "properties": {
     "account_id": { "type": "string", "minLength": 1 },
     "as_of": { "type": "string", "format": "date-time" },
-    "available_margin": { "type": "number" },
+    "available_margin": { "$ref": "#/$defs/decimal" },
     "kill_switch_active": { "type": "boolean" },
-    "max_position_size": { "type": "number", "minimum": 0 },
+    "max_position_size": { "$ref": "#/$defs/decimal_nonneg" },
     "max_open_orders": { "type": "integer", "minimum": 0 },
-    "daily_loss_limit": { "type": "number" },
-    "daily_loss_used": { "type": "number" },
+    "daily_loss_limit": { "$ref": "#/$defs/decimal" },
+    "daily_loss_used": { "$ref": "#/$defs/decimal" },
     "restricted_instruments": {
       "type": "array",
       "items": { "type": "string" }
     },
-    "margin_call_level_pct": {
-      "type": "number",
-      "minimum": 0
-    },
-    "stop_out_level_pct": {
-      "type": "number",
-      "minimum": 0
-    },
+    "margin_call_level_pct": { "$ref": "#/$defs/decimal_nonneg" },
+    "stop_out_level_pct": { "$ref": "#/$defs/decimal_nonneg" },
     "sequence": { "type": "integer", "minimum": 0 },
     "stale_after_ms": { "type": "integer", "minimum": 1 }
   }

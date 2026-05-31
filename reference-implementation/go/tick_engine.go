@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	halfSpread    = 0.0001
-	maxPipStep    = 0.0002
-	historyLimit  = 300
-	tickInterval  = 2 * time.Second
+	halfSpread   = 0.0001
+	maxPipStep   = 0.0002
+	historyLimit = 300
+	tickInterval = 2 * time.Second
 )
 
 // CandleState holds the OHLCV data for a partial or completed candle.
@@ -27,9 +27,9 @@ type CandleState struct {
 
 // TickEngineCallbacks defines the callbacks fired by the tick engine.
 type TickEngineCallbacks struct {
-	OnQuoteUpdate  func(mid, bid, ask float64)
-	OnCandleUpdate func(timeframe string)
-	OnCandleClose  func(timeframe string, candle CandleState)
+	OnQuoteUpdate   func(mid, bid, ask float64)
+	OnCandleUpdate  func(timeframe string)
+	OnCandleClose   func(timeframe string, candle CandleState)
 	OnFeatureUpdate func()
 }
 

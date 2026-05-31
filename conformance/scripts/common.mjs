@@ -259,6 +259,15 @@ export function assertNonEmptyString(value, fieldName) {
   assert(value.trim().length > 0, `${fieldName} must be non-empty`);
 }
 
+// APEX 0.2.0-alpha: monetary/price/rate/quantity values are string-encoded
+// decimals (`^-?[0-9]+(\.[0-9]+)?$`), never JSON numbers. Asserts the wire type
+// and returns the parsed numeric value for range checks.
+export function assertDecimalString(value, fieldName) {
+  assert.equal(typeof value, "string", `${fieldName} must be a string-encoded decimal`);
+  assert.match(value, /^-?[0-9]+(\.[0-9]+)?$/, `${fieldName} must match the APEX decimal pattern ^-?[0-9]+(\\.[0-9]+)?$`);
+  return Number(value);
+}
+
 export function printCheck(label) {
   process.stdout.write(`- ${label}\n`);
 }

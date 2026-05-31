@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+import { dec } from "../lib/helpers.js";
 import type { ReferenceTradingState } from "../lib/resources.js";
 import { InstrumentIdSchema } from "../lib/schemas.js";
 
@@ -89,17 +90,17 @@ export function registerMarketTools(server: McpServer, state: ReferenceTradingSt
         profile: "fx",
         base_currency: "EUR",
         quote_currency: "USD",
-        pip_size: 0.0001,
+        pip_size: dec(0.0001),
         lot_size: 100000,
         quantity_unit: "base_units",
         broker_quantity_unit: "lots",
-        min_quantity: 1000,
-        max_quantity: 50000000,
-        quantity_step: 1000,
-        margin_rate_pct: 0.5,
-        commission_per_lot: 0,
+        min_quantity: dec(1000),
+        max_quantity: dec(50000000),
+        quantity_step: dec(1000),
+        margin_rate_pct: dec(0.5),
+        commission_per_lot: dec(0),
         spread_type: "variable",
-        typical_spread_pips: 0.8,
+        typical_spread_pips: dec(0.8),
         trading_hours: [{ day: "monday", open: "00:00", close: "23:59", timezone: "UTC" }],
         profile_data: {},
       },

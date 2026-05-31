@@ -44,25 +44,25 @@ var referenceURIs = struct {
 }
 
 type referenceOrder struct {
-	OrderID           string   `json:"order_id"`
-	ClientOrderID     any      `json:"client_order_id"`
-	AccountID         string   `json:"account_id"`
-	InstrumentID      string   `json:"instrument_id"`
-	BrokerSymbol      string   `json:"broker_symbol"`
-	Side              string   `json:"side"`
-	OrderType         string   `json:"order_type"`
-	Quantity          float64  `json:"quantity"`
-	QuantityUnit      string   `json:"quantity_unit"`
-	LimitPrice        *float64 `json:"limit_price"`
-	StopPrice         *float64 `json:"stop_price"`
-	TimeInForce       string   `json:"time_in_force"`
-	Status            string   `json:"status"`
-	FilledQuantity    float64  `json:"filled_quantity"`
-	RemainingQuantity float64  `json:"remaining_quantity"`
-	AverageFillPrice  any      `json:"average_fill_price"`
-	Reason            any      `json:"reason"`
-	CreatedAt         string   `json:"created_at"`
-	UpdatedAt         string   `json:"updated_at"`
+	OrderID           string `json:"order_id"`
+	ClientOrderID     any    `json:"client_order_id"`
+	AccountID         string `json:"account_id"`
+	InstrumentID      string `json:"instrument_id"`
+	BrokerSymbol      string `json:"broker_symbol"`
+	Side              string `json:"side"`
+	OrderType         string `json:"order_type"`
+	Quantity          string `json:"quantity"`
+	QuantityUnit      string `json:"quantity_unit"`
+	LimitPrice        any    `json:"limit_price"`
+	StopPrice         any    `json:"stop_price"`
+	TimeInForce       string `json:"time_in_force"`
+	Status            string `json:"status"`
+	FilledQuantity    string `json:"filled_quantity"`
+	RemainingQuantity string `json:"remaining_quantity"`
+	AverageFillPrice  any    `json:"average_fill_price"`
+	Reason            any    `json:"reason"`
+	CreatedAt         string `json:"created_at"`
+	UpdatedAt         string `json:"updated_at"`
 }
 
 type referenceState struct {
@@ -101,23 +101,24 @@ func newReferenceState() *referenceState {
 				InstrumentID:          referenceInstrumentID,
 				BrokerSymbol:          referenceBrokerSymbol,
 				Side:                  "buy",
-				Quantity:              100000,
+				Quantity:              dec(100000),
+				qty:                   100000,
 				QuantityUnit:          "base_units",
 				BrokerQuantity:        "1.0",
 				BrokerQuantityUnit:    "lots",
-				OpenPrice:             1.0850,
-				CurrentPrice:          1.0875,
-				UnrealisedPnL:         250,
+				OpenPrice:             dec(1.0850),
+				CurrentPrice:          dec(1.0875),
+				UnrealisedPnL:         dec(250),
 				UnrealisedPnLCurrency: "USD",
-				UsedMargin:            500,
+				UsedMargin:            dec(500),
 				OpenTime:              hoursAgo(1),
-				StopLoss:              1.0800,
-				TakeProfit:            1.1000,
+				StopLoss:              dec(1.0800),
+				TakeProfit:            dec(1.1000),
 				ProfileData: profileData{
-					RolloverLongDaily:  -2.5,
-					RolloverShortDaily: 1.8,
-					AccruedRollover:    -7.5,
-					PipValue:           10,
+					RolloverLongDaily:  dec(-2.5),
+					RolloverShortDaily: dec(1.8),
+					AccruedRollover:    dec(-7.5),
+					PipValue:           dec(10),
 					PipValueCurrency:   "USD",
 				},
 			},
@@ -234,10 +235,10 @@ func (s *referenceState) resourceJSON(uri string) string {
 		payload = map[string]any{
 			"instrument_id":  referenceInstrumentID,
 			"broker_symbol":  referenceBrokerSymbol,
-			"bid":            s.liveBid,
-			"ask":            s.liveAsk,
-			"mid":            s.liveMid,
-			"spread":         spread,
+			"bid":            dec(s.liveBid),
+			"ask":            dec(s.liveAsk),
+			"mid":            dec(s.liveMid),
+			"spread":         dec(spread),
 			"timestamp":      map[bool]string{true: time.Now().UTC().Add(-5 * time.Second).Format(time.RFC3339), false: nowISO()}[s.quoteStale],
 			"is_tradeable":   true,
 			"market_status":  "open",
@@ -255,7 +256,7 @@ func (s *referenceState) resourceJSON(uri string) string {
 			"instrument_id": referenceInstrumentID,
 			"as_of":         nowISO(),
 			"quote": map[string]any{
-				"bid": s.liveBid, "ask": s.liveAsk, "mid": s.liveMid, "spread": 0.00020,
+				"bid": dec(s.liveBid), "ask": dec(s.liveAsk), "mid": dec(s.liveMid), "spread": dec(0.00020),
 			},
 			"returns":    map[string]any{"r_1s": 0.00002, "r_5s": 0.00005, "r_1m": 0.0008},
 			"volatility": map[string]any{"rv_1m": 0.12, "rv_5m": 0.37, "rv_30m": 0.55},
@@ -270,13 +271,13 @@ func (s *referenceState) resourceJSON(uri string) string {
 			"account_id":            referenceAccountID,
 			"account_base_currency": "USD",
 			"response_currency":     "USD",
-			"balance":               10000.0,
-			"equity":                10250.0,
-			"used_margin":           500.0,
-			"free_margin":           9750.0,
-			"margin_level_pct":      2050.0,
-			"unrealised_pnl":        250.0,
-			"realised_pnl_today":    0.0,
+			"balance":               dec(10000.0),
+			"equity":                dec(10250.0),
+			"used_margin":           dec(500.0),
+			"free_margin":           dec(9750.0),
+			"margin_level_pct":      dec(2050.0),
+			"unrealised_pnl":        dec(250.0),
+			"realised_pnl_today":    dec(0.0),
 			"as_of":                 map[bool]string{true: time.Now().UTC().Add(-5 * time.Second).Format(time.RFC3339), false: nowISO()}[s.riskStale],
 			"sequence":              s.nextSequence(uri),
 			"stale_after_ms":        2000,
@@ -286,7 +287,7 @@ func (s *referenceState) resourceJSON(uri string) string {
 			"account_id":           referenceAccountID,
 			"as_of":                nowISO(),
 			"positions":            s.positions,
-			"total_unrealised_pnl": 250.0,
+			"total_unrealised_pnl": dec(250.0),
 			"sequence":             s.nextSequence(uri),
 			"stale_after_ms":       2000,
 		}
@@ -310,15 +311,15 @@ func (s *referenceState) resourceJSON(uri string) string {
 		payload = map[string]any{
 			"account_id":             referenceAccountID,
 			"as_of":                  map[bool]string{true: time.Now().UTC().Add(-5 * time.Second).Format(time.RFC3339), false: nowISO()}[s.riskStale],
-			"available_margin":       9750.0,
+			"available_margin":       dec(9750.0),
 			"kill_switch_active":     s.killSwitchActive,
-			"max_position_size":      5000000,
+			"max_position_size":      dec(5000000),
 			"max_open_orders":        50,
-			"daily_loss_limit":       -1000.0,
-			"daily_loss_used":        -150.0,
+			"daily_loss_limit":       dec(-1000.0),
+			"daily_loss_used":        dec(-150.0),
 			"restricted_instruments": []any{},
-			"margin_call_level_pct":  100,
-			"stop_out_level_pct":     50,
+			"margin_call_level_pct":  dec(100),
+			"stop_out_level_pct":     dec(50),
 			"sequence":               s.nextSequence(uri),
 			"stale_after_ms":         2000,
 		}
@@ -339,7 +340,7 @@ func (s *referenceState) resourceJSON(uri string) string {
 			},
 			"constraints": map[string]any{
 				"kill_switch_active": s.killSwitchActive,
-				"max_position_size":  5000000,
+				"max_position_size":  dec(5000000),
 				"max_open_orders":    50,
 			},
 			"sequence":       s.nextSequence(uri),
@@ -361,7 +362,7 @@ func (s *referenceState) candlesEnvelopeLocked(uri, timeframe string, close floa
 		"partial_candle_included": true,
 		"as_of":                   nowISO(),
 		"candles": []map[string]any{{
-			"time": candleTime, "open": close - 0.0006, "high": close + 0.0008, "low": close - 0.0010, "close": close, "volume": 125000, "complete": true,
+			"time": candleTime, "open": dec(close - 0.0006), "high": dec(close + 0.0008), "low": dec(close - 0.0010), "close": dec(close), "volume": 125000, "complete": true,
 		}},
 		"sequence":       s.nextSequence(uri),
 		"stale_after_ms": 60000,
@@ -376,13 +377,13 @@ func (s *referenceState) accountSummary(currency string) accountSummaryResponse 
 		AccountID:           referenceAccountID,
 		AccountBaseCurrency: "USD",
 		ResponseCurrency:    currency,
-		Balance:             10000,
-		Equity:              10250,
-		UsedMargin:          500,
-		FreeMargin:          9750,
-		MarginLevelPct:      2050,
-		UnrealisedPnL:       250,
-		RealisedPnLToday:    0,
+		Balance:             dec(10000),
+		Equity:              dec(10250),
+		UsedMargin:          dec(500),
+		FreeMargin:          dec(9750),
+		MarginLevelPct:      dec(2050),
+		UnrealisedPnL:       dec(250),
+		RealisedPnLToday:    dec(0),
 		AsOf:                nowISO(),
 	}
 }
@@ -393,7 +394,7 @@ func (s *referenceState) positionsResponse() accountPositionsResponse {
 
 	return accountPositionsResponse{
 		Positions:          append([]position(nil), s.positions...),
-		TotalUnrealisedPnL: 250,
+		TotalUnrealisedPnL: dec(250),
 		AsOf:               nowISO(),
 	}
 }
@@ -426,10 +427,10 @@ func (s *referenceState) quoteResponse(instrumentID, brokerSymbol string) quoteR
 	return quoteResponse{
 		InstrumentID: instrumentID,
 		BrokerSymbol: brokerSymbol,
-		Bid:          bid,
-		Ask:          ask,
-		Mid:          mid,
-		Spread:       0.00020,
+		Bid:          dec(bid),
+		Ask:          dec(ask),
+		Mid:          dec(mid),
+		Spread:       dec(0.00020),
 		Timestamp:    nowISO(),
 		IsTradeable:  true,
 		MarketStatus: "open",
@@ -459,15 +460,15 @@ func (s *referenceState) createOrder(args map[string]any) any {
 	isMarketOrder := orderType == "market"
 	now := nowISO()
 	orderID := fmt.Sprintf("ord_%s", time.Now().UTC().Format("150405.000"))
-	var limitPrice *float64
+	var limitPriceValue any
 	if value, ok := order["limit_price"]; ok {
 		parsed := floatParam(map[string]any{"limit_price": value}, "limit_price", 0)
-		limitPrice = &parsed
+		limitPriceValue = dec(parsed)
 	}
-	var stopPrice *float64
+	var stopPriceValue any
 	if value, ok := order["stop_price"]; ok {
 		parsed := floatParam(map[string]any{"stop_price": value}, "stop_price", 0)
-		stopPrice = &parsed
+		stopPriceValue = dec(parsed)
 	}
 
 	var clientOrderValue any
@@ -498,15 +499,15 @@ func (s *referenceState) createOrder(args map[string]any) any {
 		BrokerSymbol:      strParam(order, "broker_symbol", referenceBrokerSymbol),
 		Side:              side,
 		OrderType:         orderType,
-		Quantity:          quantity,
+		Quantity:          dec(quantity),
 		QuantityUnit:      strParam(order, "quantity_unit", "base_units"),
-		LimitPrice:        limitPrice,
-		StopPrice:         stopPrice,
+		LimitPrice:        limitPriceValue,
+		StopPrice:         stopPriceValue,
 		TimeInForce:       strParam(order, "time_in_force", "GTC"),
 		Status:            status,
-		FilledQuantity:    fillQuantity,
-		RemainingQuantity: remainingQuantity,
-		AverageFillPrice:  map[bool]any{true: 1.08755, false: nil}[isMarketOrder],
+		FilledQuantity:    dec(fillQuantity),
+		RemainingQuantity: dec(remainingQuantity),
+		AverageFillPrice:  map[bool]any{true: dec(1.08755), false: nil}[isMarketOrder],
 		Reason:            nil,
 		CreatedAt:         now,
 		UpdatedAt:         now,
@@ -520,9 +521,9 @@ func (s *referenceState) createOrder(args map[string]any) any {
 			"account_id":          referenceAccountID,
 			"instrument_id":       record.InstrumentID,
 			"side":                record.Side,
-			"fill_quantity":       record.FilledQuantity,
-			"fill_price":          1.08755,
-			"commission":          -0.5,
+			"fill_quantity":       dec(fillQuantity),
+			"fill_price":          dec(1.08755),
+			"commission":          dec(-0.5),
 			"commission_currency": "USD",
 			"liquidity_flag":      "taker",
 			"position_id":         "pos_001",
@@ -557,9 +558,9 @@ func (s *referenceState) createOrder(args map[string]any) any {
 		OrderID:           orderID,
 		ClientOrderID:     clientOrderValue,
 		Status:            record.Status,
-		FillPrice:         map[bool]any{true: 1.08755, false: nil}[isMarketOrder],
-		FillQuantity:      record.FilledQuantity,
-		RemainingQuantity: record.RemainingQuantity,
+		FillPrice:         map[bool]any{true: dec(1.08755), false: nil}[isMarketOrder],
+		FillQuantity:      map[bool]any{true: dec(fillQuantity), false: nil}[isMarketOrder],
+		RemainingQuantity: dec(remainingQuantity),
 		PositionID:        map[bool]any{true: "pos_001", false: nil}[isMarketOrder],
 		RejectionReason:   nil,
 		CreatedAt:         now,
@@ -643,7 +644,7 @@ func (s *referenceState) cancelOrder(orderID string) {
 	for index := range s.orders {
 		if s.orders[index].OrderID == orderID {
 			s.orders[index].Status = "cancelled"
-			s.orders[index].RemainingQuantity = 0
+			s.orders[index].RemainingQuantity = dec(0)
 			s.orders[index].UpdatedAt = nowISO()
 			break
 		}
@@ -670,12 +671,12 @@ func (s *referenceState) closePosition(positionID string, closeQuantity *float64
 	}
 
 	// Determine close quantity
-	qty := float64(pos.Quantity)
+	qty := pos.qty
 	if closeQuantity != nil {
 		qty = *closeQuantity
 	}
-	if qty > float64(pos.Quantity) {
-		qty = float64(pos.Quantity)
+	if qty > pos.qty {
+		qty = pos.qty
 	}
 
 	// Determine opposite side for closing order
@@ -702,15 +703,15 @@ func (s *referenceState) closePosition(positionID string, closeQuantity *float64
 		BrokerSymbol:      pos.BrokerSymbol,
 		Side:              closeSide,
 		OrderType:         "market",
-		Quantity:          qty,
+		Quantity:          dec(qty),
 		QuantityUnit:      pos.QuantityUnit,
 		LimitPrice:        nil,
 		StopPrice:         nil,
 		TimeInForce:       "GTC",
 		Status:            "filled",
-		FilledQuantity:    qty,
-		RemainingQuantity: 0,
-		AverageFillPrice:  fillPrice,
+		FilledQuantity:    dec(qty),
+		RemainingQuantity: dec(0),
+		AverageFillPrice:  dec(fillPrice),
 		Reason:            nil,
 		CreatedAt:         now,
 		UpdatedAt:         now,
@@ -724,9 +725,9 @@ func (s *referenceState) closePosition(positionID string, closeQuantity *float64
 		"account_id":          referenceAccountID,
 		"instrument_id":       pos.InstrumentID,
 		"side":                closeSide,
-		"fill_quantity":       qty,
-		"fill_price":          fillPrice,
-		"commission":          -0.5,
+		"fill_quantity":       dec(qty),
+		"fill_price":          dec(fillPrice),
+		"commission":          dec(-0.5),
 		"commission_currency": "USD",
 		"liquidity_flag":      "taker",
 		"position_id":         positionID,
@@ -734,14 +735,15 @@ func (s *referenceState) closePosition(positionID string, closeQuantity *float64
 	}}, s.fills...)
 
 	// Update position state
-	remainingQty := float64(pos.Quantity) - qty
+	remainingQty := pos.qty - qty
 	if remainingQty <= 0 {
 		// Full close: remove position
 		s.positions = append(s.positions[:posIdx], s.positions[posIdx+1:]...)
 		remainingQty = 0
 	} else {
 		// Partial close: reduce quantity
-		s.positions[posIdx].Quantity = int(remainingQty)
+		s.positions[posIdx].qty = remainingQty
+		s.positions[posIdx].Quantity = dec(remainingQty)
 	}
 
 	// Bump resource sequences
@@ -770,9 +772,9 @@ func (s *referenceState) closePosition(positionID string, closeQuantity *float64
 		OrderID:           orderID,
 		PositionID:        positionID,
 		Status:            closeStatus,
-		FillPrice:         fillPrice,
-		FillQuantity:      qty,
-		RemainingQuantity: remainingQty,
+		FillPrice:         dec(fillPrice),
+		FillQuantity:      dec(qty),
+		RemainingQuantity: dec(remainingQty),
 		ClosedAt:          now,
 	}, ""
 }

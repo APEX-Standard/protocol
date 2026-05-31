@@ -2,6 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://apexstandard.org/spec/core/schemas/account-summary.resource.schema.json",
   "title": "APEX Account Summary Resource",
+  "$defs": {
+    "decimal": { "type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$" },
+    "decimal_nonneg": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$" }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -23,13 +27,13 @@
     "account_id": { "type": "string", "minLength": 1 },
     "account_base_currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
     "response_currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
-    "balance": { "type": "number" },
-    "equity": { "type": "number" },
-    "used_margin": { "type": "number" },
-    "free_margin": { "type": "number" },
-    "margin_level_pct": { "type": "number" },
-    "unrealised_pnl": { "type": "number" },
-    "realised_pnl_today": { "type": "number" },
+    "balance": { "$ref": "#/$defs/decimal" },
+    "equity": { "$ref": "#/$defs/decimal" },
+    "used_margin": { "$ref": "#/$defs/decimal_nonneg" },
+    "free_margin": { "$ref": "#/$defs/decimal" },
+    "margin_level_pct": { "$ref": "#/$defs/decimal_nonneg" },
+    "unrealised_pnl": { "$ref": "#/$defs/decimal" },
+    "realised_pnl_today": { "$ref": "#/$defs/decimal" },
     "as_of": { "type": "string", "format": "date-time" },
     "sequence": { "type": "integer", "minimum": 0 },
     "stale_after_ms": { "type": "integer", "minimum": 1 }

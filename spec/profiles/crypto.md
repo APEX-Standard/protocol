@@ -1,6 +1,6 @@
 # APEX Protocol — Layer 2: Crypto Profile
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 **Applies to:** Crypto Spot, Perpetual Futures
 **Depends on:** Core `0.1.0`
 
@@ -64,13 +64,13 @@ The Crypto profile covers two sub-types, declared in the instrument registry:
     "crypto_type": "spot|perpetual",
     "margin_mode": "cross|isolated",
     "leverage": 10,
-    "liquidation_price": 25000.00,
-    "initial_margin": 500.00,
-    "maintenance_margin": 250.00,
+    "liquidation_price": "25000.00",
+    "initial_margin": "500.00",
+    "maintenance_margin": "250.00",
     "margin_currency": "USDT",
-    "accrued_funding": -12.50,
+    "accrued_funding": "-12.50",
     "next_funding_time": "ISO8601",
-    "mark_price": 50100.00
+    "mark_price": "50100.00"
   }
 }
 ```
@@ -99,14 +99,14 @@ Query the current and predicted funding rate for a perpetual instrument. Funding
 {
   "instrument_id": "APEX:CRYPTO:PERP:BTCUSDT",
   "broker_symbol": "BTCUSDT",
-  "current_rate": 0.0001,
-  "current_rate_annualised": 0.1095,
-  "predicted_rate": 0.00012,
+  "current_rate": "0.0001",
+  "current_rate_annualised": "0.1095",
+  "predicted_rate": "0.00012",
   "funding_interval_hours": 8,
   "next_funding_time": "ISO8601",
   "countdown_seconds": 14400,
-  "index_price": 50000.00,
-  "mark_price": 50050.00,
+  "index_price": "50000.00",
+  "mark_price": "50050.00",
   "timestamp": "ISO8601"
 }
 ```
@@ -125,10 +125,10 @@ Estimate the liquidation price for a hypothetical or existing position. Agents s
   "account_id": "string",
   "instrument_id": "APEX:CRYPTO:PERP:BTCUSDT",
   "side": "buy|sell",
-  "quantity": 1.0,
+  "quantity": "1.0",
   "leverage": 10,
   "margin_mode": "isolated",
-  "entry_price": 50000.00
+  "entry_price": "50000.00"
 }
 ```
 
@@ -137,12 +137,12 @@ Estimate the liquidation price for a hypothetical or existing position. Agents s
 {
   "instrument_id": "APEX:CRYPTO:PERP:BTCUSDT",
   "side": "buy",
-  "entry_price": 50000.00,
-  "liquidation_price": 45250.00,
-  "margin_required": 5000.00,
-  "maintenance_margin": 2500.00,
+  "entry_price": "50000.00",
+  "liquidation_price": "45250.00",
+  "margin_required": "5000.00",
+  "maintenance_margin": "2500.00",
   "margin_currency": "USDT",
-  "distance_pct": 9.50,
+  "distance_pct": "9.50",
   "warnings": []
 }
 ```
@@ -162,7 +162,7 @@ Transfer funds between wallets on the same exchange. Crypto exchanges typically 
   "from_wallet": "spot|futures|funding",
   "to_wallet": "spot|futures|funding",
   "currency": "USDT",
-  "amount": 1000.00
+  "amount": "1000.00"
 }
 ```
 
@@ -173,7 +173,7 @@ Transfer funds between wallets on the same exchange. Crypto exchanges typically 
   "from_wallet": "spot",
   "to_wallet": "futures",
   "currency": "USDT",
-  "amount": 1000.00,
+  "amount": "1000.00",
   "status": "completed|pending|rejected",
   "rejection_reason": null,
   "completed_at": "ISO8601"

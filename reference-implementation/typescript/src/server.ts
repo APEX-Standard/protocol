@@ -105,7 +105,7 @@ function setupCommon(server: McpServer): { emitResourceUpdated: (uri: string) =>
   return { emitResourceUpdated };
 }
 
-const APEX_VERSION = "0.1.0-alpha";
+const APEX_VERSION = "0.2.0-alpha";
 
 /* ------------------------------------------------------------------ */
 /*  HTTP/SSE mode                                                      */

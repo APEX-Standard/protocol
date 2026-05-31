@@ -3,11 +3,16 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/mark3labs/mcp-go/mcp"
 )
+
+// dec formats a float64 as a string-encoded decimal matching
+// ^-?[0-9]+(\.[0-9]+)?$ (no scientific notation, sign preserved).
+func dec(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
 
 type apexErrorBody struct {
 	Code       string         `json:"code"`
@@ -116,7 +121,7 @@ func hoursFromNow(hours int) string {
 	return time.Now().UTC().Add(time.Duration(hours) * time.Hour).Format(time.RFC3339)
 }
 
-const apexVersion = "0.1.0-alpha"
+const apexVersion = "0.2.0-alpha"
 
 // injectApexVersion patches the initialize response to include apex_version
 // in the serverInfo object. This is necessary because the MCP library's

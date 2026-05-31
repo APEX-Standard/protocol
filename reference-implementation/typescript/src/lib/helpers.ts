@@ -40,6 +40,12 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
+// APEX 0.2.0-alpha: encode a numeric money/price/rate/quantity value as a
+// string-encoded decimal for the JSON wire (pattern ^-?[0-9]+(\.[0-9]+)?$).
+// Internal arithmetic stays numeric; only wire output is wrapped in dec(...).
+// dec(5000) -> "5000", dec(1.0875) -> "1.0875", dec(-7.5) -> "-7.5".
+export const dec = (v: number): string => v.toString();
+
 export function hoursAgo(hours: number): string {
   return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 }

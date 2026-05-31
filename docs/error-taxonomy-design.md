@@ -1,6 +1,6 @@
 # APEX Protocol — Error Taxonomy Design
 
-**Version:** `0.1.0-alpha`
+**Version:** `0.2.0-alpha`
 
 ---
 
@@ -40,8 +40,8 @@ Every APEX tool returns errors in a consistent envelope:
     "category": "risk",
     "message": "Insufficient margin for requested position size",
     "details": {
-      "required_margin": 12500.00,
-      "available_margin": 8340.22,
+      "required_margin": "12500.00",
+      "available_margin": "8340.22",
       "instrument_id": "EURUSD"
     },
     "request_id": "req_8f3a2b1c",

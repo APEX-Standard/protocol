@@ -82,8 +82,8 @@ func registerOrderToolsWithState(s *server.MCPServer, st *referenceState) {
 			mcp.WithString("target_id", mcp.Required()),
 			mcp.WithObject("modifications", mcp.Required(), mcp.Description("Fields to modify"),
 				mcp.Properties(map[string]any{
-					"limit_price": map[string]any{"type": "number", "description": "New limit price"},
-					"stop_price":  map[string]any{"type": "number", "description": "New stop price"},
+					"limit_price":   map[string]any{"type": "number", "description": "New limit price"},
+					"stop_price":    map[string]any{"type": "number", "description": "New stop price"},
 					"quantity":      map[string]any{"type": "number", "description": "New quantity"},
 					"stop_loss":     map[string]any{"type": "object", "description": "Stop loss protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"price", "pips", "percent"}}, "value": map[string]any{"type": "number"}}},
 					"take_profit":   map[string]any{"type": "object", "description": "Take profit protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"price", "pips", "percent"}}, "value": map[string]any{"type": "number"}}},

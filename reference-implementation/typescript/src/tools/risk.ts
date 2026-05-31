@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+import { dec } from "../lib/helpers.js";
 import type { ReferenceTradingState } from "../lib/resources.js";
 import { InstrumentIdSchema, OrderTypeSchema, SideSchema } from "../lib/schemas.js";
 
@@ -26,10 +27,10 @@ export function registerRiskTools(server: McpServer, state: ReferenceTradingStat
       return {
         structuredContent: {
           approved: true,
-          required_margin: requiredMargin,
-          available_margin: 9750.0,
-          margin_after_trade: 9750.0 - requiredMargin,
-          exposure_increase: order.quantity,
+          required_margin: dec(requiredMargin),
+          available_margin: dec(9750.0),
+          margin_after_trade: dec(9750.0 - requiredMargin),
+          exposure_increase: dec(order.quantity),
           warnings: [],
           rejection_reason: null,
         },

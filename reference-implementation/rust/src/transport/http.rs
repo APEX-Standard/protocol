@@ -250,7 +250,7 @@ async fn handle_post(
             "serverInfo": {
                 "name": SERVER_NAME,
                 "version": SERVER_VERSION,
-                "apex_version": "0.1.0-alpha",
+                "apex_version": "0.2.0-alpha",
             }
         });
 
@@ -995,7 +995,10 @@ async fn handle_tool_call(
                     if is_market {
                         let fill_seq = state.trading_state.get_sequence(&crate::state::fills_uri());
                         let side = order["side"].as_str().unwrap_or("buy");
-                        let fill_quantity = payload["fill_quantity"].as_f64().unwrap_or(0.0);
+                        let fill_quantity = payload["fill_quantity"]
+                            .as_str()
+                            .and_then(|v| v.parse::<f64>().ok())
+                            .unwrap_or(0.0);
                         let instrument_id =
                             order["instrument_id"].as_str().unwrap_or(INSTRUMENT_ID);
                         let account_id = args["account_id"].as_str().unwrap_or(ACCOUNT_ID);
@@ -1012,7 +1015,10 @@ async fn handle_tool_call(
                             );
                             state.emit_to_session(session_id, notif);
                         } else if status == "partially_filled" {
-                            let remaining = payload["remaining_quantity"].as_f64().unwrap_or(0.0);
+                            let remaining = payload["remaining_quantity"]
+                                .as_str()
+                                .and_then(|v| v.parse::<f64>().ok())
+                                .unwrap_or(0.0);
                             let notif = notifications::order_partially_filled(
                                 notifications::PartialFillParams {
                                     order_id,
@@ -1080,7 +1086,10 @@ async fn handle_tool_call(
                     let order_id = payload["order_id"].as_str().unwrap_or("");
                     let fill_seq = state.trading_state.get_sequence(&crate::state::fills_uri());
                     let account_id = args["account_id"].as_str().unwrap_or(ACCOUNT_ID);
-                    let close_quantity = payload["fill_quantity"].as_f64().unwrap_or(0.0);
+                    let close_quantity = payload["fill_quantity"]
+                        .as_str()
+                        .and_then(|v| v.parse::<f64>().ok())
+                        .unwrap_or(0.0);
                     // Reconstruct close_side from the position data
                     let close_side = if payload["status"].as_str() == Some("filled")
                         || payload["status"].as_str() == Some("partially_filled")
