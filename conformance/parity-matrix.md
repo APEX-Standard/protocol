@@ -1,7 +1,7 @@
 # APEX Alpha Reference Parity Matrix
 
 **Version:** `0.2.0-alpha`  
-**Last Updated:** 2026-03-27
+**Last Updated:** 2026-06-15
 
 This document records the current parity status of the bundled reference implementations:
 
@@ -69,6 +69,37 @@ All four reference implementations are currently:
 | Reference fault injection tool | Yes | Yes | Yes | Yes | Yes |
 | Negative validation: missing required fields | Yes | Yes | Yes | Yes | Yes |
 | Negative validation: unknown instrument | Yes | Yes | Yes | Yes | Yes |
+
+---
+
+## Consumer Divergence — Vestry Engine (consumer #1 / determinism reference)
+
+Vestry Engine is the first external **consumer** implementation (not a bundled
+reference) — an auditable B-book FX/CFD **prop-firm** paper-trading engine. It
+conforms to the alpha Core + the FX/CFD/crypto Layer-2 surface, but its product
+model is deliberately narrower than the generic reference broker, so part of the
+bundled `smoke.mjs` suite is **out of model by design** (not a parity gap). This
+row records that divergence so the standard documents it rather than implying a
+failure.
+
+| Capability | Vestry | Notes |
+| --- | --- | --- |
+| Core Layer-1 (`apex.session/account/order/market/risk/position.*`) | Yes | Full, over the recorded determinism engine |
+| `apex.fx.rollover` / `apex.fx.exposure` / `apex.fx.conversion` | Yes | Over D70 rollover / netting projection / D88 USD-hub Mid |
+| `apex.cfd.corporate_actions` | Yes (empty) | Degenerate — synthetic CFDs have none; returns `[]` |
+| `apex.crypto.funding_rate` | Yes (**SPOT shape**) | Projects the CFD single-benchmark daily financing for `APEX:CRYPTO:SPOT:*`; `funding_interval_hours = 24`, `index_price == mark_price`. **NOT** the generic `PERP` funding (no 8h interval / perpetual basis). |
+| `apex.crypto.liquidation_estimate` | **No (out of model)** | CFD margin-call/stop-out model — no per-position isolated-margin perpetual liquidation |
+| `apex.crypto.transfer` | **No (out of model)** | Single-currency paper ledger — no spot/futures wallets |
+| `apex.cfd.dividend_adjustment` | **No (out of model)** | Synthetic CFDs pass through no dividends |
+| Vendor `vestry.prop.*` (`scorecard` / `challenge.status` / `challenge.config`) + `profile_data.prop` | Yes | The Vestry-authored prop-eval Layer-2 profile (vendor namespace `vestry`, `prop` profile `0.1-draft`); destined for an APEX first-class `prop` profile on second-adopter validation |
+| Realtime / transport (resources, notifications, SSE replay) | Pending | Vestry's APEX Production-Realtime layer is a separate slice (not yet built) |
+
+The out-of-model tools are **not registered** in Vestry's capabilities manifest
+(a call returns method-not-found), which is the intended signal that
+perpetual-futures / wallet / dividend semantics are absent from a prop-firm
+broker. This suggests a future protocol direction: a capability-gated smoke that
+skips tools a broker does not advertise, so a conformant broker need not
+implement product semantics outside its market.
 
 ---
 
