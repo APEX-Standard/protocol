@@ -1,6 +1,6 @@
 # APEX Protocol — Feature Resource and Agent-Native Market State Design
 
-**Version:** `0.2.0-alpha`
+**Version:** `0.3.0-alpha`
 
 ---
 

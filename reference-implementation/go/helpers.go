@@ -121,7 +121,7 @@ func hoursFromNow(hours int) string {
 	return time.Now().UTC().Add(time.Duration(hours) * time.Hour).Format(time.RFC3339)
 }
 
-const apexVersion = "0.2.0-alpha"
+const apexVersion = "0.3.0-alpha"
 
 // injectApexVersion patches the initialize response to include apex_version
 // in the serverInfo object. This is necessary because the MCP library's

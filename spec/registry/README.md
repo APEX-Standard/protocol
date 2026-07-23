@@ -1,6 +1,6 @@
 # APEX Protocol — Instrument Registry
 
-**Version:** `0.2.0-alpha` (includes unreleased `0.3.0-alpha` additions — futures taxonomy and seed registry)  
+**Version:** `0.3.0-alpha`  
 **Last Updated:** 2026-07-23
 
 ---

@@ -1,6 +1,6 @@
 # APEX Protocol — Layer 2: Futures Profile
 
-**Version:** `0.3.0-alpha` (unreleased)  
+**Version:** `0.3.0-alpha`  
 **Applies to:** Listed futures on regulated derivatives exchanges  
 **Depends on:** Core `0.2.0` (string-decimal wire encoding per RFC-0001)
 

@@ -1,6 +1,6 @@
 # APEX Alpha Reference Parity Matrix
 
-**Version:** `0.2.0-alpha` (+ unreleased `0.3.0-alpha` futures profile surface)  
+**Version:** `0.3.0-alpha`  
 **Last Updated:** 2026-07-23
 
 This document records the current parity status of the bundled reference implementations:

@@ -1,6 +1,6 @@
 # APEX Protocol — Protocol Overview and Architecture
 
-**Version:** `0.2.0-alpha`
+**Version:** `0.3.0-alpha`
 
 ---
 
@@ -98,7 +98,7 @@ Asset-class extensions that add domain-specific tools, position enrichments, and
 | FX | Spot FX, CFD FX, rollovers, currency exposure, swap rates | `v0.2-alpha` |
 | CFD | Equities, indices, commodities, corporate actions, dividend adjustments | `v0.2-alpha` |
 | Crypto | Spot, perpetuals, funding rates, margin modes, liquidation estimates | `v0.2-alpha` |
-| Futures | Listed futures, contract chains, expiration, margin schedules | `v0.3-alpha` (unreleased) |
+| Futures | Listed futures, contract chains, expiration, margin schedules | `v0.3-alpha` |
 | Options | Listed options, greeks | Planned |
 | Fixed Income | Bonds, yield, duration | Planned |
 
@@ -320,7 +320,7 @@ APEX is not the first attempt to standardize financial messaging. It is informed
 
 ## Stability
 
-APEX is currently at version `0.2.0-alpha`. The protocol surface is organized into four stability classes:
+APEX is currently at version `0.3.0-alpha`. The protocol surface is organized into four stability classes:
 
 | Class | Description |
 |-------|-------------|

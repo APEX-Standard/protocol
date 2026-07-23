@@ -1,6 +1,6 @@
 # APEX Protocol — Conformance Testing Design
 
-**Version:** `0.2.0-alpha`
+**Version:** `0.3.0-alpha`
 
 ---
 

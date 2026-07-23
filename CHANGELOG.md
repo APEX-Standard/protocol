@@ -7,7 +7,7 @@ APEX uses [Semantic Versioning](https://semver.org/) with an `-alpha` pre-releas
 During `0.x` alpha, minor version bumps may include breaking changes (see
 [`docs/version-stability-design.md`](docs/version-stability-design.md)).
 
-## [Unreleased]
+## [0.3.0-alpha] — 2026-07-23
 
 ### Added
 
@@ -70,7 +70,18 @@ During `0.x` alpha, minor version bumps may include breaking changes (see
       (`08:30–15:45` CT); micro day-margin discount wording; MIC-convention
       wording; `contract_months` documented as a root-entry field; profile
       depends on Core `0.2.0`; `docs/protocol-overview-design.md` profile table
-      split into Futures (`v0.3-alpha`, unreleased) and Options (planned).
+      split into Futures (`v0.3-alpha`) and Options (planned).
+
+- **Parity matrix: Vestry Engine consumer divergence recorded**
+  ([`conformance/parity-matrix.md`](conformance/parity-matrix.md)). Vestry Engine
+  (consumer #1 / the determinism reference) conforms to the alpha Core +
+  FX/CFD/crypto Layer 2 surface but is a B-book FX/CFD prop-firm engine with a
+  deliberately narrower product model, so parts of `smoke.mjs` are out-of-model
+  by design (spot-shaped `apex.crypto.funding_rate`; no perpetuals, wallets, or
+  dividends; present-but-empty `cfd.corporate_actions`) — documented as
+  divergence, not parity gaps. Also records the vendor `vestry.prop.*` prop-eval
+  profile as a candidate first-class `prop` profile pending second-adopter
+  validation.
 
 ### Fixed
 
@@ -92,6 +103,15 @@ During `0.x` alpha, minor version bumps may include breaking changes (see
   TypeScript, and Java reference implementations. The `derivatives` value never had a
   backing profile spec and no registry instruments; no populated deployments are
   affected.
+
+- Version bumped `0.2.0-alpha` → `0.3.0-alpha` across the core spec, docs,
+  conformance suite, capability manifest examples, and reference-implementation
+  `serverInfo`/`apex_version`. Capability manifest examples now carry the full
+  pre-release string (`"apex_version": "0.3.0-alpha"`, previously shown bare as
+  `"0.2.0"`), matching the `initialize` handshake format. The unchanged
+  fx/cfd/crypto profiles keep their per-profile version `0.2.0` — profiles
+  version independently (see `docs/profile-layering-design.md`); only the new
+  futures profile is at `0.3.0`.
 
 ## [0.2.0-alpha] — 2026-05-30
 

@@ -1,6 +1,6 @@
 # APEX Protocol — Alpha Stability And Compatibility
 
-**Version:** `0.2.0-alpha`  
+**Version:** `0.3.0-alpha`  
 **Status:** Draft  
 **Last Updated:** 2026-03-27
 
@@ -156,7 +156,7 @@ Implementations should advertise clearly which class of surface they rely on:
     "autonomous": false
   },
   "stability": {
-    "core_version": "0.2.0-alpha",
+    "core_version": "0.3.0-alpha",
     "experimental_namespaces": ["vendor.example.experimental"]
   }
 }

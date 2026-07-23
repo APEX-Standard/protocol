@@ -1,6 +1,6 @@
 # APEX Protocol — Order Lifecycle and Idempotency Design
 
-**Version:** `0.2.0-alpha`
+**Version:** `0.3.0-alpha`
 
 ---
 

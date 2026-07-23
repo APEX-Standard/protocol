@@ -1,6 +1,6 @@
 # APEX Protocol — Layer 1: Core Specification
 
-**Version:** `0.2.0-alpha` (includes unreleased `0.3.0-alpha` additions — futures profile surface)  
+**Version:** `0.3.0-alpha`  
 **Status:** Draft — open for comment  
 **Last Updated:** 2026-07-23
 
@@ -63,7 +63,7 @@ During the MCP `initialize` handshake, the server should include the APEX protoc
   "serverInfo": {
     "name": "broker-name",
     "version": "1.0.0",
-    "apex_version": "0.2.0-alpha"
+    "apex_version": "0.3.0-alpha"
   }
 }
 ```
@@ -114,7 +114,7 @@ Query the full capability manifest of a connected broker. Returns all supported 
 **Output:**
 ```json
 {
-  "apex_version": "0.2.0",
+  "apex_version": "0.3.0-alpha",
   "broker_id": "string",
   "core_tools": ["apex.session.*", "apex.account.*", "apex.order.*", "apex.market.*", "apex.risk.*"],
   "profiles": {

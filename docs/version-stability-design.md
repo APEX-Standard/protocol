@@ -1,6 +1,6 @@
 # APEX Protocol — Version Negotiation and Stability Model
 
-**Version:** `0.2.0-alpha`
+**Version:** `0.3.0-alpha`
 
 ---
 
@@ -286,7 +286,7 @@ The `apex.session.capabilities` response includes two relevant sections:
     "autonomous": false
   },
   "stability": {
-    "core_version": "0.2.0-alpha",
+    "core_version": "0.3.0-alpha",
     "experimental_namespaces": ["vendor.example.experimental"]
   }
 }

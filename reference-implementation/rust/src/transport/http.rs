@@ -250,7 +250,7 @@ async fn handle_post(
             "serverInfo": {
                 "name": SERVER_NAME,
                 "version": SERVER_VERSION,
-                "apex_version": "0.2.0-alpha",
+                "apex_version": "0.3.0-alpha",
             }
         });
 

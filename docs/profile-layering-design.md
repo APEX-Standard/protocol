@@ -1,6 +1,6 @@
 # APEX Protocol — Profile and Layering Design
 
-**Version:** `0.2.0-alpha`
+**Version:** `0.3.0-alpha`
 
 ---
 
@@ -224,7 +224,7 @@ When an agent connects and calls `apex.session.capabilities`, the broker returns
 
 ```json
 {
-  "apex_version": "0.2.0",
+  "apex_version": "0.3.0-alpha",
   "core_tools": ["apex.session.*", "apex.account.*", "apex.order.*", "apex.market.*", "apex.risk.*"],
   "profiles": {
     "fx": "0.2.0",

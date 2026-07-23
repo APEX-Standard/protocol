@@ -1,6 +1,6 @@
 # APEX Protocol — Session Lifecycle Design
 
-**Version:** `0.2.0-alpha`
+**Version:** `0.3.0-alpha`
 
 ---
 
@@ -27,7 +27,7 @@ The broker includes `apex_version` in the `serverInfo` block of the initialize r
   "serverInfo": {
     "name": "acme-broker",
     "version": "2.4.1",
-    "apex_version": "0.2.0-alpha"
+    "apex_version": "0.3.0-alpha"
   }
 }
 ```
@@ -70,7 +70,7 @@ The agent calls `apex.session.capabilities` to learn what the broker supports:
 
 ```json
 {
-  "apex_version": "0.2.0-alpha",
+  "apex_version": "0.3.0-alpha",
   "broker_id": "acme",
   "core_tools": ["apex.session.*", "apex.account.*", "apex.order.*", "apex.market.*", "apex.risk.*"],
   "profiles": { "fx": "0.2.0", "cfd": "0.2.0" },
@@ -133,12 +133,12 @@ The MCP `initialize` response is the first thing the agent sees. APEX embeds `ap
 **Concrete walkthrough:**
 
 1. Agent connects and sends MCP `initialize`.
-2. Broker responds with `serverInfo` including `apex_version: "0.2.0-alpha"`.
+2. Broker responds with `serverInfo` including `apex_version: "0.3.0-alpha"`.
 3. Agent parses the version. Three outcomes:
 
-**Compatible:** The agent supports `0.2.0-alpha`. Proceed to `apex.session.authenticate`.
+**Compatible:** The agent supports `0.3.0-alpha`. Proceed to `apex.session.authenticate`.
 
-**Incompatible:** The agent only supports `0.2.0`. The version schemes don't align. The agent logs the mismatch and disconnects gracefully — no APEX tool calls, no partial session, no ambiguous state. This is better than calling `apex.session.authenticate` and getting a tool-not-found error or, worse, getting a response with a different schema than expected.
+**Incompatible:** The agent only supports `0.3.0`. The version schemes don't align. The agent logs the mismatch and disconnects gracefully — no APEX tool calls, no partial session, no ambiguous state. This is better than calling `apex.session.authenticate` and getting a tool-not-found error or, worse, getting a response with a different schema than expected.
 
 **Missing:** The broker's `serverInfo` has no `apex_version` field. The server is either not an APEX broker or an older implementation that predates version advertisement. The agent should not assume APEX capability.
 

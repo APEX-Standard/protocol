@@ -1,7 +1,7 @@
 # APEX Protocol — Agent Runtime Safety Guide
 
 **Audience:** agent/runtime implementers  
-**Version:** `0.2.0-alpha`
+**Version:** `0.3.0-alpha`
 
 ---
 

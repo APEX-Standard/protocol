@@ -363,7 +363,7 @@ public final class JdkHttpMcpTransportProvider implements McpStreamableServerTra
             Map<String, Object> serverInfo = new LinkedHashMap<>();
             serverInfo.put("name", ToolRegistry.SERVER_NAME);
             serverInfo.put("version", ToolRegistry.SERVER_VERSION);
-            serverInfo.put("apex_version", "0.2.0-alpha");
+            serverInfo.put("apex_version", "0.3.0-alpha");
 
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("protocolVersion", initResult.protocolVersion());
