@@ -54,7 +54,7 @@ export function registerMarketTools(server: McpServer, state: ReferenceTradingSt
       description: "Discover instruments by keyword, asset class, or profile.",
       inputSchema: {
         query: z.string().min(1),
-        profile: z.enum(["fx", "cfd", "crypto", "derivatives", "fixed_income"]).optional(),
+        profile: z.enum(["fx", "cfd", "crypto", "futures", "fixed_income"]).optional(),
         limit: z.number().int().min(1).max(50).default(20),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },

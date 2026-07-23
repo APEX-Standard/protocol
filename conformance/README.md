@@ -563,6 +563,78 @@ assertions:
 
 ---
 
+## Futures Profile Test Cases
+
+These tests run when `--profile futures` is specified.
+
+```yaml
+test: futures.contract_chain.es
+description: Contract chain for the ES root returns dated contracts with a single front month
+required: true
+input:
+  root: "APEX:FUT:ES"
+assertions:
+  - response.root == "APEX:FUT:ES"
+  - response.contracts has at least 2 entries
+  - exactly one contract has is_front_month == true
+  - every contract has status == "active" (expired excluded by default)
+  - every contract has expiration_date as valid ISO date
+  - every contract has settlement_type in ["cash", "physical"]
+  - volume and open_interest are numbers
+
+test: futures.contract_chain.include_expired
+description: include_expired returns expired contracts marked inactive
+required: true
+input:
+  root: "APEX:FUT:ES"
+  include_expired: true
+assertions:
+  - response.contracts is a superset of the default chain
+  - expired contracts have status == "inactive"
+  - no expired contract has is_front_month == true
+
+test: futures.margin_schedule
+description: Margin schedule returns two-tier margins as decimal strings
+required: recommended
+input:
+  account_id: "ACC_12345"
+assertions:
+  - response.margins has at least 1 entry
+  - initial_margin, maintenance_margin match the decimal-string pattern
+  - day_trading_margin is a decimal string or null
+  - as_of is valid ISO8601
+
+test: futures.order.root_rejected
+description: Orders targeting a contract root ID are rejected
+required: true
+input:
+  order:
+    instrument_id: "APEX:FUT:ES"
+    side: "buy"
+    order_type: "market"
+    quantity: "1"
+    quantity_unit: "contracts"
+    time_in_force: "GTC"
+assertions:
+  - response is an APEX error with code APEX_4010
+```
+
+> **Harness note:** the input above is spec-correct (order `quantity` is a string-decimal
+> on the wire per RFC-0001), but the executable smoke harness currently sends a numeric
+> quantity because the bundled references do not yet accept string-decimal order input
+> (a known divergence recorded in the parity matrix). A string quantity would be rejected
+> for its type before instrument identity is checked, which would mask the `APEX_4010`
+> behavior this test exists to verify.
+
+> **Not yet executable:** the spec-mandatory *expired-contract exclusion from `apex.market.search`
+> defaults* cannot be exercised against the bundled references, whose search index contains no
+> futures instruments. The same applies to futures `profile_data` on positions and
+> `apex.market.details` and to whole-contract quantity enforcement — the references' position and
+> instrument surface is FX-only. These remain documented conformance requirements for real
+> implementations.
+
+---
+
 ## Alpha Scope
 
 The executable harness currently covers a focused subset of the core protocol:

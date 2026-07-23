@@ -1,6 +1,7 @@
 # APEX Protocol — Instrument Registry
 
-**Version:** `0.2.0-alpha`
+**Version:** `0.2.0-alpha` (includes unreleased `0.3.0-alpha` additions — futures taxonomy and seed registry)  
+**Last Updated:** 2026-07-23
 
 ---
 
@@ -24,12 +25,14 @@ APEX:{ASSET_CLASS}:{SUB_CLASS?}:{SYMBOL}
 
 ```
 APEX:FX:{BASE}{QUOTE}              Spot FX and CFD FX
-APEX:CFD:EQ:{TICKER}.{MIC}        Equity CFDs
+APEX:CFD:EQ:{TICKER}.{MIC}         Equity CFDs
 APEX:CFD:IDX:{INDEX}               Index CFDs
 APEX:CFD:COM:{COMMODITY}           Commodity CFDs
 APEX:CRYPTO:SPOT:{BASE}{QUOTE}     Crypto spot
 APEX:CRYPTO:PERP:{BASE}{QUOTE}     Crypto perpetual futures
-APEX:DERIV:{TYPE}:{UNDERLYING}     Listed derivatives (futures, options)
+APEX:FUT:{ROOT}                    Futures contract root (continuous reference)
+APEX:FUT:{ROOT}{MC}{YY}            Dated futures contract (month code + 2-digit year)
+APEX:OPT:{...}                     Listed options (reserved, not yet populated)
 APEX:FI:{ISIN}                     Fixed income (uses ISIN directly)
 ```
 
@@ -94,6 +97,44 @@ Each instrument in the registry has the following structure:
   }
 }
 ```
+
+### Futures Entry Example
+
+Futures entries follow the same structure; the `canonical` block carries contract specifications, and dated contracts reference their root:
+
+```json
+{
+  "instrument_id": "APEX:FUT:ESZ26",
+  "display_name": "E-mini S&P 500 — Dec 2026",
+  "asset_class": "fut",
+  "sub_class": null,
+  "profile": "futures",
+  "status": "active",
+  "introduced_version": "0.3.0-alpha",
+  "deprecated_version": null,
+
+  "canonical": {
+    "root": "APEX:FUT:ES",
+    "exchange": "XCME",
+    "category": "equity_index",
+    "currency": "USD",
+    "contract_size": "50",
+    "contract_unit": "index_points",
+    "tick_size": "0.25",
+    "tick_value": "12.50",
+    "settlement_type": "cash",
+    "contract_month": "2026-12",
+    "expiration_date": "2026-12-18",
+    "first_notice_date": null
+  },
+
+  "broker_mappings": []
+}
+```
+
+Dated entries carry their own `contract_month` and `expiration_date`. The **root** entry (`APEX:FUT:ES`) carries the family-level fields instead: the listing cycle (`"contract_months": ["H", "M", "U", "Z"]`) and the shared contract specification, with expiration fields null.
+
+Broker mappings follow the same shape as the FX example. Native futures symbologies diverge widely (`ESZ26`, `ESZ6`, `ES 12-26`, `ES DEC26`); each broker's mapping normalizes its native format to the canonical dated ID. Expired contracts become `"status": "inactive"` and retain their ID permanently.
 
 ---
 
@@ -226,3 +267,26 @@ To request registration of an instrument not yet in the registry:
 | `APEX:CRYPTO:PERP:SOLUSDT` | SOL/USDT Perpetual | 0.01 |
 | `APEX:CRYPTO:PERP:BTCUSD` | BTC/USD Perpetual (inverse) | 0.01 |
 | `APEX:CRYPTO:PERP:ETHUSD` | ETH/USD Perpetual (inverse) | 0.01 |
+
+## Seed Registry — Major Listed Futures (Contract Roots)
+
+Roots are the continuous reference series; tradeable dated contracts append `{MONTH_CODE}{YY}` (e.g. `APEX:FUT:ESZ26`). See the [Futures Profile](../profiles/futures.md) for the month code table and ID rules.
+
+| APEX Instrument ID | Display Name | Exchange | Tick Size | Tick Value |
+|-----------------|--------------|----------|-----------|------------|
+| `APEX:FUT:ES` | E-mini S&P 500 | XCME | 0.25 | $12.50 |
+| `APEX:FUT:NQ` | E-mini NASDAQ-100 | XCME | 0.25 | $5.00 |
+| `APEX:FUT:YM` | E-mini Dow ($5) | XCBT | 1.00 | $5.00 |
+| `APEX:FUT:RTY` | E-mini Russell 2000 | XCME | 0.10 | $5.00 |
+| `APEX:FUT:MES` | Micro E-mini S&P 500 | XCME | 0.25 | $1.25 |
+| `APEX:FUT:MNQ` | Micro E-mini NASDAQ-100 | XCME | 0.25 | $0.50 |
+| `APEX:FUT:CL` | Crude Oil (WTI) | XNYM | 0.01 | $10.00 |
+| `APEX:FUT:NG` | Natural Gas (Henry Hub) | XNYM | 0.001 | $10.00 |
+| `APEX:FUT:GC` | Gold | XCEC | 0.10 | $10.00 |
+| `APEX:FUT:SI` | Silver | XCEC | 0.005 | $25.00 |
+| `APEX:FUT:HG` | Copper | XCEC | 0.0005 | $12.50 |
+| `APEX:FUT:ZB` | 30-Year US Treasury Bond | XCBT | 0.03125 | $31.25 |
+| `APEX:FUT:ZN` | 10-Year US Treasury Note | XCBT | 0.015625 | $15.625 |
+| `APEX:FUT:6E` | Euro FX | XCME | 0.00005 | $6.25 |
+| `APEX:FUT:6J` | Japanese Yen | XCME | 0.0000005 | $6.25 |
+| `APEX:FUT:MBT` | Micro Bitcoin | XCME | 5.00 | $0.50 |

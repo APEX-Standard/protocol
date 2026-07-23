@@ -51,6 +51,7 @@ final class ToolRegistry {
         registerFxSpecs(specs);
         registerCfdSpecs(specs);
         registerCryptoSpecs(specs);
+        registerFuturesSpecs(specs);
 
         return specs;
     }
@@ -146,6 +147,7 @@ final class ToolRegistry {
             || name.startsWith("apex.risk.")
             || name.startsWith("apex.fx.")
             || name.startsWith("apex.cfd.")
+            || name.startsWith("apex.futures.")
             || "apex.crypto.funding_rate".equals(name)
             || "apex.crypto.liquidation_estimate".equals(name)
             || "apex.order.status".equals(name)
@@ -338,15 +340,15 @@ final class ToolRegistry {
     private void registerOrderSpecs(List<McpServerFeatures.SyncToolSpecification> specs) {
         // apex.order.place — nested object schema with many fields, use LinkedHashMap
         var slProps = new LinkedHashMap<String, Object>();
-        slProps.put("type", enumProp(null, null, "price", "pips", "percent"));
+        slProps.put("type", enumProp(null, null, "price", "pips", "ticks", "percent"));
         slProps.put("value", numProp(null));
 
         var tpProps = new LinkedHashMap<String, Object>();
-        tpProps.put("type", enumProp(null, null, "price", "pips", "percent"));
+        tpProps.put("type", enumProp(null, null, "price", "pips", "ticks", "percent"));
         tpProps.put("value", numProp(null));
 
         var tsProps = new LinkedHashMap<String, Object>();
-        tsProps.put("type", enumProp(null, null, "pips", "percent"));
+        tsProps.put("type", enumProp(null, null, "pips", "ticks", "percent"));
         tsProps.put("value", numProp(null));
 
         var orderProps = new LinkedHashMap<String, Object>();
@@ -379,6 +381,9 @@ final class ToolRegistry {
                 Map<String, Object> order = argMap(args, "order");
                 if (order.isEmpty()) {
                     return apexError("APEX_4011", "validation", "order is required");
+                }
+                if (!ReferenceTradingState.INSTRUMENT_ID.equals(argStr(order, "instrument_id", ""))) {
+                    return apexError("APEX_4010", "validation", "Unknown instrument");
                 }
                 String orderType = argStr(order, "order_type", "market");
                 double quantity = argDouble(order, "quantity", 0);
@@ -427,15 +432,15 @@ final class ToolRegistry {
 
         // apex.order.modify
         var modSlProps = new LinkedHashMap<String, Object>();
-        modSlProps.put("type", enumProp(null, null, "price", "pips", "percent"));
+        modSlProps.put("type", enumProp(null, null, "price", "pips", "ticks", "percent"));
         modSlProps.put("value", numProp(null));
 
         var modTpProps = new LinkedHashMap<String, Object>();
-        modTpProps.put("type", enumProp(null, null, "price", "pips", "percent"));
+        modTpProps.put("type", enumProp(null, null, "price", "pips", "ticks", "percent"));
         modTpProps.put("value", numProp(null));
 
         var modTsProps = new LinkedHashMap<String, Object>();
-        modTsProps.put("type", enumProp(null, null, "pips", "percent"));
+        modTsProps.put("type", enumProp(null, null, "pips", "ticks", "percent"));
         modTsProps.put("value", numProp(null));
 
         var modProps = new LinkedHashMap<String, Object>();
@@ -604,7 +609,7 @@ final class ToolRegistry {
             "Discover instruments by keyword, asset class, or profile.",
             new McpSchema.JsonSchema("object", Map.of(
                 "query", strProp(null),
-                "profile", enumProp(null, null, "fx", "cfd", "crypto", "derivatives", "fixed_income"),
+                "profile", enumProp(null, null, "fx", "cfd", "crypto", "futures", "fixed_income"),
                 "limit", intProp(null, 1, 50, 20)
             ), List.of("query"), false, null, null),
             args -> {
@@ -967,6 +972,72 @@ final class ToolRegistry {
                     null,
                     now()
                 );
+            }
+        );
+    }
+
+    private void registerFuturesSpecs(List<McpServerFeatures.SyncToolSpecification> specs) {
+        // Mock chain is a fixed snapshot as of 2026-11-06 (42 days before ESZ26 expiry):
+        // ESU26 has expired, ESZ26 is front month, ESH27 is next out.
+        final String FUT_ROOT_ID = "APEX:FUT:ES";
+        final String FUT_EXPIRED_ID = "APEX:FUT:ESU26";
+        final String FUT_FRONT_MONTH_ID = "APEX:FUT:ESZ26";
+        final String FUT_NEXT_MONTH_ID = "APEX:FUT:ESH27";
+
+        registerSpec(specs,
+            "apex.futures.contract_chain",
+            "List dated contracts for a futures contract root with expirations and liquidity. Reference implementation serves the E-mini S&P 500 chain.",
+            new McpSchema.JsonSchema("object", Map.of(
+                "root", strProp("APEX contract root ID (e.g. APEX:FUT:ES)"),
+                "include_expired", boolProp(false, "Include expired contracts (default: false)")
+            ), List.of("root"), false, null, null),
+            args -> {
+                String root = argStr(args, "root", "");
+                boolean includeExpired = Boolean.TRUE.equals(args.get("include_expired"));
+                if (root.isEmpty()) {
+                    return apexError("APEX_4011", "validation", "root is required");
+                }
+                if (!FUT_ROOT_ID.equals(root)) {
+                    return apexError("APEX_4010", "validation", "Unknown instrument");
+                }
+                List<FuturesContract> contracts = new ArrayList<>();
+                if (includeExpired) {
+                    contracts.add(new FuturesContract(FUT_EXPIRED_ID, "2026-09", "2026-09-18", null,
+                        "cash", false, 0, 0, "inactive"));
+                }
+                contracts.add(new FuturesContract(FUT_FRONT_MONTH_ID, "2026-12", "2026-12-18", null,
+                    "cash", true, 1250000, 2100000, "active"));
+                contracts.add(new FuturesContract(FUT_NEXT_MONTH_ID, "2027-03", "2027-03-19", null,
+                    "cash", false, 41000, 98000, "active"));
+                return new FuturesContractChainResponse(FUT_ROOT_ID, contracts);
+            }
+        );
+
+        registerSpec(specs,
+            "apex.futures.margin_schedule",
+            "Per-contract margin requirements: exchange overnight margins and broker intraday margins. Reference implementation serves the ESZ26 schedule.",
+            new McpSchema.JsonSchema("object", Map.of(
+                "account_id", strProp("Trading account ID"),
+                "instrument_id", strProp("Filter by APEX canonical instrument ID (e.g. APEX:FUT:ESZ26)")
+            ), List.of("account_id"), false, null, null),
+            args -> {
+                String accountId = argStr(args, "account_id", "");
+                String instrumentId = argStr(args, "instrument_id", "");
+                if (accountId.isEmpty()) {
+                    return apexError("APEX_4011", "validation", "account_id is required");
+                }
+                if (!instrumentId.isEmpty() && !FUT_FRONT_MONTH_ID.equals(instrumentId)) {
+                    return apexError("APEX_4010", "validation", "Unknown instrument");
+                }
+                var window = new LinkedHashMap<String, Object>();
+                window.put("day", "monday");
+                window.put("from", "08:30");
+                window.put("to", "15:45");
+                window.put("timezone", "America/Chicago");
+                return new FuturesMarginScheduleResponse(List.of(
+                    new FuturesMarginScheduleEntry(FUT_FRONT_MONTH_ID, "USD",
+                        "15500.00", "14000.00", "500.00", List.of(window), now())
+                ));
             }
         );
     }

@@ -17,7 +17,8 @@ protocol/
 │   ├── profiles/                # Layer 2 — asset class extensions
 │   │   ├── fx.md                #   Spot FX, CFD FX, rollovers
 │   │   ├── cfd.md               #   Equities, indices, commodities
-│   │   └── crypto.md            #   Spot, perpetuals, funding rates
+│   │   ├── crypto.md            #   Spot, perpetuals, funding rates
+│   │   └── futures.md           #   Listed futures, contract chains, margin schedules
 │   └── registry/                # Instrument taxonomy and ID format
 ├── reference-implementation/    # Reference MCP servers (illustrative handlers)
 │   ├── typescript/              #   Node.js 18+, MCP SDK, Zod
@@ -39,7 +40,8 @@ protocol/
 | Layer 2 — FX | Spot FX, CFD FX, rollovers, currency exposure | `v0.2-alpha` |
 | Layer 2 — CFD | Equities, indices, corporate actions | `v0.2-alpha` |
 | Layer 2 — Crypto | Spot, perpetuals, funding rates, margin modes | `v0.2-alpha` |
-| Layer 2 — Derivatives | Listed options, futures, greeks | `planned` |
+| Layer 2 — Futures | Listed futures, contract chains, expiration, margin schedules | `v0.3-alpha` (unreleased) |
+| Layer 2 — Options | Listed options, greeks | `planned` |
 | Layer 2 — Fixed Income | Bonds, yield, duration | `planned` |
 
 ---
@@ -87,7 +89,7 @@ Five domains. Consistent naming. Every tool annotated with MCP metadata.
 APEX:{ASSET_CLASS}:{SUB_CLASS?}:{SYMBOL}
 ```
 
-Examples: `APEX:FX:EURUSD`, `APEX:CFD:IDX:SPX500`, `APEX:CRYPTO:SPOT:BTCUSDT`
+Examples: `APEX:FX:EURUSD`, `APEX:CFD:IDX:SPX500`, `APEX:CRYPTO:SPOT:BTCUSDT`, `APEX:FUT:ESZ26`
 
 ---
 

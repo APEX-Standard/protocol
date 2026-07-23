@@ -804,6 +804,24 @@ fn tools_list() -> Value {
                 },
                 "required": ["account_id", "from_wallet", "to_wallet", "currency", "amount"]
             }), ann_mutating()),
+            // futures.contract_chain: read-only
+            tool_desc("apex.futures.contract_chain", "List dated contracts for a futures contract root with expirations and liquidity.", json!({
+                "type": "object",
+                "properties": {
+                    "root": { "type": "string", "description": "APEX contract root ID (e.g. APEX:FUT:ES)" },
+                    "include_expired": { "type": "boolean", "description": "Include expired contracts (default: false)" }
+                },
+                "required": ["root"]
+            }), ann_read_only()),
+            // futures.margin_schedule: read-only
+            tool_desc("apex.futures.margin_schedule", "Per-contract margin requirements: exchange overnight and broker intraday margins.", json!({
+                "type": "object",
+                "properties": {
+                    "account_id": { "type": "string", "description": "Trading account ID" },
+                    "instrument_id": { "type": "string", "description": "Filter by APEX canonical instrument ID (e.g. APEX:FUT:ESZ26)" }
+                },
+                "required": ["account_id"]
+            }), ann_read_only()),
         ]
     })
 }
@@ -1255,6 +1273,19 @@ async fn handle_tool_call(
                 to_wallet,
                 currency,
                 amount,
+            ))
+        }
+        "apex.futures.contract_chain" => {
+            let root = args["root"].as_str().unwrap_or("");
+            let include_expired = args["include_expired"].as_bool().unwrap_or(false);
+            json_result_value(&handlers::handle_futures_contract_chain(root, include_expired))
+        }
+        "apex.futures.margin_schedule" => {
+            let account_id = args["account_id"].as_str().unwrap_or("");
+            let instrument_id = args["instrument_id"].as_str().unwrap_or("");
+            json_result_value(&handlers::handle_futures_margin_schedule(
+                account_id,
+                instrument_id,
             ))
         }
         _ => {

@@ -27,6 +27,7 @@ func newServerWithState(s *referenceState) *server.MCPServer {
 	registerFxToolsWithState(srv, s)
 	registerCfdToolsWithState(srv, s)
 	registerCryptoToolsWithState(srv, s)
+	registerFuturesToolsWithState(srv, s)
 	registerForceCandeCloseToolWithState(srv, s)
 	registerStopTicksToolWithState(srv, s)
 	return srv

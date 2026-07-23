@@ -50,13 +50,14 @@ The core tool set deliberately avoids asset-class assumptions. Positions have `q
 
 ## Layer 2: Asset Class Profiles
 
-Layer 2 is where asset classes diverge. APEX defines three profiles:
+Layer 2 is where asset classes diverge. APEX defines four profiles:
 
 | Profile | Applies To | Instrument ID Prefix |
 |---|---|---|
 | FX | Spot FX, CFD FX, Rolling Spot | `APEX:FX:` |
 | CFD | Equity CFDs, Index CFDs, Commodity CFDs | `APEX:CFD:EQ:`, `APEX:CFD:IDX:`, `APEX:CFD:COM:` |
 | Crypto | Crypto Spot, Perpetual Futures | `APEX:CRYPTO:SPOT:`, `APEX:CRYPTO:PERP:` |
+| Futures | Listed futures on regulated derivatives exchanges | `APEX:FUT:` |
 
 Each profile extends the core in four ways:
 
@@ -190,15 +191,15 @@ Profile independence means brokers can add profiles incrementally. A broker that
 
 The profiles diverge in predictable ways. The following table maps the key concerns across asset classes:
 
-| Concern | FX | CFD | Crypto |
-|---|---|---|---|
-| **Holding cost** | Rollover/swap — nightly charge based on interest rate differential. Triple rollover on Wednesdays. | Overnight financing — daily charge based on reference rate + broker spread, calculated as `Position Value x Rate / 365`. | Funding rate — periodic payment (typically every 8 hours) between long and short holders anchoring perp to spot index. |
-| **Holding cost field** | `rollover_long_daily`, `rollover_short_daily`, `accrued_rollover` | `overnight_financing_rate`, `overnight_financing_daily`, `accrued_financing` | `accrued_funding`, `next_funding_time` |
-| **Position risk metric** | Pip value — the monetary value of a one-pip move, denominated in quote currency. | Point value — the monetary value of a one-point move in the underlying. | Liquidation price — the price at which the exchange force-closes the position to prevent negative equity. |
-| **Position risk field** | `pip_value`, `pip_value_currency` | `point_value`, `point_value_currency` | `liquidation_price`, `mark_price`, `maintenance_margin` |
-| **Unique concern 1** | Net currency exposure across all pairs (`apex.fx.exposure`). | Corporate actions — dividends, splits, mergers that adjust position values (`apex.cfd.corporate_actions`). | Margin modes — cross vs isolated margin with fundamentally different risk profiles. |
-| **Unique concern 2** | Cross-currency P&L conversion (`apex.fx.conversion`). | Guaranteed stop-loss orders for a premium (`guaranteed_stop`, `guaranteed_stop_premium`). | Wallet transfers — moving funds between spot, futures, and funding wallets before trading (`apex.crypto.transfer`). |
-| **Unique concern 3** | Hedging vs netting mode (`netting_mode` in order `profile_data`). | DMA availability for equity CFDs (`dma_requested` in order `profile_data`). | Leverage selection per position (`leverage` in order `profile_data`). |
+| Concern | FX | CFD | Crypto | Futures |
+|---|---|---|---|---|
+| **Holding cost** | Rollover/swap — nightly charge based on interest rate differential. Triple rollover on Wednesdays. | Overnight financing — daily charge based on reference rate + broker spread, calculated as `Position Value x Rate / 365`. | Funding rate — periodic payment (typically every 8 hours) between long and short holders anchoring perp to spot index. | None charged as a fee — carry cost is embedded in the contract basis. Positions are marked to market daily and variation margin settles in cash. |
+| **Holding cost field** | `rollover_long_daily`, `rollover_short_daily`, `accrued_rollover` | `overnight_financing_rate`, `overnight_financing_daily`, `accrued_financing` | `accrued_funding`, `next_funding_time` | `prior_settlement_price` (daily mark reference) |
+| **Position risk metric** | Pip value — the monetary value of a one-pip move, denominated in quote currency. | Point value — the monetary value of a one-point move in the underlying. | Liquidation price — the price at which the exchange force-closes the position to prevent negative equity. | Tick value — the monetary value of one minimum price increment, set by the exchange contract spec. |
+| **Position risk field** | `pip_value`, `pip_value_currency` | `point_value`, `point_value_currency` | `liquidation_price`, `mark_price`, `maintenance_margin` | `tick_size`, `tick_value`, `initial_margin`, `maintenance_margin` |
+| **Unique concern 1** | Net currency exposure across all pairs (`apex.fx.exposure`). | Corporate actions — dividends, splits, mergers that adjust position values (`apex.cfd.corporate_actions`). | Margin modes — cross vs isolated margin with fundamentally different risk profiles. | Contract expiration and rolls — dated contracts expire; agents resolve front months and plan rolls (`apex.futures.contract_chain`). |
+| **Unique concern 2** | Cross-currency P&L conversion (`apex.fx.conversion`). | Guaranteed stop-loss orders for a premium (`guaranteed_stop`, `guaranteed_stop_premium`). | Wallet transfers — moving funds between spot, futures, and funding wallets before trading (`apex.crypto.transfer`). | Two-tier margin — exchange-set overnight vs broker-set intraday margins (`apex.futures.margin_schedule`). |
+| **Unique concern 3** | Hedging vs netting mode (`netting_mode` in order `profile_data`). | DMA availability for equity CFDs (`dma_requested` in order `profile_data`). | Leverage selection per position (`leverage` in order `profile_data`). | Physical delivery — first notice date protection for deliverable contracts (`first_notice_date` in position `profile_data`). |
 
 ### Profile-Specific Tools
 
@@ -212,6 +213,8 @@ The profiles diverge in predictable ways. The following table maps the key conce
 | Crypto | `apex.crypto.funding_rate` | Current and predicted funding rate for a perpetual |
 | Crypto | `apex.crypto.liquidation_estimate` | Estimate liquidation price for a hypothetical or existing position |
 | Crypto | `apex.crypto.transfer` | Transfer funds between wallets on the same exchange |
+| Futures | `apex.futures.contract_chain` | List dated contracts for a root with expirations, volume, and front-month designation |
+| Futures | `apex.futures.margin_schedule` | Per-contract exchange overnight and broker intraday margin requirements |
 
 ---
 

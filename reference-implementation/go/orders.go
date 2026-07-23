@@ -30,9 +30,9 @@ func registerOrderToolsWithState(s *server.MCPServer, st *referenceState) {
 					"time_in_force":   map[string]any{"type": "string", "description": "Time in force: GTC, IOC, FOK, DAY", "enum": []string{"GTC", "IOC", "FOK", "DAY"}},
 					"limit_price":     map[string]any{"type": "number", "description": "Limit price (required for limit orders)"},
 					"stop_price":      map[string]any{"type": "number", "description": "Stop price (required for stop orders)"},
-					"stop_loss":       map[string]any{"type": "object", "description": "Stop loss protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"price", "pips", "percent"}}, "value": map[string]any{"type": "number"}}},
-					"take_profit":     map[string]any{"type": "object", "description": "Take profit protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"price", "pips", "percent"}}, "value": map[string]any{"type": "number"}}},
-					"trailing_stop":   map[string]any{"type": "object", "description": "Trailing stop protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"pips", "percent"}}, "value": map[string]any{"type": "number"}}},
+					"stop_loss":       map[string]any{"type": "object", "description": "Stop loss protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"price", "pips", "ticks", "percent"}}, "value": map[string]any{"type": "number"}}},
+					"take_profit":     map[string]any{"type": "object", "description": "Take profit protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"price", "pips", "ticks", "percent"}}, "value": map[string]any{"type": "number"}}},
+					"trailing_stop":   map[string]any{"type": "object", "description": "Trailing stop protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"pips", "ticks", "percent"}}, "value": map[string]any{"type": "number"}}},
 					"profile_data":    map[string]any{"type": "object", "description": "Profile-specific fields"},
 					"profile":         map[string]any{"type": "string", "description": "Asset class profile"},
 					"client_order_id": map[string]any{"type": "string", "description": "Client-assigned order ID"},
@@ -57,6 +57,10 @@ func registerOrderToolsWithState(s *server.MCPServer, st *referenceState) {
 			order := mapParam(request.GetArguments(), "order")
 			if order == nil {
 				return jsonResult(apexError("APEX_4011", "validation", "order is required"))
+			}
+
+			if strParam(order, "instrument_id", "") != referenceInstrumentID {
+				return jsonResult(apexError("APEX_4010", "validation", "Unknown instrument"))
 			}
 
 			orderType := strParam(order, "order_type", "market")
@@ -85,9 +89,9 @@ func registerOrderToolsWithState(s *server.MCPServer, st *referenceState) {
 					"limit_price":   map[string]any{"type": "number", "description": "New limit price"},
 					"stop_price":    map[string]any{"type": "number", "description": "New stop price"},
 					"quantity":      map[string]any{"type": "number", "description": "New quantity"},
-					"stop_loss":     map[string]any{"type": "object", "description": "Stop loss protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"price", "pips", "percent"}}, "value": map[string]any{"type": "number"}}},
-					"take_profit":   map[string]any{"type": "object", "description": "Take profit protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"price", "pips", "percent"}}, "value": map[string]any{"type": "number"}}},
-					"trailing_stop": map[string]any{"type": "object", "description": "Trailing stop protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"pips", "percent"}}, "value": map[string]any{"type": "number"}}},
+					"stop_loss":     map[string]any{"type": "object", "description": "Stop loss protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"price", "pips", "ticks", "percent"}}, "value": map[string]any{"type": "number"}}},
+					"take_profit":   map[string]any{"type": "object", "description": "Take profit protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"price", "pips", "ticks", "percent"}}, "value": map[string]any{"type": "number"}}},
+					"trailing_stop": map[string]any{"type": "object", "description": "Trailing stop protection", "properties": map[string]any{"type": map[string]any{"type": "string", "enum": []string{"pips", "ticks", "percent"}}, "value": map[string]any{"type": "number"}}},
 				}),
 			),
 		),

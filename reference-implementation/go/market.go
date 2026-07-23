@@ -40,7 +40,7 @@ func registerMarketTools(s *server.MCPServer) {
 		mcp.NewTool("apex.market.search",
 			mcp.WithDescription("Discover instruments by keyword, asset class, or profile."),
 			mcp.WithString("query", mcp.Required(), mcp.Description("Search query")),
-			mcp.WithString("profile", mcp.Description("Asset class profile filter"), mcp.Enum("fx", "cfd", "crypto", "derivatives", "fixed_income")),
+			mcp.WithString("profile", mcp.Description("Asset class profile filter"), mcp.Enum("fx", "cfd", "crypto", "futures", "fixed_income")),
 			mcp.WithNumber("limit", mcp.Description("Maximum results (1-50, default 20)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),

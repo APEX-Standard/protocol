@@ -47,6 +47,10 @@ For every field that is money, a price (or price increment), a financial rate/pe
 
 None outstanding. The borderline analytics fields (`volume`, `returns`, `volatility`, `confidence`, `liquidity_score`, `expected_slippage_bps`) were resolved as **remain `number`** — they are unitless model/statistical outputs, not exact-money values.
 
+## Amendments
+
+- **2026-07-23 (with RFC-0002):** The "explicitly unchanged" classification of `contract_size` above applies to the `0.2.0-alpha` core/CFD surface it described. The **futures profile** defines its `contract_size` as a string-decimal (`decimal_nonneg`), because micro futures contracts have fractional sizes (Micro Bitcoin is 0.1 BTC, Micro Ether is 0.1 ETH) that an integer cannot represent. See [`spec/profiles/futures.md`](../../spec/profiles/futures.md).
+
 ## References
 
 - [`docs/schema-design.md`](../../docs/schema-design.md) — schema evolution rules, type guarantee

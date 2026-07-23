@@ -46,12 +46,13 @@ The prefix `APEX:` is always present. The asset class is always present. The sub
 
 ```
 APEX:FX:{BASE}{QUOTE}              Spot FX and CFD FX
-APEX:CFD:EQ:{TICKER}.{MIC}        Equity CFDs
+APEX:CFD:EQ:{TICKER}.{MIC}         Equity CFDs
 APEX:CFD:IDX:{INDEX}               Index CFDs
 APEX:CFD:COM:{COMMODITY}           Commodity CFDs
 APEX:CRYPTO:SPOT:{BASE}{QUOTE}     Crypto spot
 APEX:CRYPTO:PERP:{BASE}{QUOTE}     Crypto perpetual futures
-APEX:DERIV:{TYPE}:{UNDERLYING}     Listed derivatives (futures, options)
+APEX:FUT:{ROOT}{MC}{YY}?           Listed futures (root, or dated with month code + 2-digit year)
+APEX:OPT:{...}                     Listed options (reserved, not yet populated)
 APEX:FI:{ISIN}                     Fixed income (uses ISIN directly)
 ```
 
@@ -69,11 +70,11 @@ Walk through the tree with concrete examples:
 
 **`APEX:CRYPTO:PERP:BTCUSDT`** — Bitcoin/Tether perpetual future. Sub-class `PERP`. Same symbol as spot, different sub-class. The sub-class is what disambiguates: `APEX:CRYPTO:SPOT:BTCUSDT` and `APEX:CRYPTO:PERP:BTCUSDT` are two different instruments with the same underlying pair but fundamentally different mechanics (spot settlement vs margined perpetual with funding rates).
 
-**`APEX:DERIV:{TYPE}:{UNDERLYING}`** — Reserved namespace for listed derivatives. The type segment would encode the derivative class (futures, options). This namespace is defined but not yet populated in v0.1.0-alpha.
+**`APEX:FUT:ESZ26`** — E-mini S&P 500 futures, December 2026 contract. Futures are a top-level asset class with no sub-class, mirroring ISO 10962 (CFI category `F`) and FIX `SecurityType` `FUT`. The symbol is the exchange contract root (`ES`) plus the standard month code (`Z` = December) and a two-digit year — two digits, not the single digit some platforms use, because permanent IDs cannot tolerate decade ambiguity. The bare root (`APEX:FUT:ES`) identifies the contract family for registry metadata and continuous market-data series; orders must target a dated contract. The `APEX:OPT:` namespace is reserved for listed options (CFI category `O`), not yet populated. See the [Futures Profile](../spec/profiles/futures.md).
 
 **`APEX:FI:{ISIN}`** — Fixed income instruments use the existing ISIN standard directly as the symbol segment. No reason to invent a new identifier when ISIN already provides unambiguous global identification for bonds and notes.
 
-The hierarchy is parseable by splitting on `:`. An agent can determine the asset class, sub-class, and symbol programmatically. A routing layer can dispatch to the correct profile handler (`fx`, `cfd`, `crypto`) by inspecting the second segment. A search index can filter by asset class without parsing the symbol itself.
+The hierarchy is parseable by splitting on `:`. An agent can determine the asset class, sub-class, and symbol programmatically. A routing layer can dispatch to the correct profile handler (`fx`, `cfd`, `crypto`, `futures`) by inspecting the second segment. A search index can filter by asset class without parsing the symbol itself.
 
 ---
 
@@ -327,6 +328,6 @@ The pattern across all of these is the same: an industry starts with ad hoc nami
 
 ## Related Design Documents
 
-- [Profile Layering Design](profile-layering-design.md) — how the asset class encoded in the instrument ID (`FX`, `CFD`, `CRYPTO`) maps to the profile that governs domain-specific tools and `profile_data` fields
+- [Profile Layering Design](profile-layering-design.md) — how the asset class encoded in the instrument ID (`FX`, `CFD`, `CRYPTO`, `FUT`) maps to the profile that governs domain-specific tools and `profile_data` fields
 - [Quantity Design](quantity-design.md) — how the instrument registry carries per-broker quantity conventions (`canonical_quantity_unit`, `broker_quantity_unit`, `min_quantity`, `quantity_step`) that enable quantity normalization
 - [Market Data Design](market-data-design.md) — how instrument IDs are used in resource URIs (`apex://market/quote/{instrument_id}`) and tool calls (`apex.market.details`)

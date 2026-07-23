@@ -27,6 +27,7 @@ import { registerRiskTools } from "./tools/risk.js";
 import { registerFxTools } from "./tools/fx.js";
 import { registerCfdTools } from "./tools/cfd.js";
 import { registerCryptoTools } from "./tools/crypto.js";
+import { registerFuturesTools } from "./tools/futures.js";
 import { registerSessionTools } from "./tools/session.js";
 
 import { z } from "zod";
@@ -288,6 +289,7 @@ async function startHttp(port: number) {
     registerFxTools(server, state);
     registerCfdTools(server, state);
     registerCryptoTools(server, state);
+    registerFuturesTools(server, state);
 
     /* -- Test-only: force candle close ------------------------------- */
 

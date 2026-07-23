@@ -98,7 +98,8 @@ Asset-class extensions that add domain-specific tools, position enrichments, and
 | FX | Spot FX, CFD FX, rollovers, currency exposure, swap rates | `v0.2-alpha` |
 | CFD | Equities, indices, commodities, corporate actions, dividend adjustments | `v0.2-alpha` |
 | Crypto | Spot, perpetuals, funding rates, margin modes, liquidation estimates | `v0.2-alpha` |
-| Derivatives | Listed options, futures, greeks | Planned |
+| Futures | Listed futures, contract chains, expiration, margin schedules | `v0.3-alpha` (unreleased) |
+| Options | Listed options, greeks | Planned |
 | Fixed Income | Bonds, yield, duration | Planned |
 
 A broker activates the profiles that match its asset classes. An FX broker implements Core + FX. A multi-asset broker implements Core + FX + CFD + Crypto. The agent discovers active profiles during session initialization and adapts accordingly.

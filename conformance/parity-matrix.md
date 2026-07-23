@@ -1,7 +1,7 @@
 # APEX Alpha Reference Parity Matrix
 
-**Version:** `0.2.0-alpha`  
-**Last Updated:** 2026-06-15
+**Version:** `0.2.0-alpha` (+ unreleased `0.3.0-alpha` futures profile surface)  
+**Last Updated:** 2026-07-23
 
 This document records the current parity status of the bundled reference implementations:
 
@@ -61,6 +61,8 @@ All four reference implementations are currently:
 | `apex.crypto.funding_rate` | Yes | Yes | Yes | Yes | smoke |
 | `apex.crypto.liquidation_estimate` | Yes | Yes | Yes | Yes | smoke |
 | `apex.crypto.transfer` | Yes | Yes | Yes | Yes | smoke |
+| `apex.futures.contract_chain` | Yes | Yes | Yes | Yes | smoke |
+| `apex.futures.margin_schedule` | Yes | Yes | Yes | Yes | smoke |
 | `resources/list` | Yes | Yes | Yes | Yes | Yes |
 | `resources/read` | Yes | Yes | Yes | Yes | Yes |
 | `resources/subscribe` | Yes | Yes | Yes | Yes | Yes |
@@ -69,6 +71,7 @@ All four reference implementations are currently:
 | Reference fault injection tool | Yes | Yes | Yes | Yes | Yes |
 | Negative validation: missing required fields | Yes | Yes | Yes | Yes | Yes |
 | Negative validation: unknown instrument | Yes | Yes | Yes | Yes | Yes |
+| Negative validation: futures root-targeted order rejected (in-band `APEX_4010` asserted) | Yes | Yes | Yes | Yes | smoke |
 
 ---
 
@@ -91,6 +94,7 @@ failure.
 | `apex.crypto.liquidation_estimate` | **No (out of model)** | CFD margin-call/stop-out model — no per-position isolated-margin perpetual liquidation |
 | `apex.crypto.transfer` | **No (out of model)** | Single-currency paper ledger — no spot/futures wallets |
 | `apex.cfd.dividend_adjustment` | **No (out of model)** | Synthetic CFDs pass through no dividends |
+| `apex.futures.contract_chain` / `apex.futures.margin_schedule` | **No (out of model)** | Spot/CFD prop engine — no listed futures product |
 | Vendor `vestry.prop.*` (`scorecard` / `challenge.status` / `challenge.config`) + `profile_data.prop` | Yes | The Vestry-authored prop-eval Layer-2 profile (vendor namespace `vestry`, `prop` profile `0.1-draft`); destined for an APEX first-class `prop` profile on second-adopter validation |
 | Realtime / transport (resources, notifications, SSE replay) | Pending | Vestry's APEX Production-Realtime layer is a separate slice (not yet built) |
 
@@ -170,6 +174,9 @@ implement product semantics outside its market.
 ## Notes
 
 - The parity claim is intentionally scoped to the **alpha spec and current conformance coverage**.
+- The futures profile's mandatory *expired-contract exclusion from `apex.market.search` defaults* is **not yet executably verified** — the reference search index contains no futures instruments. The same applies to futures `profile_data` on positions/`apex.market.details` and whole-contract quantity enforcement: the references' position and instrument surface is FX-only, so these mandatory items are documented, not harness-enforced. `include_expired` semantics on `apex.futures.contract_chain` ARE smoke-verified (expired ESU26 returned only on request, marked `inactive`).
+- **Known divergence — order-input quantity typing:** the spec and RFC-0001 define order `quantity` as a string-decimal on the wire, but all four references currently accept only JSON numbers on order *input* (the `0.2.0-alpha` migration covered outputs, not order-entry inputs). The smoke harness therefore deliberately sends numeric quantities. To be fixed in a future pass; until then, string-decimal order quantities are rejected by the references with a type error.
+- The references do not enforce the offset-type *convention* rejection described in the core prose (`pips` on futures / `ticks` on FX-style instruments) — input schemas accept the full core enum and handlers apply no per-instrument convention check. Mock-level looseness; real implementations must enforce it.
 - The reconnect contract is `session_replay` with acknowledgment-driven retention (max 10000 events) and gap fill for ephemeral event elision during replay.
 - Order and fill schema validation is performed against normalized event payloads derived from the orders and fills resources.
 - The references are protocol-complete for alpha, but they are still reference servers, not real broker/exchange integrations.

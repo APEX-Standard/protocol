@@ -1,8 +1,8 @@
 # APEX Protocol — Layer 1: Core Specification
 
-**Version:** `0.2.0-alpha`  
+**Version:** `0.2.0-alpha` (includes unreleased `0.3.0-alpha` additions — futures profile surface)  
 **Status:** Draft — open for comment  
-**Last Updated:** 2026-03-27
+**Last Updated:** 2026-07-23
 
 ---
 
@@ -97,7 +97,7 @@ Establish an authenticated trading session. The broker validates credentials dir
   "account_id": "string",
   "expires_at": "ISO8601",
   "capabilities": ["apex.session.*", "apex.account.*", "..."],  // tool namespaces available in this session
-  "profiles": ["fx", "cfd", "crypto"],                        // active asset class profiles
+  "profiles": ["fx", "cfd", "crypto", "futures"],             // active asset class profiles
   "broker_id": "string",
   "broker_name": "string"
 }
@@ -316,7 +316,7 @@ Closed trades and funding events.
     {
       "event_id": "string",
       "event_type": "trade|funding|cash|corporate_action",
-      "event_subtype": "fill|rollover|funding_fee|commission|deposit|withdrawal|dividend_adjustment|split|other",
+      "event_subtype": "fill|rollover|funding_fee|variation_margin|commission|deposit|withdrawal|dividend_adjustment|split|other",
       "instrument_id": "APEX:FX:EURUSD",
       "side": "buy|sell",
       "quantity": "100000",
@@ -372,15 +372,15 @@ Unified order entry. The canonical order object — composable by asset class pr
     "stop_price": null,
 
     "stop_loss": {
-      "type": "price|pips|percent",
+      "type": "price|pips|ticks|percent",
       "value": "1.0800"
     },
     "take_profit": {
-      "type": "price|pips|percent",
+      "type": "price|pips|ticks|percent",
       "value": "1.1200"
     },
     "trailing_stop": {
-      "type": "pips|percent",
+      "type": "pips|ticks|percent",
       "value": 20
     },
 
@@ -408,6 +408,8 @@ Unified order entry. The canonical order object — composable by asset class pr
   "created_at": "ISO8601"
 }
 ```
+
+Protective offset types are instrument-convention dependent: `pips` applies to FX-style instruments, `ticks` to tick-based instruments (listed futures — see the [Futures Profile](../profiles/futures.md)); brokers reject offset types that are not meaningful for the instrument.
 
 #### Idempotency
 
@@ -601,7 +603,7 @@ Discover instruments by keyword, asset class, or profile.
 ```json
 {
   "query": "EUR",
-  "profile": "fx|cfd|crypto|derivatives|fixed_income",
+  "profile": "fx|cfd|crypto|futures|fixed_income",
   "limit": 20
 }
 ```

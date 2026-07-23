@@ -79,6 +79,13 @@ export function registerOrderTools(
         };
       }
 
+      if (order.instrument_id !== state.instrumentId) {
+        return {
+          structuredContent: apexError("APEX_4010", "validation", "Unknown instrument"),
+          content: [],
+        };
+      }
+
       if (order.order_type === "limit" && order.limit_price === undefined) {
         return {
           structuredContent: apexError("APEX_4011", "validation", "limit_price required for limit orders"),

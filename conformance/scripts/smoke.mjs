@@ -385,6 +385,65 @@ try {
   assert(transfer.status === "completed" || transfer.status === "pending", "Expected completed or pending status");
   printCheck("Crypto wallet transfer returned");
 
+  // --- Futures profile tools ---
+
+  const contractChain = await callTool(client, "apex.futures.contract_chain", { root: "APEX:FUT:ES" });
+  assert.equal(contractChain.root, "APEX:FUT:ES", "Expected ES contract root");
+  assert(Array.isArray(contractChain.contracts), "Expected contracts array");
+  assert(contractChain.contracts.length >= 2, "Expected at least two dated contracts");
+  const frontMonths = contractChain.contracts.filter((c) => c.is_front_month === true);
+  assert.equal(frontMonths.length, 1, "Expected exactly one front month contract");
+  assert.equal(frontMonths[0].instrument_id, "APEX:FUT:ESZ26", "Expected ESZ26 front month");
+  assert(frontMonths[0].expiration_date, "Expected expiration_date");
+  assert.equal(frontMonths[0].settlement_type, "cash", "Expected cash settlement");
+  assert(typeof frontMonths[0].volume === "number", "Expected numeric volume");
+  assert(typeof frontMonths[0].open_interest === "number", "Expected numeric open_interest");
+  assert(contractChain.contracts.every((c) => c.status === "active"), "Expected only active contracts by default");
+  printCheck("Futures contract chain returned");
+
+  const chainWithExpired = await callTool(client, "apex.futures.contract_chain", {
+    root: "APEX:FUT:ES",
+    include_expired: true,
+  });
+  assert(
+    chainWithExpired.contracts.length > contractChain.contracts.length,
+    "Expected include_expired to add expired contracts",
+  );
+  const expired = chainWithExpired.contracts.filter((c) => c.status === "inactive");
+  assert.equal(expired.length, 1, "Expected exactly one expired contract in mock chain");
+  assert.equal(expired[0].instrument_id, "APEX:FUT:ESU26", "Expected expired ESU26");
+  assert.equal(expired[0].is_front_month, false, "Expired contract must not be front month");
+  printCheck("Futures contract chain include_expired returned");
+
+  // Numeric quantity on purpose: the references accept only JSON-number order
+  // quantities (see parity-matrix notes), so a string quantity would trip type
+  // validation before instrument identity — masking the exact check this test
+  // exists to pin. Only an in-band APEX_4010 satisfies this assertion.
+  const rootOrder = await callTool(client, "apex.order.place", {
+    account_id: "ACC_12345",
+    order: {
+      instrument_id: "APEX:FUT:ES",
+      side: "buy",
+      order_type: "market",
+      quantity: 1,
+      quantity_unit: "contracts",
+      time_in_force: "GTC",
+    },
+  });
+  assertApexError(rootOrder, "APEX_4010");
+  printCheck("Futures root-targeted order rejected with APEX_4010");
+
+  const marginSchedule = await callTool(client, "apex.futures.margin_schedule", { account_id: "ACC_12345" });
+  assert(Array.isArray(marginSchedule.margins), "Expected margins array");
+  assert(marginSchedule.margins.length > 0, "Expected at least one margin entry");
+  const margin = marginSchedule.margins[0];
+  assert.equal(margin.instrument_id, "APEX:FUT:ESZ26", "Expected ESZ26 margin entry");
+  assertDecimalString(margin.initial_margin, "initial_margin");
+  assertDecimalString(margin.maintenance_margin, "maintenance_margin");
+  assertDecimalString(margin.day_trading_margin, "day_trading_margin");
+  assert(margin.as_of, "Expected as_of timestamp");
+  printCheck("Futures margin schedule returned");
+
   console.log(`Smoke suite passed for ${target.label}`);
 } catch (error) {
   printCapturedStderr(session);

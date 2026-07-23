@@ -301,4 +301,36 @@ final class ProtocolModels {
         String completed_at
     ) {
     }
+
+    // Futures profile records
+
+    record FuturesContract(
+        String instrument_id,
+        String contract_month,
+        String expiration_date,
+        Object first_notice_date,
+        String settlement_type,
+        boolean is_front_month,
+        long volume,
+        long open_interest,
+        String status
+    ) {
+    }
+
+    record FuturesContractChainResponse(String root, List<FuturesContract> contracts) {
+    }
+
+    record FuturesMarginScheduleEntry(
+        String instrument_id,
+        String currency,
+        String initial_margin,
+        String maintenance_margin,
+        String day_trading_margin,
+        List<Object> day_trading_hours,
+        String as_of
+    ) {
+    }
+
+    record FuturesMarginScheduleResponse(List<FuturesMarginScheduleEntry> margins) {
+    }
 }

@@ -13,14 +13,14 @@ export const TifSchema = z.enum(["GTC", "IOC", "FOK", "DAY"]);
 
 export const PriceStopSchema = z
   .object({
-    type: z.enum(["price", "pips", "percent"]),
+    type: z.enum(["price", "pips", "ticks", "percent"]),
     value: z.number().positive(),
   })
   .optional();
 
 export const TrailingStopSchema = z
   .object({
-    type: z.enum(["pips", "percent"]),
+    type: z.enum(["pips", "ticks", "percent"]),
     value: z.number().positive(),
   })
   .optional();
